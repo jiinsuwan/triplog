@@ -13,9 +13,9 @@ TripLog는 "AI 기능이 있는 여행 서비스"가 아니라, **AI agent를 �
 
 ---
 
-> 🟢 **현재 단계 (2026-05-29)**: 기획 v1 확정 + **Sprint 0 코어 셋업 완료** (backend·frontend·CI 골격, PR #1 머지 — [sprint-0 회고](docs/sprints/sprint-0.md)). 남은 것: `S0-LOG-01`(카드 PoC) 미착수 · `S0-CORE-01`(branch protection)은 플랜 제약으로 **컨벤션 운용** · Q6(LLM 모델)은 PoC 후 결정.
+> 🟢 **현재 단계 (2026-05-29)**: **Sprint 1 진행 중** — [`docs/sprints/sprint-1.md`](docs/sprints/sprint-1.md). 인증 마무리(F01) · Trip CRUD(F02) · 카드 PoC 완료+모델 확정(Q6). Sprint 0 코어 셋업은 완료(PR #1 — [sprint-0 회고](docs/sprints/sprint-0.md)).
 >
-> **다음 단계 = Sprint 1.** 주초에 [`_template.md`](docs/sprints/_template.md)를 복사해 `docs/sprints/sprint-1.md`를 작성하고 Issue로 분해한다 ([conventions §1-1](docs/conventions.md)).
+> **다음 할 일**: `sprint-1.md`의 트랙별 항목을 **GitHub Issue로 발행**하고 각자 트랙 작업 시작 ([conventions §1-1](docs/conventions.md)). branch protection은 플랜 제약으로 **컨벤션 운용**.
 
 ### 🚦 세션 진입 절차 — 이 순서로 시작한다 (맥락 없이 문서만으로 따라갈 수 있어야 함)
 
