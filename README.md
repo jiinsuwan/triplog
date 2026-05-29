@@ -36,6 +36,7 @@ docs/
 ├── architecture.md     ← 패키지 구조, DB/API 설계 방향
 ├── conventions.md      ← Issue/Branch/Commit/PR 규칙, AI agent 운용 원칙
 ├── decisions/          ← 중요한 의사결정 기록
+├── sprints/            ← 스프린트 실행 문서 (주초 작성, conventions §1-1)
 └── poc/                ← PoC 검증 가이드
 ```
 
@@ -46,12 +47,12 @@ docs/
 | 영역 | 기술 |
 |---|---|
 | Frontend | Vue 3 + Vite |
-| Backend | Spring Boot |
+| Backend | Spring Boot (Java 21 + Maven) |
 | Persistence | MyBatis |
-| Security | Spring Security + JWT |
+| Security | Spring Security + JWT (Access + Refresh) |
 | DB | MySQL |
-| Map | Kakao Map |
-| Tourism Data | 한국관광공사 TourAPI |
+| Map | Kakao Map (식당·카페 등 장소 검색 포함) |
+| Tourism Data | 공공데이터 표준데이터 JSON (DB 적재) · TourAPI는 P2 |
 | AI | SSAFY 제공 GMS key 우선 |
 | CI | GitHub Actions |
 

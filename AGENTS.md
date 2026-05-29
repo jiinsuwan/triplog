@@ -13,9 +13,9 @@ TripLog는 "AI 기능이 있는 여행 서비스"가 아니라, **AI agent를 �
 
 ---
 
-> 🟡 **현재 단계 (2026-05-22)**: `requirements.md` / `roadmap.md` / `architecture.md`는 **v0 초안**. 다음 세션에서 사용자 + 팀원 + Claude가 함께 섹션별로 같이 보며 즉석 합의 후 v1 승격 예정.
+> 🟢 **현재 단계 (2026-05-29)**: 기획 문서 **v1 확정 완료** (`requirements.md` / `architecture.md` / `roadmap.md`). 미결은 Q6(텍스트/Vision LLM 모델, 카드 PoC 후 결정)뿐.
 >
-> **다음 세션 진입 시 가장 먼저 [`docs/decisions/0000-open-questions.md`](docs/decisions/0000-open-questions.md) 를 펴고 §A~§D 결정 항목 표를 같이 훑은 뒤, §F 어젠다대로 `requirements.md` → `architecture.md` → 데이터·저장소 → `roadmap.md` → 인프라 순서로 섹션별 진행하세요.** 합의 내용은 §G 매핑대로 즉시 해당 파일을 Edit합니다.
+> **다음 단계는 Sprint 0 시작입니다. 진입 시 가장 먼저 [`docs/sprints/_template.md`](docs/sprints/_template.md)를 복사해 `docs/sprints/sprint-0.md`를 작성하세요** — `roadmap.md`의 Sprint 0(셋업 + 카드 PoC 착수)을 구체화하고 Issue로 분해합니다. 스프린트 운영 방식은 [conventions §1-1](docs/conventions.md) 참고.
 
 ## 1. 가장 먼저 읽어야 할 문서
 
