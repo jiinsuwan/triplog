@@ -12,8 +12,8 @@
 - **P0 = Sprint 0~3** 에서 "여행 → 사진 → AI 카드 → PNG" **end-to-end 완성** (목표: 2주 내).
 - **P1 = Sprint 4** 에 정식 포함 — 버퍼가 아니라 차별화 핵심. 야간 agent 활용으로 P0가 빨리 끝나면 P1을 앞당긴다.
 - **매 Sprint 두 사람 모두 자기 파트 작업**이 있다 (한쪽만 일하는 구간 없음).
-  - `trip`(파트너): 여행 → 관광지 → 일정 → 챗봇·즐겨찾기
-  - `log`(본인): 카드 PoC → 사진 → 카드 생성 → 카드 편집·정사각
+  - `trip`: 여행 → 관광지 → 일정 → 챗봇·즐겨찾기
+  - `log`: 카드 PoC → 사진 → 카드 생성 → 카드 편집·정사각
   - `core`(공통): 누가 맡아도 되는 토대. 셋업 직후 기본만 깔고, 이후 필요한 걸 가벼운 쪽이.
 - **막히면 P2 > P1 순으로 잘라 P0를 보호**한다.
 
@@ -48,32 +48,32 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 ## Sprint 0 — 셋업 & core 기반 & PoC 착수
 
 ### 둘이 함께 (core)
-- [ ] **[S0-CORE-01]** GitHub Organization / Repository 생성, collaborator 초대, branch protection
-- [ ] **[S0-CORE-02]** Vue 3 + Vite 초기 세팅 (`frontend/`)
-- [ ] **[S0-CORE-03]** Spring Boot 초기 세팅 (`backend/`), **Java 21 / Maven**
-- [ ] **[S0-CORE-04]** MySQL 로컬 DB + 테스트 스키마(`triplog_test`) 세팅, 연결 확인
-- [ ] **[S0-CORE-05]** Flyway 도입, 첫 마이그레이션 골격
-- [ ] **[S0-CORE-06]** 인증 골격(Spring Security + JWT) + 공통 응답 형식 + 글로벌 에러 핸들러 (간단히)
-- [ ] **[S0-CORE-07]** GitHub Actions CI 활성화 (frontend build / backend test, MySQL service container) + SpringDoc 세팅
-- [ ] **[S0-CORE-08]** `.env` 정책 정리 (DB·JWT·카카오맵·SSAFY GMS·UPLOAD_DIR)
+- [~] **[S0-CORE-01]** Repo 생성 ✓ / collaborator 초대(사람 확인) / **branch protection은 플랜 제약으로 미적용 → 컨벤션 운용** (AGENTS §3·§5)
+- [x] **[S0-CORE-02]** Vue 3 + Vite 초기 세팅 (`frontend/`)
+- [x] **[S0-CORE-03]** Spring Boot 초기 세팅 (`backend/`), **Java 21 / Maven**
+- [x] **[S0-CORE-04]** MySQL 로컬 DB + 테스트 스키마(`triplog_test`) 세팅, 연결 확인
+- [x] **[S0-CORE-05]** Flyway 도입, 첫 마이그레이션 골격 (V1: users, refresh_token)
+- [x] **[S0-CORE-06]** 인증 골격(Spring Security + JWT) + 공통 응답 형식 + 글로벌 에러 핸들러 (간단히)
+- [x] **[S0-CORE-07]** GitHub Actions CI 활성화 (frontend build·test / backend test·build, MySQL service container) + SpringDoc 세팅
+- [x] **[S0-CORE-08]** `.env` 정책 정리 (DB·JWT·카카오맵·SSAFY GMS·UPLOAD_DIR) — `.env.example`
 
-### log 트랙 (본인) — 병렬 착수
-- [ ] **[S0-LOG-01]** 카드 PoC 착수 — Vision/텍스트 LLM 비교, Vue+Konva 합성 실험 ([poc/card-poc.md](poc/card-poc.md))
+### log 트랙 — 병렬 착수
+- [ ] **[S0-LOG-01]** 카드 PoC 착수 — Vision/텍스트 LLM 비교, Vue+Konva 합성 실험 ([poc/card-poc.md](poc/card-poc.md)) — **미착수 (Sprint 1로 이월)**
 
 ### 종료 조건
-- 양 트랙 repo 접근 가능 / `frontend` build·`backend` test 통과 / CI 그린
-- 인증·공통응답 골격 동작 / 카드 PoC 진행 중
+- [x] 양 트랙 repo 접근 가능 / `frontend` build·test·`backend` test·build 통과 / CI 그린 (PR #1)
+- [~] 인증·공통응답 골격 동작 ✓ / **카드 PoC 미착수(이월)**
 
 ---
 
 ## Sprint 1 — 인증 완성 & Trip CRUD & PoC 완료
 
-### trip 트랙 (파트너)
+### trip 트랙
 - [ ] **[S1-TRIP-01]** Trip CRUD API (제목·기간·지역·테마·상태, 삭제 포함) — F02
 - [ ] **[S1-TRIP-02]** Trip 목록 / 생성 화면
 - [ ] **[S1-TRIP-03]** Trip 상세 / 수정 / 삭제 화면
 
-### log 트랙 (본인)
+### log 트랙
 - [ ] **[S1-LOG-01]** 카드 PoC 완료 — 정성 평가 + 비용 실측
 - [ ] **[S1-LOG-02]** `decisions/0004-card-poc-result.md` 작성, **텍스트/Vision 모델 확정(Q6)** + Vision·텍스트 합침 여부 결정
 
@@ -90,12 +90,12 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 
 ## Sprint 2 — 관광지 탐색 & 사진 업로드
 
-### trip 트랙 (파트너)
+### trip 트랙
 - [ ] **[S2-TRIP-01]** 관광지 표준데이터 JSON 적재 (Flyway seed 또는 적재 스크립트) — Q3
 - [ ] **[S2-TRIP-02]** 카카오맵 SDK 연동, 장소 검색(식당·카페 포함) + 마커 — F03
 - [ ] **[S2-TRIP-03]** 관광지 상세 화면
 
-### log 트랙 (본인)
+### log 트랙
 - [ ] **[S2-LOG-01]** 사진 업로드 API (다중) — F06
 - [ ] **[S2-LOG-02]** EXIF 자동 추출 (GPS·촬영시간)
 - [ ] **[S2-LOG-03]** 사진 ↔ 여행 연결 (테이블 + API)
@@ -113,11 +113,11 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 
 ## Sprint 3 — 일정 에디터 & 카드 생성 → **P0 완성**
 
-### trip 트랙 (파트너)
+### trip 트랙
 - [ ] **[S3-TRIP-01]** 일정 에디터 — 날짜별 장소·메모 + **드래그앤드롭** — F04
 - [ ] **[S3-TRIP-02]** 일정에 관광지/검색 장소 추가, 단순 위치 핀 동선
 
-### log 트랙 (본인)
+### log 트랙
 - [ ] **[S3-LOG-01]** AI 카드 JSON 스키마 확정 (PoC 기반)
 - [ ] **[S3-LOG-02]** Vision LLM 어댑터 (객체 인식 + bbox)
 - [ ] **[S3-LOG-03]** 텍스트 LLM 어댑터 (카드 JSON·캡션·해시태그 생성)
@@ -138,12 +138,12 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 
 ## Sprint 4 — P1 추가
 
-### trip 트랙 (파트너)
+### trip 트랙
 - [ ] **[S4-TRIP-01]** 즐겨찾기 / 위시리스트 — F10
 - [ ] **[S4-TRIP-02]** trip 챗봇 — 관광지 설명 요약·추천 이유 — F16
 - [ ] **[S4-TRIP-03]** 소셜 로그인 — 카카오·구글·네이버 OAuth — F23 (core 성격, 인증 담당이 주도)
 
-### log 트랙 (본인)
+### log 트랙
 - [ ] **[S4-LOG-01]** 사진 라이브러리 뷰 — 그리드 ↔ 지도 ↔ 타임라인 — F14
 - [ ] **[S4-LOG-02]** 카드 수동 편집 — 요소 제외/글씨 수정/스티커 추가·이동 — F12
 - [ ] **[S4-LOG-03]** 정사각 피드 카드 (1080×1080) 포맷 토글 — F09
