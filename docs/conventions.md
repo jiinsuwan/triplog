@@ -26,7 +26,7 @@ Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Action
   2. `roadmap.md`에서 이번 스프린트 범위 확정 (변동 반영)
   3. `sprint-{N}.md` 작성 — 트랙별 Issue 후보(제목 + Goal/AC 요약) + 종료 조건
   4. 그 문서 기준으로 **GitHub Issue 생성 → 각자 트랙 작업 시작**
-- **종료**: `sprint-{N}.md` 하단에 회고(완료/이월/배운 점) 추가 → 다음 스프린트 입력으로.
+- **종료**: `sprint-{N}.md` 하단에 회고(완료/이월/배운 점) 추가 → 다음 스프린트 입력으로. 회고 때 **①각 트랙이 내린 결정 요약을 서로 검토 ②`proposal` Issue(공통 규칙 변경 건의)를 채택/기각**도 함께 본다.
 - **종료 시 진입점 갱신**: `AGENTS.md` 상단 "현재 단계" 박스를 **지금 상태·다음 할 일**로 업데이트한다. 새 세션/다음 작업자가 옛 안내를 따르지 않도록 — 이 박스가 항상 "지금 어디서, 무엇부터"를 가리켜야 한다.
 - `sprint-{N}.md`는 **1~2장으로 제한**. 설계·핸드오프 문서로 비대해지지 않습니다(§10). 형식은 `docs/sprints/_template.md` 참고.
 
@@ -184,10 +184,13 @@ track:core
 track:trip
 track:log
 status:blocked
+proposal
 priority:p0
 priority:p1
 priority:p2
 ```
+
+- `proposal`: 공통 규칙(conventions 등) 변경 **건의**. 혼자 못 바꾸므로 Issue로 올리고, 스프린트 회고 때 함께 검토 → 채택 시 conventions PR.
 
 여유가 생기면 `type:feature`, `type:bug`, `type:docs`, `type:chore`, `status:review-needed`를 추가합니다.
 
