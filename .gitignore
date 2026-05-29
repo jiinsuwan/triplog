@@ -52,3 +52,6 @@ AGENTS.local.md
 *.bak
 coverage/
 .nyc_output/
+
+# ========== 사진 업로드 (로컬 저장) ==========
+uploads/
