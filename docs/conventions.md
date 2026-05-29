@@ -1,0 +1,254 @@
+# Conventions — 협업 규칙 정본
+
+> 이 문서가 Issue · Branch · Commit · PR · AI agent 운용의 **유일한 정본**입니다.
+> `AGENTS.md` / `CLAUDE.md`는 이 문서를 가리키는 얇은 참조용 문서일 뿐입니다.
+>
+> 상위 합의의 근거: [decisions/0001-project-blueprint](decisions/0001-project-blueprint.md), [decisions/0003-collaboration-direction](decisions/0003-collaboration-direction.md)
+
+---
+
+## 1. 워크플로우
+
+```text
+Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Actions → Merge
+```
+
+- "Milestone"이라는 용어는 쓰지 않습니다. 모두 **Sprint**로 통일합니다 (GitHub Milestone 기능을 쓰더라도 팀 내부 명칭은 Sprint).
+- 하나의 Issue = 하나의 PR을 기본으로 합니다.
+- 범위가 커지면 새 Issue로 분리합니다.
+
+### 1-1. 스프린트 운영 사이클
+
+스프린트는 **`docs/sprints/sprint-{N}.md`** 한 장으로 실행합니다. `roadmap.md`(전체 계획)를 이번 스프린트 실행용으로 구체화한 문서입니다.
+
+- **시작 (주초, 사람 + AI agent 함께)**:
+  1. 지난 스프린트 회고 — 완료/미완(이월) 확인
+  2. `roadmap.md`에서 이번 스프린트 범위 확정 (변동 반영)
+  3. `sprint-{N}.md` 작성 — 트랙별 Issue 후보(제목 + Goal/AC 요약) + 종료 조건
+  4. 그 문서 기준으로 **GitHub Issue 생성 → 각자 트랙 작업 시작**
+- **종료**: `sprint-{N}.md` 하단에 회고(완료/이월/배운 점) 추가 → 다음 스프린트 입력으로.
+- `sprint-{N}.md`는 **1~2장으로 제한**. 설계·핸드오프 문서로 비대해지지 않습니다(§10). 형식은 `docs/sprints/_template.md` 참고.
+
+---
+
+## 2. Track (역할 축)
+
+| Track | 담당 | 범위 |
+|---|---|---|
+| `trip` | 파트너 | 여행 생성, 관광지 탐색, 지도, 일정, 장소 저장 |
+| `log` | 본인 | 사진 업로드, 사진 기록, AI 카드 생성, export |
+| `core` | 공동 | 인증, 공통 구조, DB schema, API convention, CI, 공통 UI |
+
+- FE/BE로 가르지 않습니다. 각자 자기 트랙의 화면·API·DB·테스트를 end-to-end로 책임집니다.
+- **`core` 변경은 PR 리뷰 필수**입니다. 공유 영역을 혼자 임의로 바꾸지 않습니다.
+
+---
+
+## 3. Issue
+
+### 3-1. 제목 규칙
+
+```text
+[S{Sprint번호}-{TRACK}-{번호}] 작업명
+```
+
+예시:
+
+```text
+[S1-CORE-01] Spring Security + JWT 인증 구현
+[S1-TRIP-01] 여행 CRUD API 구현
+[S2-LOG-01] 사진 업로드 API 구현
+[S3-LOG-01] AI 카드 JSON 스키마 정의
+```
+
+### 3-2. 본문 템플릿
+
+`.github/ISSUE_TEMPLATE/feature_issue.md` 사용. 필수 섹션:
+
+- **Goal** — 이 Issue에서 완성할 목표
+- **Scope** — 포함/제외 범위
+- **Acceptance Criteria** — 체크리스트
+- **Test Criteria** — 테스트 통과 조건
+- **Notes** — 관련 API/화면/공유 영역 영향
+
+### 3-3. 운영 규칙
+
+- Issue는 **단순 메모가 아니라 AI agent에게 전달할 작업 계약서**입니다.
+- AI agent에게 작업을 넘길 때 Issue 본문을 그대로 컨텍스트로 사용합니다.
+- 공유 영역 변경이 있으면 Issue와 PR에 반드시 명시합니다.
+
+---
+
+## 4. Branch
+
+### 4-1. 타입
+
+| type | 용도 |
+|---|---|
+| `feat` | 기능 개발 |
+| `fix` | 버그 수정 |
+| `chore` | 설정, 빌드, CI, 환경 |
+| `docs` | 문서 |
+
+### 4-2. 네이밍
+
+```text
+{type}/s{sprint}-{track}{number}-{short-name}
+```
+
+예시:
+
+```text
+feat/s1-core01-auth
+feat/s1-trip01-trip-crud
+feat/s2-log01-photo-upload
+feat/s3-log01-card-json
+fix/s3-log01-card-json
+chore/ci
+docs/roadmap
+```
+
+---
+
+## 5. Commit
+
+### 5-1. 규칙
+
+```text
+{type}({track}): {message}
+```
+
+### 5-2. type / track
+
+- type: `feat` / `fix` / `test` / `docs` / `chore` / `refactor`
+- track: `trip` / `log` / `core`
+
+### 5-3. 예시
+
+```text
+feat(trip): add trip crud api
+feat(log): add photo upload api
+feat(log): parse ai card layout json
+feat(core): configure spring security jwt
+test(log): add card json validation tests
+fix(log): handle invalid ai response
+docs(core): add sprint workflow
+chore(core): add github actions ci
+```
+
+---
+
+## 6. Pull Request
+
+### 6-1. 제목
+
+Issue 제목과 동일하게.
+
+```text
+[S1-TRIP-01] 여행 CRUD API 구현
+```
+
+### 6-2. 본문 템플릿
+
+`.github/pull_request_template.md` 사용. 필수 섹션:
+
+- **Related Issue** — `closes #N`
+- **Summary** — 변경 요약
+- **Test** — 로컬 테스트/CI/화면·API 확인 체크리스트
+- **Review Point** — 검토자가 봐야 할 부분
+
+### 6-3. 리뷰 필수 영역
+
+다음 변경은 **반드시 상대 리뷰**를 받습니다.
+
+- DB schema
+- Spring Security / 인증
+- 공통 API 응답 형식
+- 공통 UI 컴포넌트
+- router / layout 구조
+- build 설정
+- GitHub Actions
+- 환경변수 구조
+
+자기 트랙 내부 변경은 self-merge 가능하지만, 상대에게 알림은 남깁니다.
+
+---
+
+## 7. Labels
+
+운영 부담을 줄이기 위해 다음만 사용합니다.
+
+```text
+track:core
+track:trip
+track:log
+status:blocked
+priority:p0
+priority:p1
+priority:p2
+```
+
+여유가 생기면 `type:feature`, `type:bug`, `type:docs`, `type:chore`, `status:review-needed`를 추가합니다.
+
+---
+
+## 8. Test / CI
+
+### 8-1. 테스트 우선 적용 대상
+
+| 대상 | 테스트 필요도 |
+|---|---|
+| AI 응답 JSON 파싱 | 매우 높음 |
+| 카드 레이아웃 검증 | 매우 높음 |
+| 인증 / Security | 높음 |
+| MyBatis Mapper / Repository | 높음 |
+| 관광지 API adapter | 높음 |
+| 단순 Vue 화면 | 선택 |
+| CSS / 레이아웃 | 수동 확인 중심 |
+
+### 8-2. CI 최소 구성
+
+GitHub Actions에서 다음을 실행합니다.
+
+```text
+frontend build
+backend test
+backend build
+```
+
+여유 생기면 `frontend lint`, `frontend unit test`, `backend integration test`를 추가합니다.
+
+---
+
+## 9. AI Agent 운용 원칙
+
+### 9-1. 역할
+
+- **사람**: 제품 방향, 우선순위, 시스템 설계, Sprint/Issue 분해, 완료 조건 정의, 공유 영역 변경 승인, PR/CI 검증, UX 최종 판단
+- **AI agent**: Issue 단위 구현, 테스트 코드 작성, 리팩터링, 문서 초안, 실패 원인 분석, 수정안 제안
+
+### 9-2. 핵심 원칙
+
+- AI agent에게 작업을 맡길 때는 **Issue 단위**로 맡깁니다.
+- Issue에는 목표·범위·제외 범위·완료 조건·테스트 기준이 반드시 있어야 합니다.
+- AI가 만든 코드는 **육안 검토만으로 통제하지 않습니다**. 가능한 경우 테스트와 CI로 검증합니다.
+- 테스트 가능한 로직은 테스트를 먼저 작성하거나 구현과 함께 작성합니다.
+- PR은 agent 결과물을 검토하고 프로젝트 기록으로 남기는 단위입니다.
+
+### 9-3. 툴체인 자유 · 공통/개인 경계
+
+- 각자 로컬 agent 운용 방식(Claude / Codex / 혼합)은 **사적 영역**입니다.
+- 팀이 보는 공통 인터페이스는 **GitHub Issue · PR · CI · `docs/`** 뿐입니다.
+- **공통 규칙은 `AGENTS.md` + `docs/`에만** 둡니다 (git 공유). 여기엔 개인 규칙을 쓰지 않습니다 — 그래야 서로 섞이지 않습니다.
+- **개인 agent 규칙은 각자 git-ignored 파일에** 둡니다. Claude 사용자는 로컬 `CLAUDE.md`(`@AGENTS.md` import + 개인 규칙), 그 외 개인 오버라이드는 `AGENTS.local.md`. 둘 다 `.gitignore`로 제외됩니다.
+
+---
+
+## 10. 금지 사항
+
+- 과도한 workflow 문서 생성
+- 무거운 spec/handoff/archive 문서 체계 도입
+- DB/API 상세 설계를 기능 확정 전에 과하게 선행
+- MSA 구조 제안
+- AI 일정 자동 생성 기능을 P0로 복귀시키는 것
+- GitLab을 개발 정본으로 설정 (SSAFY GitLab은 제출용 산출물 업로드 전용)

@@ -1,0 +1,54 @@
+# ========== OS ==========
+.DS_Store
+Thumbs.db
+
+# ========== IDE ==========
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# ========== 환경변수 / 비밀 ==========
+.env
+.env.*
+!.env.example
+*.pem
+*_key
+*_secret
+*_token
+credentials.json
+
+# ========== Java / Spring Boot ==========
+target/
+build/
+*.class
+*.jar
+*.war
+*.log
+HELP.md
+.gradle/
+.mvn/wrapper/maven-wrapper.jar
+hs_err_pid*
+
+# ========== Node / Vue ==========
+node_modules/
+dist/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========== AI agent 로컬 자산 ==========
+# 공통 규칙은 AGENTS.md + docs/ (공유). 개인 agent 규칙은 공유하지 않는다.
+CLAUDE.md
+AGENTS.local.md
+.claude/
+.codex/
+
+# ========== 임시 / 빌드 산출물 ==========
+*.tmp
+*.bak
+coverage/
+.nyc_output/
