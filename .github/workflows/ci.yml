@@ -10,6 +10,25 @@ on:
 # 백엔드 확정 스택 = Java 21 + Maven (architecture D1). DB 테스트용 MySQL service container 포함(§9-2).
 
 jobs:
+  pr-title:
+    name: PR Title Convention
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title format
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "PR title: $TITLE"
+          if echo "$TITLE" | grep -qE '^\[S[0-9]+-(CORE|TRIP|LOG)-[0-9]+\] .+'; then
+            echo "OK: issue-key 형식"; exit 0
+          fi
+          if echo "$TITLE" | grep -qE '^(feat|fix|chore|docs)(\(.+\))?: .+'; then
+            echo "OK: conventional 형식"; exit 0
+          fi
+          echo "::error::PR 제목 규칙 위반 — '[S{n}-{TRACK}-{n}] 작업명' 또는 'feat|fix|chore|docs: 설명' 형식이어야 합니다 (conventions §3-1)."
+          exit 1
+
   frontend-build:
     name: Frontend Build & Test (Vue)
     runs-on: ubuntu-latest
