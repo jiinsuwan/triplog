@@ -48,7 +48,7 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 ## Sprint 0 — 셋업 & core 기반 & PoC 착수
 
 ### 둘이 함께 (core)
-- [~] **[S0-CORE-01]** Repo 생성 ✓ / collaborator 초대(사람 확인) / **branch protection은 플랜 제약으로 미적용 → 컨벤션 운용** (AGENTS §3·§5)
+- [x] **[S0-CORE-01]** Repo 생성 ✓ / collaborator 초대(사람 확인) / **branch protection은 플랜 제약으로 미적용 → 컨벤션 운용** (AGENTS §3·§5)
 - [x] **[S0-CORE-02]** Vue 3 + Vite 초기 세팅 (`frontend/`)
 - [x] **[S0-CORE-03]** Spring Boot 초기 세팅 (`backend/`), **Java 21 / Maven**
 - [x] **[S0-CORE-04]** MySQL 로컬 DB + 테스트 스키마(`triplog_test`) 세팅, 연결 확인
@@ -62,7 +62,7 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 
 ### 종료 조건
 - [x] 양 트랙 repo 접근 가능 / `frontend` build·test·`backend` test·build 통과 / CI 그린 (PR #1)
-- [~] 인증·공통응답 골격 동작 ✓ / **카드 PoC 미착수(이월)**
+- [ ] 인증·공통응답 골격 동작 ✓ / **카드 PoC 미착수(이월)**
 
 ---
 
