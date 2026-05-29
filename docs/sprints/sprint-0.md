@@ -13,7 +13,7 @@
 ## 이번 스프린트 작업
 
 ### core (공통)
-- [~] **[S0-CORE-01]** Repo 생성 ✓ / collaborator 초대(사람 확인) / branch protection은 플랜 제약으로 미적용 → 컨벤션 운용
+- [x] **[S0-CORE-01]** Repo 생성 ✓ / collaborator 초대(사람 확인) / branch protection은 플랜 제약으로 미적용 → 컨벤션 운용
 - [x] **[S0-CORE-02]** Vue 3 + Vite + Pinia + Router + axios + PrimeVue(Aura) + Vitest
 - [x] **[S0-CORE-03]** Spring Boot 3.5.3 / Java 21 / Maven(mvnw)
 - [x] **[S0-CORE-04]** MySQL 로컬 + 테스트 스키마(`triplog`, `triplog_test`) 연결 확인
@@ -28,7 +28,7 @@
 ## 종료 조건
 - [x] 양 트랙 repo 접근 가능 / frontend build·test · backend test·build 통과 / CI 그린 (PR #1)
 - [x] 인증·공통응답 골격 동작 (헬스 엔드포인트·Swagger·보안 차단 확인)
-- [~] 카드 PoC: 미착수(이월)
+- [ ] 카드 PoC: 미착수(이월)
 
 ## 회고 (스프린트 종료 시 작성)
 - **완료 / 이월**: core 셋업 8건 중 7건 완료. 이월 = S0-LOG-01(카드 PoC), S0-CORE-01의 branch protection.
@@ -40,3 +40,4 @@
   - branch protection은 private+Free 플랜에서 불가 → 규칙 강제 대신 **컨벤션(신사협정)** 으로 운용하기로 결정.
   - 협업 진입 구조 보강: 역할은 로컬 `AGENTS.local.md`로 선언, 공유 문서는 관점 중립(trip/log)으로 통일, 진입 절차·현재 스프린트 추적 규칙 명문화.
   - **Sprint 1 입력**: 인증 마무리(F01) / Trip CRUD(F02) / 카드 PoC(이월) + architecture §6·§3-1 문서 반영.
+  - **협업 구조 공동 합의(필수)**: 이번에 정한 진입 체계(역할=로컬파일 / 관점 중립 / 진입 절차 / SSOT=Issue)는 한쪽이 먼저 작성한 것 — **파트너 합류 첫 세션에 함께 1회 리뷰·합의**하고, 이견은 `proposal` Issue로 조정한다.

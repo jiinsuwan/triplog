@@ -25,6 +25,11 @@ TripLog는 단순한 "AI 여행 서비스"가 아닙니다.
 | 시스템 구조 파악 | [docs/architecture.md](docs/architecture.md) |
 | AI agent에게 일 시키기 | [AGENTS.md](AGENTS.md), Issue 템플릿 |
 
+**에이전트 진입(첫 세션 셋업)**: [AGENTS.md](AGENTS.md)의 "🚦 세션 진입 절차"를 따른다. 처음이라면 루트의 `AGENTS.local.md.example`를 `AGENTS.local.md`로 복사해 **자기 트랙을 선언**한다(이 파일은 git 공유 안 함).
+
+- **Codex 사용자**: `AGENTS.md`를 자동으로 읽으므로 추가 설정 없음.
+- **Claude 사용자**: 루트에 `CLAUDE.md`(git 미추적)를 만들고 `@AGENTS.md` 한 줄을 넣으면 `AGENTS.md`를 자동 로드한다.
+
 ---
 
 ## 문서 인덱스
