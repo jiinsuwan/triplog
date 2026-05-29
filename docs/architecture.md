@@ -115,7 +115,7 @@ frontend/src/
 
 ### 3-1. UI 디자인 방침 (2026-05-29)
 
-- **컴포넌트 라이브러리 채택** — 버튼·폼·모달 등 기본 룩과 일관성을 라이브러리(PrimeVue / Naive UI 등 후보)로 확보. 직접 커스텀 CSS는 최소화. **구체 라이브러리는 Sprint 0에서 선택.**
+- **컴포넌트 라이브러리 채택** — 버튼·폼·모달 등 기본 룩과 일관성을 라이브러리로 확보. 직접 커스텀 CSS는 최소화. **PrimeVue (Aura 테마) 확정 (Sprint 0, 2026-05-29).**
 - **핵심 화면만 러프 목업** — 전체 정밀 디자인 대신, **카드 생성 흐름 / 일정 에디터 / 여행 목록·상세 / 사진 라이브러리** 정도만 목업. 목업은 agent 구현의 **시각적 명세**(손그림·이미지도 입력 가능). 나머지 화면은 라이브러리 컴포넌트 조합으로.
 - **카드 결과물 디자인은 별도** — 스티커·폰트·색 팔레트·레이아웃 템플릿은 앱 UI와 다른 문제로, **카드 PoC([poc/card-poc.md](poc/card-poc.md))에서** 다룬다.
 
@@ -202,6 +202,8 @@ frontend/src/
 ## 6. AI 호출 인프라
 
 ### 6-1. 위치
+
+**기반 라이브러리 = Spring AI (BOM `1.0.0`, 2026-05-29 확정).** Sprint 0에선 **BOM만 도입**하고 `ai/` 패키지는 비워 둔다. provider 구현은 PoC로 모델을 확정한 뒤 **Sprint 2~3**에 작성한다. Spring AI의 `ChatClient`/모델 추상화 위에 아래 `LlmAdapter`/`VisionAdapter`를 얇게 둔다 (벤더 종속 최소화).
 
 `backend/src/main/java/.../triplog/ai/` 패키지에 어댑터를 둡니다.
 
@@ -301,3 +303,4 @@ ai/
 | v1 | 2026-05-29 | 합의 확정: ORM=MyBatis / Java 21+Maven / 응답 string code / Access+Refresh(DB) / Flyway / snake_case 명명 / AI 어댑터+provider 1개. 계층 표준(controller·service·mapper·dto·domain, 인터페이스 미사용)·프론트 작명 규칙 추가. 엔티티에 소셜로그인·협업공유·열람공유·카드 세로기본 반영 |
 | v1.1 | 2026-05-29 | 에이전틱 렌즈 재점검 보완: 테스트 전략 신설(가치 기준·JUnit5/Mockito/MockMvc/Vitest, mapper는 로컬 MySQL `triplog_test` 스키마·@Transactional 롤백·H2/Testcontainers 미사용) / 에러코드 카탈로그 틀(형식·prefix·단일 카탈로그) / N3=SpringDoc 도입(어노테이션 agent 생성) / 트랙 경계 API=공유 영역 취급 |
 | v1.2 | 2026-05-29 | F-3 데이터·저장소 확정: Q3 관광지=표준데이터 JSON(DB 적재)+식당은 카카오맵 / Q5 사진=로컬 디스크 저장(S3·추상화 미사용) / DB 테스트 Testcontainers→로컬 MySQL 테스트 스키마로 완화 |
+| v1.3 | 2026-05-29 | Sprint 0 결과 반영: §3-1 컴포넌트 라이브러리 **PrimeVue(Aura) 확정** / §6-1 AI 기반 라이브러리 **Spring AI(BOM 1.0.0) 확정** — Sprint 0은 BOM만, provider는 Sprint 2~3 |
