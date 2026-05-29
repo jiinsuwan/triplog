@@ -13,9 +13,15 @@ TripLog는 "AI 기능이 있는 여행 서비스"가 아니라, **AI agent를 �
 
 ---
 
-> 🟢 **현재 단계 (2026-05-29)**: 기획 문서 **v1 확정 완료** (`requirements.md` / `architecture.md` / `roadmap.md`). 미결은 Q6(텍스트/Vision LLM 모델, 카드 PoC 후 결정)뿐.
+> 🟢 **현재 단계 (2026-05-29)**: 기획 v1 확정 + **Sprint 0 코어 셋업 완료** (backend·frontend·CI 골격, PR #1 머지 — [sprint-0 회고](docs/sprints/sprint-0.md)). 남은 것: `S0-LOG-01`(카드 PoC) 미착수 · `S0-CORE-01`(branch protection)은 플랜 제약으로 **컨벤션 운용** · Q6(LLM 모델)은 PoC 후 결정.
 >
-> **다음 단계는 Sprint 0 시작입니다. 진입 시 가장 먼저 [`docs/sprints/_template.md`](docs/sprints/_template.md)를 복사해 `docs/sprints/sprint-0.md`를 작성하세요** — `roadmap.md`의 Sprint 0(셋업 + 카드 PoC 착수)을 구체화하고 Issue로 분해합니다. 스프린트 운영 방식은 [conventions §1-1](docs/conventions.md) 참고.
+> **다음 단계 = Sprint 1.** 주초에 [`_template.md`](docs/sprints/_template.md)를 복사해 `docs/sprints/sprint-1.md`를 작성하고 Issue로 분해한다 ([conventions §1-1](docs/conventions.md)).
+
+### 🚦 세션 진입 절차 — 이 순서로 시작한다 (맥락 없이 문서만으로 따라갈 수 있어야 함)
+
+1. **내 트랙 확인** — repo 루트의 `AGENTS.local.md`(개인 로컬 파일, git 공유 안 함)를 읽어 자신이 맡은 트랙(`trip` / `log` / `core`)을 확인한다. 파일이 없으면 [`AGENTS.local.md.example`](AGENTS.local.md.example)를 복사해 만든다.
+2. **현재 스프린트 찾기** — `docs/sprints/`에서 **가장 최신 `sprint-{N}.md`** 가 현재 스프린트다. 문서 상단 **상태줄**(🟢 진행 중 / ✅ 완료)로 진행 여부를 판별한다. 위 "현재 단계" 박스가 같은 내용을 가리킨다.
+3. **내 할 일만** — 그 스프린트 문서의 **내 트랙 섹션**과, 나에게 할당된 **열린 GitHub Issue**만 따라간다. 다른 트랙 파일은 건드리기 전 사람에게 확인한다.
 
 ## 1. 가장 먼저 읽어야 할 문서
 
@@ -48,13 +54,14 @@ GitHub Issue → Branch → Commit → Pull Request → GitHub Actions → Merge
 
 ## 3. 역할 분담
 
-| Track | 담당 사람 | AI agent의 작업 영역 |
+| Track | AI agent의 작업 영역 | 공유 |
 |---|---|---|
-| `trip` | 파트너 | 여행 CRUD, 관광지 탐색, 지도, 일정, 장소 저장 |
-| `log` | 본인 | 사진 업로드, 사진 기록, AI 카드 생성, export |
-| `core` | 둘 다 | 인증, 공통 구조, DB schema, API convention, CI, 공통 UI |
+| `trip` | 여행 CRUD, 관광지 탐색, 지도, 일정, 장소 저장 | 한 명 담당 |
+| `log` | 사진 업로드, 사진 기록, AI 카드 생성, export | 한 명 담당 |
+| `core` | 인증, 공통 구조, DB schema, API convention, CI, 공통 UI | 둘 다 (PR 리뷰 필수) |
 
-AI agent는 **자기에게 할당된 트랙 안에서만** 작업합니다. 다른 트랙의 파일을 건드리려면 사람에게 먼저 확인하세요.
+- **누가 어느 트랙인지는 공유 문서에 적지 않는다** (관점 종속을 피함). 각 작업자가 자신의 `AGENTS.local.md`(로컬, 공유 안 함)에 선언하고, agent는 위 "🚦 세션 진입 절차" 1번에서 그 파일을 읽어 자기 역할을 안다.
+- AI agent는 **자기 트랙 안에서만** 작업한다. 다른 트랙의 파일을 건드리려면 사람에게 먼저 확인한다.
 
 ---
 
