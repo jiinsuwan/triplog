@@ -27,6 +27,7 @@ Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Action
   3. `sprint-{N}.md` 작성 — 트랙별 Issue 후보(제목 + Goal/AC 요약) + 종료 조건
   4. 그 문서 기준으로 **GitHub Issue 생성 → 각자 트랙 작업 시작**
 - **종료**: `sprint-{N}.md` 하단에 회고(완료/이월/배운 점) 추가 → 다음 스프린트 입력으로.
+- **종료 시 진입점 갱신**: `AGENTS.md` 상단 "현재 단계" 박스를 **지금 상태·다음 할 일**로 업데이트한다. 새 세션/다음 작업자가 옛 안내를 따르지 않도록 — 이 박스가 항상 "지금 어디서, 무엇부터"를 가리켜야 한다.
 - `sprint-{N}.md`는 **1~2장으로 제한**. 설계·핸드오프 문서로 비대해지지 않습니다(§10). 형식은 `docs/sprints/_template.md` 참고.
 
 ---
