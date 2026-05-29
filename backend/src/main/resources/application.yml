@@ -1,0 +1,56 @@
+# TripLog 백엔드 공통 설정 (core)
+# 비밀/환경값은 모두 .env(또는 환경변수)로 주입한다. 값 직접 커밋 금지. (architecture §8)
+spring:
+  application:
+    name: triplog
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/triplog?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USER:triplog}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 100MB
+
+# MyBatis: snake_case ↔ camelCase 자동 매핑 (architecture §2-1, N2)
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+# SpringDoc OpenAPI (architecture N3)
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+# 사진 로컬 저장 경로 (architecture §8, log 트랙)
+app:
+  upload-dir: ${UPLOAD_DIR:./uploads}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+# JWT (auth 골격, architecture §7). secret은 반드시 env로 주입.
+jwt:
+  secret: ${JWT_SECRET:}
+  access-token-validity-ms: 1800000      # 30분
+  refresh-token-validity-ms: 1209600000  # 14일
+
+---
+# 테스트 프로파일: 로컬 MySQL의 테스트 전용 스키마 사용 (architecture §9-1)
+# mapper(SQL) 테스트가 추가되는 Sprint부터 실제 연결. 현재 Sprint 0 테스트는 DB 불필요(웹 슬라이스).
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/triplog_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USER:triplog}
+    password: ${DB_PASSWORD:}
+jwt:
+  secret: ${JWT_SECRET:test-only-secret-please-override-in-real-env-0123456789abcdef}
