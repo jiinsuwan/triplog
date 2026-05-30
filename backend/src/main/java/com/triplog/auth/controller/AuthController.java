@@ -2,6 +2,7 @@ package com.triplog.auth.controller;
 
 import com.triplog.auth.dto.AuthTokenResponse;
 import com.triplog.auth.dto.LoginRequest;
+import com.triplog.auth.dto.LogoutRequest;
 import com.triplog.auth.dto.RefreshTokenRequest;
 import com.triplog.auth.dto.SignupRequest;
 import com.triplog.auth.service.AuthService;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -45,5 +47,13 @@ public class AuthController {
     @PostMapping("/refresh")
     public ApiResponse<AuthTokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         return ApiResponse.success("토큰이 재발급되었습니다.", authService.refresh(request.refreshToken()));
+    }
+
+    @Operation(summary = "로그아웃")
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@AuthenticationPrincipal Long userId,
+                                    @Valid @RequestBody LogoutRequest request) {
+        authService.logout(userId, request.refreshToken());
+        return ApiResponse.success("로그아웃되었습니다.", null);
     }
 }
