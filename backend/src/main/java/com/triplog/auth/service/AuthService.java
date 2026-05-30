@@ -62,6 +62,28 @@ public class AuthService {
         return issueTokens(user.getId());
     }
 
+    @Transactional
+    public AuthTokenResponse refresh(String refreshTokenValue) {
+        Long tokenUserId = tokenProvider.parseUserIdOrThrow(refreshTokenValue);
+        RefreshToken refreshToken = refreshTokenMapper.findByToken(refreshTokenValue);
+        LocalDateTime now = now();
+
+        if (refreshToken == null || !tokenUserId.equals(refreshToken.getUserId())) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        if (refreshToken.isRevoked()) {
+            refreshTokenMapper.revokeAllByUserId(refreshToken.getUserId(), now);
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_REUSED);
+        }
+        if (refreshToken.isExpired(now)) {
+            refreshTokenMapper.revokeByToken(refreshTokenValue, now);
+            throw new BusinessException(ErrorCode.EXPIRED_TOKEN);
+        }
+
+        refreshTokenMapper.revokeByToken(refreshTokenValue, now);
+        return issueTokens(refreshToken.getUserId());
+    }
+
     private AuthTokenResponse issueTokens(Long userId) {
         String accessToken = tokenProvider.createAccessToken(userId);
         String refreshTokenValue = tokenProvider.createRefreshToken(userId);

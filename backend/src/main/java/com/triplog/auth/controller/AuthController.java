@@ -2,6 +2,7 @@ package com.triplog.auth.controller;
 
 import com.triplog.auth.dto.AuthTokenResponse;
 import com.triplog.auth.dto.LoginRequest;
+import com.triplog.auth.dto.RefreshTokenRequest;
 import com.triplog.auth.dto.SignupRequest;
 import com.triplog.auth.service.AuthService;
 import com.triplog.common.ApiResponse;
@@ -38,5 +39,11 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<AuthTokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success("로그인되었습니다.", authService.login(request));
+    }
+
+    @Operation(summary = "토큰 재발급")
+    @PostMapping("/refresh")
+    public ApiResponse<AuthTokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return ApiResponse.success("토큰이 재발급되었습니다.", authService.refresh(request.refreshToken()));
     }
 }
