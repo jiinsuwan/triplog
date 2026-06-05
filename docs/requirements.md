@@ -1,6 +1,6 @@
 # Requirements — 기능 요구사항 (v1)
 
-> **상태**: v1 Accepted (2026-05-29 합의) — 미결은 Q6(텍스트 LLM 모델, 카드 PoC 후 결정)뿐
+> **상태**: v1 Accepted (2026-05-29 합의) — **미결 없음** (Q6 → [decisions/0004](decisions/0004-card-poc-result.md)에서 해소, 2026-06-05)
 > 근거: [decisions/0001-project-blueprint](decisions/0001-project-blueprint.md), [decisions/0002-scope-pivot](decisions/0002-scope-pivot.md)
 
 ---
@@ -141,11 +141,11 @@
 
 ---
 
-## 6. 결정 필요 항목 (미결만 잔존)
+## 6. 결정 필요 항목 (모두 해소)
 
-| # | 항목 | 옵션 | 영향 |
+| # | 항목 | 결정 | 근거 |
 |---|---|---|---|
-| Q6 | 텍스트 LLM 모델 | SSAFY GMS key 우선 / Anthropic / OpenAI / Google — PoC 후 결정 | AI 호출 비용·품질 |
+| Q6 | 텍스트/Vision LLM 모델 | **Resolved** — 텍스트=SSAFY GMS 소형 우선 / Vision=로컬 SAM(per-card API 없음) / 합침 불요 | [decisions/0004](decisions/0004-card-poc-result.md) |
 
 **2026-05-29 해결**: Q1 → F04 드래그앤드롭 **P0 확정**. Q2 → 영상 기능 **전체 제외**. Q7 → 카드 **세로 1080×1920 메인(P0)**, 정사각형 1080×1080은 F09(P1). Q3 → **표준데이터 JSON(관광지 큐레이션, DB 적재) 우선**, 식당·카페는 카카오맵 검색 커버, TourAPI는 P2. Q4 → ORM **MyBatis** (architecture 확정). Q5 → 사진 **로컬 디스크 저장**(정적 서빙), S3·추상화 미사용.
 

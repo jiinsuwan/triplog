@@ -227,7 +227,9 @@ ai/
 - 모델 선택은 `application.yml` 환경별 설정으로 분리. 기본값은 SSAFY GMS key 우선.
 - **과설계 방지 (2026-05-29)**: 어댑터 인터페이스(`LlmAdapter`/`VisionAdapter`)는 두되, **provider 구현은 PoC에서 확정한 1개만** 먼저 작성한다. Anthropic/OpenAI/Google fallback은 실제로 필요해질 때 추가 (인터페이스가 있으므로 그때 붙이면 됨). 안 쓸 provider 4개를 미리 만들지 않는다.
 
-상세 가이드 / 모델 선정 근거: [poc/card-poc.md](poc/card-poc.md), 결정 로그 `decisions/0004-card-poc-result.md` (Sprint 0 종료 후 생성 예정).
+상세 가이드 / 모델 선정 근거: [poc/card-poc.md](poc/card-poc.md), 결정 로그 [decisions/0004](decisions/0004-card-poc-result.md).
+
+> **PoC 반영 (2026-06-05, decisions/0004)**: 카드 = "사진 위 overlay(canvas 합성·편집 가능)" 구조. **텍스트 LLM = 짧은 문구만**(전체 카드 JSON 생성 폐기) → provider 1순위 = GMS 텍스트 어댑터. **Vision = per-card API 미사용** — 객체 외곽/위치는 업로드 시 1회 SAM2 세그멘테이션 + 경량 CV로 처리하므로 `VisionAdapter`는 "로컬 세그 어댑터"로 충족 가능. 렌더는 Canvas2D 공용 코어(**Konva 미채택**).
 
 ---
 
