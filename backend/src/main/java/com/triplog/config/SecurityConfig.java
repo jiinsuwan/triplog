@@ -1,9 +1,15 @@
 package com.triplog.config;
 
 import com.triplog.auth.jwt.JwtAuthenticationFilter;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.triplog.common.ApiResponse;
+import com.triplog.common.ErrorCode;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -16,12 +22,12 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.time.Clock;
 import java.util.List;
 
 /**
  * Spring Security 골격 (architecture §7). Stateless + JWT 필터.
- * Sprint 0 에서는 인증 흐름이 없으므로 공개 경로 위주로 열어두고, 보호 경로 규칙은
- * 도메인 API 가 생기는 Sprint 부터 좁혀간다.
+ * Sprint 1부터 인증 API만 공개하고 나머지 도메인 API는 보호한다.
  */
 @Configuration
 public class SecurityConfig {
@@ -29,13 +35,17 @@ public class SecurityConfig {
     private static final String[] PUBLIC_PATHS = {
             "/api/health",
             "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
-            "/auth/**"
+            "/auth/signup", "/auth/login", "/auth/refresh",
+            "/error"
     };
 
     private final String allowedOrigins;
+    private final ObjectMapper objectMapper;
 
-    public SecurityConfig(@Value("${app.cors.allowed-origins}") String allowedOrigins) {
+    public SecurityConfig(@Value("${app.cors.allowed-origins}") String allowedOrigins,
+                          ObjectMapper objectMapper) {
         this.allowedOrigins = allowedOrigins;
+        this.objectMapper = objectMapper;
     }
 
     @Bean
@@ -48,8 +58,14 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .anyRequest().authenticated())
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) ->
+                                writeError(response, ErrorCode.UNAUTHORIZED))
+                        .accessDeniedHandler((request, response, accessDeniedException) ->
+                                writeError(response, ErrorCode.ACCESS_DENIED)))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -70,5 +86,17 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12); // architecture §7: cost factor 12
+    }
+
+    @Bean
+    public Clock clock() {
+        return Clock.systemDefaultZone();
+    }
+
+    private void writeError(HttpServletResponse response, ErrorCode errorCode) throws java.io.IOException {
+        response.setStatus(errorCode.getStatus().value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        objectMapper.writeValue(response.getWriter(), ApiResponse.error(errorCode));
     }
 }

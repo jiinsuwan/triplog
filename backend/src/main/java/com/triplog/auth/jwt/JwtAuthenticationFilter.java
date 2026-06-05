@@ -34,10 +34,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String token = resolveToken(request);
         if (token != null) {
-            String subject = tokenProvider.parseSubject(token);
-            if (subject != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            Long userId = tokenProvider.parseUserId(token);
+            if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        subject, null, AuthorityUtils.NO_AUTHORITIES);
+                        userId, null, AuthorityUtils.NO_AUTHORITIES);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         }
