@@ -29,7 +29,12 @@ public enum ErrorCode {
 
     // --- USER ---
     EMAIL_ALREADY_EXISTS("USER_001", HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
-    USER_NOT_FOUND("USER_002", HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다.");
+    USER_NOT_FOUND("USER_002", HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
+
+    // --- TRIP ---
+    TRIP_NOT_FOUND("TRIP_001", HttpStatus.NOT_FOUND, "Trip not found."),
+    TRIP_ACCESS_DENIED("TRIP_002", HttpStatus.FORBIDDEN, "Trip access denied."),
+    TRIP_INVALID_INPUT("TRIP_003", HttpStatus.BAD_REQUEST, "Invalid trip input.");
 
     private final String code;
     private final HttpStatus status;
