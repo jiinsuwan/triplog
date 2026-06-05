@@ -1,8 +1,6 @@
 package com.triplog.trip.controller;
 
 import com.triplog.common.ApiResponse;
-import com.triplog.common.BusinessException;
-import com.triplog.common.ErrorCode;
 import com.triplog.trip.dto.CreateTripRequest;
 import com.triplog.trip.dto.TripListResponse;
 import com.triplog.trip.dto.TripResponse;
@@ -13,7 +11,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,63 +36,39 @@ public class TripController {
     @Operation(summary = "Create trip")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<TripResponse> create(@AuthenticationPrincipal Object principal,
+    public ApiResponse<TripResponse> create(@AuthenticationPrincipal Long userId,
                                             @Valid @RequestBody CreateTripRequest request) {
-        return ApiResponse.success("Trip created.", tripService.create(resolveUserId(principal), request));
+        return ApiResponse.success("Trip created.", tripService.create(userId, request));
     }
 
     @Operation(summary = "List my trips")
     @GetMapping
-    public ApiResponse<TripListResponse> list(@AuthenticationPrincipal Object principal,
+    public ApiResponse<TripListResponse> list(@AuthenticationPrincipal Long userId,
                                               @RequestParam(required = false) Integer page,
                                               @RequestParam(required = false) Integer size) {
-        return ApiResponse.success(tripService.list(resolveUserId(principal), page, size));
+        return ApiResponse.success(tripService.list(userId, page, size));
     }
 
     @Operation(summary = "Get trip detail")
     @GetMapping("/{id}")
-    public ApiResponse<TripResponse> get(@AuthenticationPrincipal Object principal,
+    public ApiResponse<TripResponse> get(@AuthenticationPrincipal Long userId,
                                          @PathVariable Long id) {
-        return ApiResponse.success(tripService.get(resolveUserId(principal), id));
+        return ApiResponse.success(tripService.get(userId, id));
     }
 
     @Operation(summary = "Update trip")
     @PutMapping("/{id}")
-    public ApiResponse<TripResponse> update(@AuthenticationPrincipal Object principal,
+    public ApiResponse<TripResponse> update(@AuthenticationPrincipal Long userId,
                                             @PathVariable Long id,
                                             @Valid @RequestBody UpdateTripRequest request) {
-        return ApiResponse.success("Trip updated.", tripService.update(resolveUserId(principal), id, request));
+        return ApiResponse.success("Trip updated.", tripService.update(userId, id, request));
     }
 
     @Operation(summary = "Delete trip")
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@AuthenticationPrincipal Object principal,
+    public ApiResponse<Void> delete(@AuthenticationPrincipal Long userId,
                                     @PathVariable Long id) {
-        tripService.delete(resolveUserId(principal), id);
+        tripService.delete(userId, id);
         return ApiResponse.success("Trip deleted.", null);
-    }
-
-    private Long resolveUserId(Object principal) {
-        if (principal instanceof Long userId) {
-            return userId;
-        }
-        if (principal instanceof Number number) {
-            return number.longValue();
-        }
-        if (principal instanceof String subject) {
-            return parseUserId(subject);
-        }
-        if (principal instanceof UserDetails userDetails) {
-            return parseUserId(userDetails.getUsername());
-        }
-        throw new BusinessException(ErrorCode.UNAUTHORIZED);
-    }
-
-    private Long parseUserId(String value) {
-        try {
-            return Long.valueOf(value);
-        } catch (NumberFormatException e) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED);
-        }
     }
 }

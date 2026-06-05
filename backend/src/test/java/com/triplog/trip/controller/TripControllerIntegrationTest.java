@@ -2,6 +2,7 @@ package com.triplog.trip.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.triplog.auth.jwt.JwtTokenProvider;
 import com.triplog.trip.dto.CreateTripRequest;
 import com.triplog.trip.dto.UpdateTripRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -17,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -43,6 +44,9 @@ class TripControllerIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private JwtTokenProvider tokenProvider;
+
     @BeforeEach
     void setUp() {
         insertUser(USER_ID, "trip-owner@example.com");
@@ -67,20 +71,20 @@ class TripControllerIntegrationTest {
         long tripId = createBody.at("/data/id").asLong();
 
         mockMvc.perform(get("/trips")
-                        .with(user(String.valueOf(USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.items[0].id").value(tripId));
 
         mockMvc.perform(get("/trips/{id}", tripId)
-                        .with(user(String.valueOf(USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(tripId))
                 .andExpect(jsonPath("$.data.title").value("Seoul food trip"));
 
         mockMvc.perform(put("/trips/{id}", tripId)
-                        .with(user(String.valueOf(USER_ID)))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateTripRequest(
                                 "Busan sea trip",
@@ -94,12 +98,12 @@ class TripControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.region").value("Busan"));
 
         mockMvc.perform(delete("/trips/{id}", tripId)
-                        .with(user(String.valueOf(USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS"));
 
         mockMvc.perform(get("/trips/{id}", tripId)
-                        .with(user(String.valueOf(USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_001"));
     }
@@ -123,7 +127,7 @@ class TripControllerIntegrationTest {
                 "PLANNED"), OTHER_USER_ID);
 
         mockMvc.perform(get("/trips")
-                        .with(user(String.valueOf(USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.items[0].id").value(ownerTrip.at("/data/id").asLong()))
@@ -141,12 +145,12 @@ class TripControllerIntegrationTest {
                 "PLANNED"), USER_ID).andReturnBody().at("/data/id").asLong();
 
         mockMvc.perform(get("/trips/{id}", tripId)
-                        .with(user(String.valueOf(OTHER_USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(OTHER_USER_ID)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TRIP_002"));
 
         mockMvc.perform(put("/trips/{id}", tripId)
-                        .with(user(String.valueOf(OTHER_USER_ID)))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(OTHER_USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateTripRequest(
                                 "Changed",
@@ -159,7 +163,7 @@ class TripControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("TRIP_002"));
 
         mockMvc.perform(delete("/trips/{id}", tripId)
-                        .with(user(String.valueOf(OTHER_USER_ID))))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(OTHER_USER_ID)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TRIP_002"));
     }
@@ -167,7 +171,7 @@ class TripControllerIntegrationTest {
     @Test
     void create_rejects_missing_required_fields() throws Exception {
         mockMvc.perform(post("/trips")
-                        .with(user(String.valueOf(USER_ID)))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -185,10 +189,14 @@ class TripControllerIntegrationTest {
 
     private ResultActionsWithBody postTrip(CreateTripRequest request, long userId) throws Exception {
         var resultActions = mockMvc.perform(post("/trips")
-                .with(user(String.valueOf(userId)))
+                .header(HttpHeaders.AUTHORIZATION, bearer(userId))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)));
         return new ResultActionsWithBody(resultActions);
+    }
+
+    private String bearer(long userId) {
+        return "Bearer " + tokenProvider.createAccessToken(userId);
     }
 
     private void insertUser(long id, String email) {
