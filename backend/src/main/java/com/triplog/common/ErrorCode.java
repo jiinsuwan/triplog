@@ -16,6 +16,7 @@ public enum ErrorCode {
 
     // --- COMMON ---
     INVALID_INPUT("COMMON_001", HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
+    DATA_INTEGRITY_VIOLATION("COMMON_002", HttpStatus.CONFLICT, "데이터 제약 조건을 위반했습니다."),
     INTERNAL_ERROR("COMMON_500", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
 
     // --- AUTH ---

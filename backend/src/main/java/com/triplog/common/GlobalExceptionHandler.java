@@ -1,5 +1,6 @@
 package com.triplog.common;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -35,6 +36,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException e) {
         ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+        return ResponseEntity.status(errorCode.getStatus())
+                .body(ApiResponse.error(errorCode));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        ErrorCode errorCode = ErrorCode.DATA_INTEGRITY_VIOLATION;
         return ResponseEntity.status(errorCode.getStatus())
                 .body(ApiResponse.error(errorCode));
     }
