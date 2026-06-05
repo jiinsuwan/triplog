@@ -62,7 +62,7 @@ public class AuthService {
         return issueTokens(user.getId());
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public AuthTokenResponse refresh(String refreshTokenValue) {
         Long tokenUserId = tokenProvider.parseUserIdOrThrow(refreshTokenValue);
         RefreshToken refreshToken = refreshTokenMapper.findByToken(refreshTokenValue);

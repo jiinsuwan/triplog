@@ -15,7 +15,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -86,14 +89,16 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void reused_refresh_token_revokes_all_user_refresh_tokens() throws Exception {
-        SignupRequest signup = new SignupRequest("reuse@example.com", "password123", "reuse");
+        String email = "reuse-" + UUID.randomUUID() + "@example.com";
+        SignupRequest signup = new SignupRequest(email, "password123", "reuse");
         mockMvc.perform(post("/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(signup)))
                 .andExpect(status().isCreated());
 
-        JsonNode loginBody = postJson("/auth/login", new LoginRequest("reuse@example.com", "password123"))
+        JsonNode loginBody = postJson("/auth/login", new LoginRequest(email, "password123"))
                 .andExpect(status().isOk())
                 .andReturnBody();
         String oldRefreshToken = loginBody.at("/data/refreshToken").asText();
