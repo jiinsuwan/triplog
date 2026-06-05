@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>TripLog AI 음식 카드 PoC — 방법론 시도 회고</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; color: #222; line-height: 1.6; font-size: 12px; }
+  h1 { font-size: 24px; color: #1a1410; border-bottom: 3px solid #c8841f; padding-bottom: 8px; margin-bottom: 4px; }
+  h2 { font-size: 18px; color: #b8650f; margin-top: 28px; border-left: 5px solid #c8841f; padding-left: 10px; page-break-after: avoid; }
+  h3 { font-size: 14px; color: #333; margin-top: 18px; page-break-after: avoid; }
+  .sub { color: #888; font-size: 12px; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 11px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f5ead9; color: #6b4a1f; }
+  tr:nth-child(even) td { background: #fbf7f1; }
+  .ok { color: #1a7d3a; font-weight: bold; }
+  .bad { color: #c0392b; font-weight: bold; }
+  .mid { color: #b8860b; font-weight: bold; }
+  code { background: #f0ece6; padding: 1px 5px; border-radius: 3px; font-family: "SF Mono", Menlo, monospace; font-size: 11px; }
+  pre { background: #1d1813; color: #e8e2d8; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 10px; line-height: 1.4; }
+  figure { margin: 12px 0; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; border: 1px solid #ccc; border-radius: 6px; }
+  figcaption { font-size: 10px; color: #777; margin-top: 4px; }
+  .imgrow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .imgrow figure { flex: 1; min-width: 0; margin: 6px; }
+  .card-img { max-height: 360px; }
+  .wide { max-height: 300px; }
+  .note { background: #fff8e7; border-left: 4px solid #e0b050; padding: 8px 12px; margin: 10px 0; font-size: 11px; }
+  .miss { background: #fbeaea; border-left: 4px solid #d08080; padding: 8px 12px; margin: 10px 0; font-size: 11px; color: #844; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  .meta { color: #999; font-size: 11px; }
+  .pill { display: inline-block; background: #eee; border-radius: 10px; padding: 1px 8px; font-size: 10px; margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<h1>TripLog — AI 음식 카드 PoC 방법론 시도 회고</h1>
+<p class="sub">사진 → 인스타 감성 카드 자동 생성 PoC · 음식 영역 검출 + 카드 디자인 톤 실험 기록 · 작성 2026-05-30</p>
+
+<div class="note">
+<b>이 문서의 목적</b> — "음식 사진 위에 손글씨/낙서를 얹은 인스타 감성 카드"를 자동 생성하기 위해,
+① <b>음식 영역을 어떻게 검출할 것인가</b>(컴퓨터비전)와 ② <b>카드 디자인 톤</b>을 여러 방법으로 시도했다.
+무엇을 시도했고, 어떤 결과가 나왔으며, 지금 무엇을 수정 중이고, 무엇이 미해결인지 정리해 <b>다음 아이디어를 고민하기 위한 자료</b>로 만든다.
+</div>
+
+<h2>0. 한눈에 보기 — 핵심 결론</h2>
+<ul>
+  <li><b>카드 렌더 엔진은 완성도 높음.</b> Canvas2D 공용 코어(<code>render-core.mjs</code>)로 JSON→PNG 양산 + 브라우저 편집기까지 동일 코어 공유. 손글씨·반짝이·오버레이·점선·누끼 마스크 다 지원.</li>
+  <li><b>음식 영역 검출이 가장 어려운 미해결 지점.</b> rembg→FastSAM→SAM2→색기반→hull 순으로 진화. 현재 <b>SAM2 large + box-prompt</b>가 "접시+음식 통째"를 가장 정밀하게 잡음.</li>
+  <li><b>핵심 미결정:</b> 외곽선이 <b>접시째</b>를 감쌀지 <b>음식 내용물</b>만 감쌀지 방향이 계속 흔들림. 음식이 빽빽한 사진은 코멘트 둘 여백도 부족.</li>
+  <li><b>결정된 방향:</b> 자동(SAM2)은 80%만 잡고 <b>나머지는 편집기에서 사용자가 점 드래그/뭉툭 슬라이더로 보정</b>한다 = "AI 자동 + 사용자 편집". (편집기 보정 UI는 미구현)</li>
+</ul>
+
+<h2>1. 카드 디자인 톤 — 진화 과정</h2>
+<p>사용자 피드백을 받아가며 톤이 6단계로 바뀌었다. (일부 중간 단계는 카드 JSON을 덮어써서 PNG가 유실 → 설명으로 대체)</p>
+
+<table>
+<tr><th>단계</th><th>시도한 톤</th><th>사용자 피드백 / 결과</th></tr>
+<tr><td>1</td><td><b>캡션형(잡지 표지)</b> — 큰 손글씨 제목 + 물결 밑줄. 4사진 × 4스타일(minimal/rich/info/polaroid) = 16종</td><td>"따로 노는 느낌" — 인스타 다꾸 톤과 거리. <span class="mid">방향 전환</span></td></tr>
+<tr><td>2</td><td><b>말풍선형</b> — 사진 위 말풍선 박스 + 꼬리로 음식 코멘트</td><td class="bad">"말풍선이 핵심이 아냐" — 예시는 홍보 게시물이라 말풍선이 과했던 것 <span class="miss" style="display:inline;padding:1px 6px">PNG 유실</span></td></tr>
+<tr><td>3</td><td><b>흰 손글씨 낙서</b> — 박스 제거, 사진 위 흰 펜 글씨 + 점선</td><td>"배경 어둡게 해야 글씨가 산다" <span class="miss" style="display:inline;padding:1px 6px">PNG 유실</span></td></tr>
+<tr><td>4</td><td><b>폰트 교체</b> — 나눔펜 → Gamja Flower(둥근 손글씨) + 어두운 오버레이</td><td class="ok">톤 크게 개선</td></tr>
+<tr><td>5</td><td><b>리서치 반영</b> — 반짝이 ✦, 따뜻한 톤(soft-light), 강조색, 워터마크, 누끼 흰테두리</td><td>예시 톤에 근접</td></tr>
+<tr><td>6</td><td><b>프롬프트 발견 → 톤다운</b> — 사용자가 공유한 GPT 편집 프롬프트("원본 유지·은은·과하지 않게") 반영</td><td>현재 진행 — 음식 외곽 강조 방식에서 막힘</td></tr>
+</table>
+
+<div class="imgrow">
+  <figure><img class="card-img" src="out/renders/IMG_9800_rich.png"><figcaption>1단계: 캡션형(rich) — 잡지 표지 톤</figcaption></figure>
+  <figure><img class="card-img" src="out/renders/IMG_9717_doodle.png"><figcaption>6단계(현재): 흰 손글씨 + 음식 외곽 점선 + 따뜻한 톤</figcaption></figure>
+</div>
+
+<figure><img class="wide" src="out/font-sample.png"><figcaption>4단계: 한글 손글씨 폰트 6종 비교 → Gamja Flower 채택</figcaption></figure>
+
+<h2>2. 음식 영역 검출 방법론 — 핵심 실험</h2>
+<p>"음식을 어떻게 잡을 것인가"가 가장 많이 갈아엎은 부분이다. 시간순으로:</p>
+
+<table>
+<tr><th>#</th><th>방법</th><th>의도</th><th>결과</th><th>판정</th></tr>
+<tr><td>2-1</td><td><b>rembg (u2net)</b> 배경제거</td><td>주제 누끼로 객체 강조</td><td>"두드러진 하나"만 따는 saliency라 접시 4개 분리 <b>구조적 불가</b></td><td class="bad">불가</td></tr>
+<tr><td>2-2</td><td><b>FastSAM everything</b></td><td>클래스 무관 전체 인스턴스 자동 분리</td><td>사람·빈 배경을 잡고 정작 음식 접시는 놓침</td><td class="bad">실패</td></tr>
+<tr><td>2-3</td><td><b>FastSAM box-prompt</b> (vision bbox)</td><td>음식 위치를 프롬프트로 한정</td><td>접시는 잡으나 윤곽 거침(폴리곤 11~38점)</td><td class="mid">거침</td></tr>
+<tr><td>2-4</td><td><b>SAM2 box (base)</b></td><td>FastSAM보다 정밀한 SAM2</td><td>윤곽 촘촘(28~90점). 단 우하단 삐침 노이즈</td><td class="ok">개선</td></tr>
+<tr><td>2-5</td><td><b>SAM2 point-prompt</b> (음식 중앙 1점)</td><td>접시 말고 음식만 분리</td><td>메인 파스타·피자는 음식 정확히 땄으나, 흩어진 음식(감자)은 한 조각만(frac 0.001)</td><td class="mid">부분</td></tr>
+<tr><td>2-6</td><td><b>multi-point</b> (음식 그리드 9점)</td><td>흩어진 음식 전체 커버</td><td>API 형식 문제로 9점을 9객체로 해석 → 더 작게</td><td class="bad">실패</td></tr>
+<tr><td>2-7</td><td><b>색 기반</b> (접시 표면색 제외)</td><td>접시 안에서 음식만 색으로 분리</td><td>음식 영역 조각남(frac 0.002~0.026), 무늬 접시에서 흔들림</td><td class="bad">실패</td></tr>
+<tr><td>2-8</td><td><b>SAM2 large + morphology</b></td><td>마스크 품질↑ + 삐침/구멍 제거</td><td>접시+음식 통째를 삐침 없이 정밀하게 (현재 베이스)</td><td class="ok">정밀</td></tr>
+<tr><td>2-9</td><td><b>convex hull + 5% 확대</b></td><td>"뭉툭하게" 둥근 외곽</td><td>볼록 껍질이 음식 凹부분을 직선으로 가로지르고 확대로 <b>접시 밖 테이블까지</b> 둘러 이상해짐</td><td class="bad">과함</td></tr>
+<tr><td>2-10</td><td><b>원본 contour + smooth</b> (현재)</td><td>확대 빼고 윤곽 따라가며 둥글게</td><td>마스크 저장 → SAM 없이 <code>round_outline.py</code>로 뭉툭 정도 즉시 조절</td><td class="mid">조정중</td></tr>
+</table>
+
+<h3>리서치로 확정한 추천 파이프라인</h3>
+<pre>FastSAM/SAM2 box-prompt(음식 위치)  →  인스턴스 마스크
+   →  pymatting / OpenCV feather (경계 부드럽게, hard edge 제거)
+   →  cv2.findContours + approxPolyDP (외곽 폴리곤)
+   →  canvas 점선 손그림 강조선</pre>
+
+<div class="imgrow">
+  <figure><img class="wide" src="out/_debug_poly.png"><figcaption>2-8: SAM2 large box-prompt — 4개 접시 윤곽 정밀 검출(색별)</figcaption></figure>
+  <figure><img class="wide" src="out/_food_check.png"><figcaption>2-9: convex hull+확대 실패 — 점선이 접시 밖 테이블까지 헐렁하게</figcaption></figure>
+</div>
+
+<div class="imgrow">
+  <figure><img class="wide" src="out/cutout_IMG_9717.png"><figcaption>2-1: rembg 누끼 — 식탁이라 주제가 여러 접시로 뭉침</figcaption></figure>
+  <figure><img class="wide" src="out/_smooth_compare.png"><figcaption>스무딩 0(좌) vs 6(우) — 외곽 둥글기 조절</figcaption></figure>
+</div>
+
+<h2>3. 외부 리서치 발견 (검색 기반)</h2>
+<h3>3-1. 컴퓨터비전 (음식 세그멘테이션)</h3>
+<ul>
+  <li><b>FastSAM-s</b>(23.9MB, AGPL): 빠르나 거침. <b>SAM2</b>(b/l): 느리나 정밀 — <span class="ok">현재 채택(large)</span>.</li>
+  <li>경계 부드럽게: <b>pymatting</b> alpha matting(trimap), 또는 OpenCV erode+GaussianBlur feather.</li>
+  <li>외곽선: <code>cv2.findContours + approxPolyDP</code>로 폴리곤화, Canny/HED는 질감 있는 선.</li>
+  <li>상업 폐쇄소스 시 AGPL 주의 → MobileSAM(Apache) 대안.</li>
+</ul>
+<h3>3-2. 인스타 감성 카드 디자인</h3>
+<ul>
+  <li>폰트 1~2종 제한 / 메인:코멘트 ≈ 2.2:1 / 강조 1색만 (크림 <code>#FFF8E7</code>).</li>
+  <li>반짝이 6~10개 상한(과하면 촌스러움), 그림자 약하게(blur 8/op 0.3).</li>
+  <li>누끼 = 흰 외곽선 2px + soft 그림자 + 배경 블러(스티커화).</li>
+  <li>색온도 +warm, 그레인 20~30, 폴라로이드 하단 띠에 날짜·장소.</li>
+</ul>
+
+<h2>4. 현재 미해결 과제 / 고민거리</h2>
+<table>
+<tr><th>이슈</th><th>현황 / 고민</th></tr>
+<tr><td><b>접시 vs 음식</b></td><td>외곽선이 "접시째"인지 "음식 내용물"인지 방향이 계속 흔들림. 현재는 "접시+음식 통째(box)". 음식만 분리는 무늬 접시/흩어진 음식에서 까다로움.</td></tr>
+<tr><td><b>뭉툭함</b></td><td>윤곽이 음식 굴곡을 그대로 따르면 들쭉날쭉. 너무 뭉툭(hull+확대)하면 접시 밖으로 뜸. <code>smooth</code>·<code>expand</code> 균형점 탐색 중.</td></tr>
+<tr><td><b>경계 자연스러움</b></td><td>foodmask hard edge → GaussianBlur(45)로 완화. pymatting 정밀 매팅은 미적용(맥 CPU 속도).</td></tr>
+<tr><td><b>코멘트 배치</b></td><td>음식이 빽빽한 사진(IMG_9717)은 글씨 둘 어두운 여백이 좁아 음식을 가림. 여백 많은 사진은 수월.</td></tr>
+<tr><td><b>자동 정밀도 한계</b></td><td>SAM2도 100%는 불가 → <b>편집기 수동 보정</b>으로 메우는 게 결론. (UI 미구현)</td></tr>
+</table>
+
+<h2>5. 만들어 둔 재사용 자산</h2>
+<table>
+<tr><th>파일</th><th>역할</th></tr>
+<tr><td><code>render-core.mjs</code></td><td>Canvas2D 공용 렌더 코어 — 브라우저 편집기 ↔ Node 배치 렌더러 공유. 사진·오버레이·누끼마스크·반짝이·외곽점선·캡션·말풍선·스티커·정보박스.</td></tr>
+<tr><td><code>render-batch.mjs</code></td><td>out/cards/*.json → PNG 양산(헤드리스). foodmask/segments 자동 로드.</td></tr>
+<tr><td><code>editor.html</code></td><td>브라우저 편집기 — 전 요소 선택·드래그·텍스트수정·숨김·PNG export. (외곽선 점 보정은 미구현)</td></tr>
+<tr><td><code>segment_food.py</code></td><td>SAM2 large box-prompt → 음식 마스크 + 외곽 폴리곤 JSON + 개별 마스크 저장.</td></tr>
+<tr><td><code>round_outline.py</code></td><td>저장된 마스크에서 <b>SAM 재실행 없이</b> 뭉툭(smooth)·여유(expand)만 즉시 재계산.</td></tr>
+<tr><td><code>prompts/gpt-image-edit-prompt.md</code></td><td>GPT 이미지 편집용 프롬프트(원본 사진 감성편집) — 직접 사용 자산.</td></tr>
+</table>
+
+<h2>6. 다음 아이디어 후보</h2>
+<ol>
+  <li><b>편집기 외곽선 보정 UI</b> — SAM2 자동 외곽을 점 핸들로 표시, 드래그/추가/삭제 + 뭉툭 슬라이더. (가장 실용적, 결론적 방향)</li>
+  <li><b>음식 vs 접시 결정</b> — 둘 중 하나로 확정하거나, 편집기에서 토글.</li>
+  <li><b>경계 매팅 정밀화</b> — pymatting trimap을 다운스케일로 적용해 속도/품질 절충.</li>
+  <li><b>여백 많은 사진 우선</b> — 코멘트 배치가 자연스러운 사진(캠핑·분식)으로 톤 확정 후 빽빽한 사진 대응.</li>
+  <li><b>HQ-SAM / SAM2.1 large+</b> 등 더 높은 품질 모델, 또는 음식 전용 세그 모델 검토.</li>
+  <li><b>GPT 이미지 편집 트랙 병행</b> — canvas 자동 합성과 별개로, 사용자가 직접 GPT로 감성편집(프롬프트 자산 활용).</li>
+</ol>
+
+<div class="note" style="margin-top:24px">
+<b>요약 한 줄</b> — 렌더 엔진·편집기·세그 파이프라인 골격은 섰고, 남은 핵심은 <b>"음식 외곽을 어느 수준(접시째/음식만, 얼마나 뭉툭)으로 잡고, 부족분을 편집기에서 어떻게 보정하게 할 것인가"</b>의 디자인 결정이다.
+</div>
+
+</body>
+</html>

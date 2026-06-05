@@ -1,0 +1,21 @@
+images/
+*.heic
+*.HEIC
+.env
+*.key
+node_modules/
+__pycache__/
+
+# 무거운 로컬 자산 — 커밋 금지
+.venv/
+*.pt
+.DS_Store
+
+# 비전 산출물(대용량, 재생성 가능). segments_*.json 만 추적해 외곽선 재현 보장
+out/_legacy/
+out/foodmask_*.png
+out/cutout_*.png
+
+# 대용량 자산 — 다운로드/생성 (커밋 제외)
+fonts/
+ref/

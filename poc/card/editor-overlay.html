@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TripLog — 다꾸 overlay 편집기 (1080×1920)</title>
+<style>
+  @font-face { font-family: 'East Sea Dokdo'; src: url('fonts/EastSeaDokdo-Regular.ttf'); }
+  @font-face { font-family: 'Nanum Pen Script'; src: url('fonts/NanumPenScript-Regular.ttf'); }
+  @font-face { font-family: 'Dokdo'; src: url('fonts/Dokdo-Regular.ttf'); }
+  @font-face { font-family: 'Stylish'; src: url('fonts/Stylish-Regular.ttf'); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #14120e; color: #e6dcc9; font: 14px/1.5 -apple-system, sans-serif; height: 100vh; overflow: hidden; }
+  .wrap { display: flex; height: 100vh; }
+  .stage { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #0c0b09; }
+  #holder { position: relative; }
+  #card { box-shadow: 0 8px 40px rgba(0,0,0,.6); border-radius: 6px; display: block; }
+  #sel { position: absolute; left: 0; top: 0; pointer-events: none; }
+  aside { width: 340px; background: #1b1813; border-left: 1px solid #2a2620; padding: 16px; overflow-y: auto; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  .sub { color: #9b8e79; font-size: 12px; margin-bottom: 14px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #8a7d68; margin: 16px 0 8px; border-bottom: 1px solid #2a2620; padding-bottom: 5px; }
+  button { background: #2a2620; color: #e6dcc9; border: 1px solid #3a342b; border-radius: 7px; padding: 7px 11px; cursor: pointer; font-size: 13px; margin: 0 5px 6px 0; }
+  button:hover { background: #353029; } button.on { background: #c9a96a; color: #1a1610; border-color: #c9a96a; font-weight: 600; }
+  button.danger { background: #4a2420; color: #f0b3aa; border-color: #5a2c26; }
+  textarea, input[type=text] { width: 100%; background: #221f1a; border: 1px solid #3a342b; color: #e6dcc9; padding: 7px 9px; border-radius: 6px; font: inherit; }
+  label { font-size: 12px; color: #9b8e79; display: block; margin: 8px 0 3px; }
+  .hint { color: #8a7d68; font-size: 12px; margin-top: 6px; }
+  code { background: #221f1a; padding: 1px 5px; border-radius: 4px; color: #d8b878; }
+  .muted { color: #6f6557; font-size: 12px; }
+  input[type=range] { width: 100%; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage"><div id="holder"><canvas id="card"></canvas><canvas id="sel"></canvas></div></div>
+  <aside>
+    <h1>다꾸 overlay 편집기</h1>
+    <div class="sub">세로 1080×1920 (F07) · 사진 풀블리드 · 주석 드래그 이동</div>
+
+    <h2>사진</h2><div id="photos"></div>
+    <div class="hint" id="aspect"></div>
+
+    <h2>주석 추가 / 모드</h2>
+    <button data-mode="select" class="on">선택·이동</button>
+    <button data-mode="add">＋ 클릭해 주석 추가</button>
+    <div class="hint" id="modeHint">주석을 클릭해 선택하고 드래그로 옮깁니다.</div>
+
+    <h2>선택한 주석</h2>
+    <div id="noPick" class="muted">캔버스에서 주석을 클릭하세요.</div>
+    <div id="editor" style="display:none">
+      <label>문구 (Enter=줄바꿈, 최대 3줄)</label>
+      <textarea id="noteText" rows="3"></textarea>
+      <label>장식</label>
+      <select id="noteDeco" style="width:100%;background:#221f1a;border:1px solid #3a342b;color:#e6dcc9;padding:6px;border-radius:6px">
+        <option value="">없음</option><option>heart</option><option>sparkle</option><option>star</option><option>smile</option><option>sun</option>
+      </select>
+      <label><input type="checkbox" id="noteOutline" style="width:auto"> 강조 외곽선(원)</label>
+      <div id="radWrap" style="display:none"><label>외곽선 크기</label><input type="range" id="noteRad" min="40" max="320" /></div>
+      <div style="margin-top:10px"><button id="resetPos">자동 위치로</button><button class="danger" id="del">삭제</button></div>
+    </div>
+
+    <h2>표시 / 내보내기</h2>
+    <button id="tgOutline" class="on">외곽선</button>
+    <button id="tgArrow" class="on">화살표</button>
+    <button id="tgDeco" class="on">장식</button>
+    <div style="margin-top:8px"><button id="reset">처음으로</button><button id="export" class="on">PNG 저장</button></div>
+
+    <h2>상태</h2><div class="hint" id="status">초기화 중…</div>
+    <div class="hint">정적 서버: <code>python3 -m http.server 8000</code></div>
+  </aside>
+</div>
+
+<script type="module">
+import { renderOverlay } from './render-overlay.mjs';
+import { computeOccupancy } from './freespace.mjs';
+import { layoutOverlay } from './overlay-place.mjs';
+import { toCanvasData } from './overlay-prep.mjs';
+import { OVERLAY } from './overlay-data.mjs';
+
+const W = 1080, H = 1920;
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return { canvas: c, ctx: c.getContext('2d', { willReadFrequently: true }) }; };
+const card = document.getElementById('card'), cctx = card.getContext('2d');
+const selCv = document.getElementById('sel'), sctx = selCv.getContext('2d');
+const measureCtx = mk(20, 20).ctx;
+const statusEl = document.getElementById('status'), modeHint = document.getElementById('modeHint');
+card.width = selCv.width = W; card.height = selCv.height = H;
+
+let S = { name: 'IMG_9717', mode: 'select', img: null, field: null, objects: [], closing: null, warmth: 0.04,
+  sel: -1, lastSpec: null, show: { outline: true, arrow: true, deco: true } };
+window.__editor = S;  // 디버그/테스트 훅
+
+async function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
+async function preloadFonts() {
+  const fams = ['East Sea Dokdo', 'Nanum Pen Script', 'Dokdo', 'Stylish'];
+  await Promise.all(fams.flatMap(f => [document.fonts.load(`40px "${f}"`), document.fonts.load(`60px "${f}"`)]));
+  await document.fonts.ready;
+}
+async function loadPolys(name) {
+  try { const d = await (await fetch(`out/segments_${name}.json`)).json();
+    return d.items.map((it) => ({ cx: it.cx_norm, cy: it.cy_norm, poly: it.poly_norm }));
+  } catch { return []; }
+}
+
+function fitDisplay() {
+  const h = Math.min(window.innerHeight - 32, 900), w = h * W / H;
+  for (const c of [card, selCv]) { c.style.width = w + 'px'; c.style.height = h + 'px'; }
+}
+async function loadPhoto(name) {
+  S.name = name; S.img = await loadImg(`images/${name}.jpg`);
+  document.getElementById('aspect').textContent = `${S.img.width}×${S.img.height} 원본 → 1080×1920 cover-fit (F07 세로 스펙)`;
+  let mask = null; try { mask = await loadImg(`out/foodmask_${name}.png`); } catch {}
+  S.field = computeOccupancy(mk, S.img, { gw: 54, aspect: H / W, maskImg: mask });
+  const polys = await loadPolys(name);
+  const { data } = toCanvasData(S.img, W, H, OVERLAY[name], polys);
+  S.objects = data.objects; S.closing = data.closing; S.warmth = data.warmth ?? 0.04;
+  S.sel = -1; fitDisplay(); render(); refreshPanel();
+}
+
+function render() {
+  const data = { warmth: S.warmth, objects: S.objects, closing: S.closing };
+  const spec = layoutOverlay({ ctx: measureCtx, W, H, field: S.field, data });
+  if (!S.show.outline) spec.outlines = [];
+  if (!S.show.arrow) spec.arrows = [];
+  if (!S.show.deco) spec.doodles = [];
+  renderOverlay(cctx, spec, { photo: S.img });
+  S.lastSpec = spec;
+  drawSel();
+  statusEl.innerHTML = `객체 ${S.objects.length} · 주석 ${spec.notes.length}`;
+}
+function drawSel() {
+  sctx.clearRect(0, 0, W, H);
+  if (S.sel < 0 || !S.lastSpec) return;
+  const n = S.lastSpec.notes.find(n => n.oi === S.sel); if (!n) return;
+  const b = n.box;
+  sctx.strokeStyle = '#7fd6a0'; sctx.lineWidth = 3; sctx.setLineDash([10, 7]);
+  sctx.strokeRect(b.x - 8, b.y - 8, b.w + 16, b.h + 16); sctx.setLineDash([]);
+}
+
+// ---- 히트테스트 + 드래그 ----
+function toCanvas(ev) { const r = card.getBoundingClientRect(); return [(ev.clientX - r.left) / r.width * W, (ev.clientY - r.top) / r.height * H]; }
+function hitNote(x, y) {
+  if (!S.lastSpec) return -1;
+  for (const n of S.lastSpec.notes) { const b = n.box; if (x >= b.x - 10 && x <= b.x + b.w + 10 && y >= b.y - 10 && y <= b.y + b.h + 10) return n.oi; }
+  return -1;
+}
+let drag = null;
+card.addEventListener('mousedown', (e) => {
+  const [x, y] = toCanvas(e);
+  if (S.mode === 'add') { addNote(x / W, y / H); return; }
+  const oi = hitNote(x, y);
+  if (oi >= 0) { S.sel = oi; const n = S.lastSpec.notes.find(n => n.oi === oi); drag = { oi, dx: x - n.box.x, dy: y - n.box.y }; refreshPanel(); drawSel(); }
+  else { S.sel = -1; refreshPanel(); drawSel(); }
+});
+window.addEventListener('mousemove', (e) => {
+  if (!drag) return; const [x, y] = toCanvas(e);
+  S.objects[drag.oi].npos = { x: Math.max(8, Math.min(W - 60, x - drag.dx)), y: Math.max(8, Math.min(H - 60, y - drag.dy)) };
+  render();
+});
+window.addEventListener('mouseup', () => { drag = null; });
+
+function addNote(cx, cy) {
+  const POOL = [['여기', '강추 ♡'], ['최애 ✦'], ['이거', '진짜 맛있어'], ['행복한', '한 입']];
+  S.objects.push({ cx, cy, r: 0.08, note: POOL[S.objects.length % POOL.length], deco: 'heart', outline: false });
+  S.sel = S.objects.length - 1; render(); refreshPanel(); setMode('select');
+}
+
+// ---- 선택 패널 ----
+function refreshPanel() {
+  const has = S.sel >= 0 && S.objects[S.sel];
+  document.getElementById('noPick').style.display = has ? 'none' : '';
+  document.getElementById('editor').style.display = has ? '' : 'none';
+  if (!has) return;
+  const o = S.objects[S.sel];
+  document.getElementById('noteText').value = o.note.join('\n');
+  document.getElementById('noteDeco').value = o.deco || '';
+  const oc = o.outline === 'circle';
+  document.getElementById('noteOutline').checked = oc;
+  document.getElementById('radWrap').style.display = oc ? '' : 'none';
+  document.getElementById('noteRad').value = Math.round((o.r || 0.08) * W);
+}
+document.getElementById('noteText').addEventListener('input', (e) => { if (S.sel < 0) return; S.objects[S.sel].note = e.target.value.split('\n').slice(0, 3); render(); });
+document.getElementById('noteDeco').addEventListener('change', (e) => { if (S.sel < 0) return; S.objects[S.sel].deco = e.target.value || undefined; render(); });
+document.getElementById('noteOutline').addEventListener('change', (e) => { if (S.sel < 0) return; S.objects[S.sel].outline = e.target.checked ? 'circle' : false; document.getElementById('radWrap').style.display = e.target.checked ? '' : 'none'; render(); });
+document.getElementById('noteRad').addEventListener('input', (e) => { if (S.sel < 0) return; S.objects[S.sel].r = (+e.target.value) / W; render(); });
+document.getElementById('resetPos').addEventListener('click', () => { if (S.sel < 0) return; delete S.objects[S.sel].npos; render(); drawSel(); });
+document.getElementById('del').addEventListener('click', () => { if (S.sel < 0) return; S.objects.splice(S.sel, 1); S.sel = -1; render(); refreshPanel(); });
+
+// ---- UI ----
+function setMode(m) { S.mode = m; document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  modeHint.textContent = m === 'add' ? '강조할 음식을 클릭하면 그 자리를 가리키는 주석이 추가됩니다.' : '주석을 클릭해 선택하고 드래그로 옮깁니다.';
+  card.style.cursor = m === 'add' ? 'crosshair' : 'default'; }
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+const photosEl = document.getElementById('photos');
+['IMG_9717', 'IMG_8247', 'IMG_9800'].forEach((n, i) => { const b = document.createElement('button'); b.textContent = n; if (i === 0) b.classList.add('on');
+  b.onclick = () => { [...photosEl.children].forEach(c => c.classList.remove('on')); b.classList.add('on'); loadPhoto(n); }; photosEl.appendChild(b); });
+for (const [id, key] of [['tgOutline', 'outline'], ['tgArrow', 'arrow'], ['tgDeco', 'deco']])
+  document.getElementById(id).onclick = (e) => { S.show[key] = !S.show[key]; e.target.classList.toggle('on', S.show[key]); render(); };
+document.getElementById('reset').onclick = () => loadPhoto(S.name);
+document.getElementById('export').onclick = () => {
+  const prev = { ...S.show }; S.show = { outline: prev.outline, arrow: prev.arrow, deco: prev.deco }; S.sel = -1; render();
+  card.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = S.name + '_overlay.png'; a.click(); });
+};
+window.addEventListener('resize', fitDisplay);
+preloadFonts().then(() => loadPhoto('IMG_9717')).then(() => statusEl.textContent += ' · 준비 완료');
+</script>
+</body>
+</html>

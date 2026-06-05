@@ -1,0 +1,12 @@
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { writeFile } from 'node:fs/promises';
+const h = 760, gap = 20;
+const a = await loadImage('ref/gpt_9717.png'), b = await loadImage('out/v3/IMG_9717_overlay.png');
+const aw = Math.round(h * a.width / a.height), bw = Math.round(h * b.width / b.height);
+const c = createCanvas(gap * 3 + aw + bw, h + 50); const x = c.getContext('2d');
+x.fillStyle = '#0c0b09'; x.fillRect(0, 0, c.width, c.height);
+x.drawImage(a, gap, 40, aw, h); x.drawImage(b, gap * 2 + aw, 40, bw, h);
+x.fillStyle = '#bfb3a0'; x.font = '24px sans-serif'; x.textBaseline = 'middle';
+x.fillText('GPT 원본(목표)', gap + 4, 22); x.fillStyle = '#7fd6a0'; x.fillText('v3 (우리 · 편집가능)', gap * 2 + aw + 4, 22);
+await writeFile('out/v3/match_9717_vs_gpt.png', c.toBuffer('image/png'));
+console.log('out/v3/match_9717_vs_gpt.png');

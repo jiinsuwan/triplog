@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TripLog 카드 — 객체지정 PoC 워크벤치</title>
+<style>
+  @font-face { font-family: 'East Sea Dokdo'; src: url('fonts/EastSeaDokdo-Regular.ttf'); }
+  @font-face { font-family: 'Nanum Pen Script'; src: url('fonts/NanumPenScript-Regular.ttf'); }
+  @font-face { font-family: 'Nanum Brush Script'; src: url('fonts/NanumBrushScript-Regular.ttf'); }
+  @font-face { font-family: 'Dokdo'; src: url('fonts/Dokdo-Regular.ttf'); }
+  @font-face { font-family: 'Stylish'; src: url('fonts/Stylish-Regular.ttf'); }
+  @font-face { font-family: 'Gugi'; src: url('fonts/Gugi-Regular.ttf'); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #15130f; color: #e6dcc9; font: 14px/1.5 -apple-system, sans-serif; }
+  .wrap { display: flex; gap: 24px; padding: 24px; }
+  .stage { position: relative; }
+  #card { width: 388px; height: 690px; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); cursor: crosshair; }
+  #overlay { position: absolute; left: 0; top: 0; width: 388px; height: 690px; pointer-events: none; }
+  .panel { width: 340px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #9b8e79; font-size: 12px; margin-bottom: 18px; }
+  .group { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #2a2620; }
+  .group h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #8a7d68; margin: 0 0 8px; }
+  button { background: #2a2620; color: #e6dcc9; border: 1px solid #3a342b; border-radius: 7px; padding: 8px 12px; cursor: pointer; font-size: 13px; margin: 0 6px 6px 0; }
+  button:hover { background: #353029; }
+  button.on { background: #c9a96a; color: #1a1610; border-color: #c9a96a; font-weight: 600; }
+  .hint { color: #8a7d68; font-size: 12px; margin-top: 6px; }
+  .row { display: flex; flex-wrap: wrap; }
+  code { background: #221f1a; padding: 1px 5px; border-radius: 4px; color: #d8b878; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="card" width="1080" height="1920"></canvas>
+    <canvas id="overlay" width="1080" height="1920"></canvas>
+  </div>
+  <div class="panel">
+    <h1>객체지정 PoC 워크벤치</h1>
+    <div class="sub">기본은 <b>자동 생성</b>. 객체지정은 선택 보조 기능입니다.</div>
+
+    <div class="group">
+      <h2>사진</h2>
+      <div class="row" id="photos"></div>
+    </div>
+    <div class="group">
+      <h2>스타일 프리셋</h2>
+      <div class="row" id="presets"></div>
+    </div>
+    <div class="group">
+      <h2>강조 모드 (선택)</h2>
+      <div class="row">
+        <button data-mode="off" class="on">자동 (강조 없음)</button>
+        <button data-mode="circle">① 원형 지정</button>
+        <button data-mode="pick">② 후보 클릭</button>
+      </div>
+      <div class="hint" id="modeHint">기본 자동 흐름. 강조가 필요할 때만 모드를 켜세요.</div>
+      <button id="clear" style="margin-top:8px">강조 해제 · 자동으로</button>
+    </div>
+    <div class="group">
+      <h2>상태</h2>
+      <div class="hint" id="status">초기화 중…</div>
+    </div>
+    <div class="hint">로컬 모듈 import 때문에 정적 서버 필요:<br><code>python3 -m http.server 8000</code> → <code>localhost:8000/workbench.html</code></div>
+  </div>
+</div>
+
+<script type="module">
+import { renderCard } from './render-core.mjs';
+import { computeOccupancy, objectCandidates, mainAnchor } from './freespace.mjs';
+import { layoutCard, PRESETS } from './placement.mjs';
+
+const W = 1080, H = 1920, PHOTO = { x: 0, y: 420, w: 1080, h: 1080 };
+const makeCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return { canvas: c, ctx: c.getContext('2d', { willReadFrequently: true }) }; };
+
+const CONTENT = {
+  IMG_9717: { title: '오늘의 만찬은\n사랑입니다', memo: '이 크림파스타\n진짜 못 잊어', info: { place: '전주 객리단길', date: '2024.10.19', people: 2 }, hashtags: ['#전주여행', '#브런치맛집', '#먹스타그램'] },
+  IMG_9800: { title: '면도 회도\n다 내꺼야', memo: '야끼소바\n한 입 더', info: { place: '부산 자갈치시장', date: '2024.09.21', people: 4 }, hashtags: ['#부산여행', '#회와볶음면', '#먹스타그램'] },
+  IMG_8247: { title: '오늘은\n분식이 진리', memo: '치즈 떡볶이\n미쳤다', info: { place: '대구 서문시장', date: '2024.11.16', people: 2 }, hashtags: ['#대구먹방', '#치즈떡볶이', '#소울푸드'] },
+  IMG_4663: { title: '맑은 하늘 아래\n광장을 거닐다', memo: '역사가\n멈춰선 자리', info: { place: '서울 광화문광장', date: '2024.04.21', people: 2 }, hashtags: ['#도심산책', '#역사여행', '#감성스냅'] },
+};
+
+const cardCv = document.getElementById('card'), cardCtx = cardCv.getContext('2d');
+const ovCv = document.getElementById('overlay'), ovCtx = ovCv.getContext('2d');
+const statusEl = document.getElementById('status'), modeHint = document.getElementById('modeHint');
+
+let state = { photoName: 'IMG_9717', preset: 'B_penmemo', mode: 'off', emphasis: null,
+  photoImg: null, field: null, comps: [] };
+
+async function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
+
+// 캔버스 텍스트는 폰트가 로드된 뒤에 그려야 폴백이 안 쓰인다 — 사용 폰트 전부 사전 로드
+async function preloadFonts() {
+  const fams = ['East Sea Dokdo', 'Nanum Pen Script', 'Nanum Brush Script', 'Dokdo', 'Stylish', 'Gugi'];
+  await Promise.all(fams.flatMap(f => [document.fonts.load(`40px "${f}"`), document.fonts.load(`100px "${f}"`)]));
+  await document.fonts.ready;
+}
+
+async function loadPhoto(name) {
+  state.photoName = name;
+  state.photoImg = await loadImg(`images/${name}.jpg`);
+  let maskImg = null;
+  try { maskImg = await loadImg(`out/foodmask_${name}.png`); } catch {}
+  state.field = computeOccupancy(makeCanvas, state.photoImg, { gw: 48, aspect: PHOTO.h / PHOTO.w, maskImg });
+  state.comps = objectCandidates(state.field, PHOTO);
+  state.emphasis = null;
+  render();
+}
+
+function render() {
+  const content = { ...CONTENT[state.photoName] };
+  if (state.emphasis) { content.emphasis = state.emphasis; content.emphasisForce = true; }
+  const spec = layoutCard(content, state.field, PHOTO, W, H, state.preset);
+  renderCard(cardCtx, spec, { photo: state.photoImg, stickers: {}, rough: null });
+  drawOverlay();
+  const cnt = state.comps.length;
+  statusEl.innerHTML = `점유맵 48×48 · 자동분리 후보 <b>${cnt}</b>개 · 강조: ${state.emphasis ? `(${Math.round(state.emphasis.cx)}, ${Math.round(state.emphasis.cy)}) r${Math.round(state.emphasis.r)}` : '없음(자동)'}`;
+}
+
+function drawOverlay() {
+  ovCtx.clearRect(0, 0, W, H);
+  if (state.mode === 'pick') {
+    state.comps.forEach((k, i) => {
+      const [x1, y1, x2, y2] = k.bbox;
+      ovCtx.strokeStyle = 'rgba(255,224,122,.9)'; ovCtx.lineWidth = 4; ovCtx.setLineDash([10, 8]);
+      ovCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      ovCtx.setLineDash([]); ovCtx.fillStyle = 'rgba(255,224,122,.9)';
+      ovCtx.font = '34px Stylish'; ovCtx.fillText('후보 ' + (i + 1), x1 + 8, y1 + 38);
+    });
+  }
+  if (state.emphasis) {
+    const e = state.emphasis;
+    ovCtx.strokeStyle = 'rgba(120,210,160,.95)'; ovCtx.lineWidth = 3; ovCtx.setLineDash([6, 8]);
+    ovCtx.beginPath(); ovCtx.arc(e.cx, e.cy, e.r, 0, 7); ovCtx.stroke(); ovCtx.setLineDash([]);
+  }
+}
+
+// ---- 좌표 변환 (디스플레이 → 1080×1920) ----
+function toCanvas(ev) {
+  const r = cardCv.getBoundingClientRect();
+  return [(ev.clientX - r.left) / r.width * W, (ev.clientY - r.top) / r.height * H];
+}
+
+// ---- 원형 지정: 드래그 ----
+let drag = null;
+cardCv.addEventListener('mousedown', (e) => { if (state.mode !== 'circle') return; drag = toCanvas(e); });
+window.addEventListener('mousemove', (e) => {
+  if (!drag) return;
+  const [x, y] = toCanvas(e); const r = Math.hypot(x - drag[0], y - drag[1]);
+  state.emphasis = { cx: drag[0], cy: drag[1], r: Math.max(40, r) };
+  drawOverlay();
+});
+window.addEventListener('mouseup', () => { if (drag) { drag = null; render(); } });
+
+// ---- 후보 클릭 ----
+cardCv.addEventListener('click', (e) => {
+  if (state.mode !== 'pick') return;
+  const [x, y] = toCanvas(e);
+  for (const k of state.comps) {
+    const [x1, y1, x2, y2] = k.bbox;
+    if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+      state.emphasis = { cx: k.cx, cy: k.cy, r: k.r * 0.95 }; render(); return;
+    }
+  }
+});
+
+// ---- UI 바인딩 ----
+const photosEl = document.getElementById('photos');
+Object.keys(CONTENT).forEach((n, i) => {
+  const b = document.createElement('button'); b.textContent = n; if (i === 0) b.classList.add('on');
+  b.onclick = () => { [...photosEl.children].forEach(c => c.classList.remove('on')); b.classList.add('on'); loadPhoto(n); };
+  photosEl.appendChild(b);
+});
+const presetsEl = document.getElementById('presets');
+Object.keys(PRESETS).forEach((p) => {
+  const b = document.createElement('button'); b.textContent = p; if (p === state.preset) b.classList.add('on');
+  b.onclick = () => { [...presetsEl.children].forEach(c => c.classList.remove('on')); b.classList.add('on'); state.preset = p; render(); };
+  presetsEl.appendChild(b);
+});
+const HINTS = { off: '기본 자동 흐름. 강조가 필요할 때만 모드를 켜세요.',
+  circle: '사진 위를 드래그해 강조할 영역을 원으로 지정 → 메모가 그 지점을 가리킵니다.',
+  pick: '자동 분리된 후보(노란 점선)를 클릭해 강조 대상을 고릅니다.' };
+document.querySelectorAll('[data-mode]').forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-mode]').forEach(c => c.classList.remove('on')); b.classList.add('on');
+    state.mode = b.dataset.mode; modeHint.textContent = HINTS[state.mode];
+    cardCv.style.cursor = state.mode === 'circle' ? 'crosshair' : (state.mode === 'pick' ? 'pointer' : 'default');
+    drawOverlay();
+  };
+});
+document.getElementById('clear').onclick = () => { state.emphasis = null; render(); };
+
+preloadFonts().then(() => loadPhoto('IMG_9717')).then(() => statusEl.textContent += ' · 준비 완료');
+</script>
+</body>
+</html>
