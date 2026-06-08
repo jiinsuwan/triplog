@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import TripCreateView from '@/views/trip/TripCreateView.vue'
 import TripDetailView from '@/views/trip/TripDetailView.vue'
 import TripListView from '@/views/trip/TripListView.vue'
+import TripPlaceSearchView from '@/views/trip/TripPlaceSearchView.vue'
 
 // 라우터 (architecture §3, 공유 영역).
 //
@@ -42,6 +43,11 @@ const routes = [
     path: '/trips/:tripId',
     name: 'trip-detail',
     component: TripDetailView,
+  },
+  {
+    path: '/trips/:tripId/places',
+    name: 'trip-place-search',
+    component: TripPlaceSearchView,
   },
 ]
 
