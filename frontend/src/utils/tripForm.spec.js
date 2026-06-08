@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addDays,
   createDefaultTripForm,
+  createTripFormFromTrip,
   toTripPayload,
   validateTripForm,
 } from './tripForm'
@@ -27,12 +28,34 @@ describe('trip form 유틸', () => {
       endDate: '2026-06-08',
       region: '',
       theme: '',
+      status: '',
     })
 
     expect(errors.title).toBe('여행 제목을 입력해주세요.')
     expect(errors.endDate).toBe('종료일은 시작일 이후로 선택해주세요.')
     expect(errors.region).toBe('지역을 선택해주세요.')
     expect(errors.theme).toBe('테마를 선택해주세요.')
+    expect(errors.status).toBe('상태를 선택해주세요.')
+  })
+
+  it('Trip 상세 응답을 수정 폼 초기값으로 변환한다', () => {
+    const form = createTripFormFromTrip({
+      title: '제주 바다 산책',
+      startDate: '2026-07-01',
+      endDate: '2026-07-03',
+      region: '제주',
+      theme: '바다',
+      status: 'DONE',
+    })
+
+    expect(form).toEqual({
+      title: '제주 바다 산책',
+      startDate: '2026-07-01',
+      endDate: '2026-07-03',
+      region: '제주',
+      theme: '바다',
+      status: 'DONE',
+    })
   })
 
   it('API payload 는 제목 공백을 제거하고 백엔드 Trip 생성 계약을 맞춘다', () => {
