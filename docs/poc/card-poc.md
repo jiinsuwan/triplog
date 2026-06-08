@@ -1,5 +1,7 @@
 # PoC — AI 카드 생성 파이프라인 (이미지 변환 PoC)
 
+> 🔄 **후속 결과 — 현행 정본**: [card-poc-v3-report.md](card-poc-v3-report.md) (사진 위 다꾸 overlay). v2([card-poc-v2-report.md](card-poc-v2-report.md))는 포스터/카드형으로 방향이 틀려 폐기. 구조 공통: "LLM 전체 JSON 생성"을 버리고 **짧은 객체 문구 + 코드 배치**.
+
 - **상태**: Pending (Sprint 0 ~ Sprint 1 초입에서 수행)
 - **소요**: 약 1주 (집중 시 5일)
 - **담당**: log 트랙 주도, trip 트랙 협업 가능
