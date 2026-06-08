@@ -15,6 +15,8 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+// 회원가입 직후 넘어온 경우 안내(가입 → 로그인 유도 플로우).
+const justRegistered = route.query.registered === '1'
 
 async function onSubmit() {
   error.value = ''
@@ -35,14 +37,24 @@ async function onSubmit() {
 <template>
   <main class="auth">
     <h1>로그인</h1>
+    <Message v-if="justRegistered" severity="success" :closable="false">
+      회원가입이 완료되었습니다. 로그인해 주세요.
+    </Message>
     <form @submit.prevent="onSubmit">
       <label>
         <span>이메일</span>
-        <InputText v-model="email" type="email" autocomplete="email" required />
+        <InputText v-model="email" type="email" autocomplete="email" placeholder="you@triplog.app" required />
       </label>
       <label>
         <span>비밀번호</span>
-        <Password v-model="password" :feedback="false" toggleMask autocomplete="current-password" required />
+        <Password
+          v-model="password"
+          :feedback="false"
+          toggleMask
+          autocomplete="current-password"
+          placeholder="비밀번호"
+          required
+        />
       </label>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Button type="submit" label="로그인" :loading="loading" />
