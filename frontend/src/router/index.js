@@ -38,6 +38,11 @@ const routes = [
     name: 'trip-detail',
     component: TripDetailView,
   },
+  {
+    path: '/trips/:tripId',
+    name: 'trip-detail',
+    component: TripDetailView,
+  },
 ]
 
 const router = createRouter({
