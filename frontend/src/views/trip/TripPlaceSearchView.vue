@@ -294,9 +294,24 @@ function pinClass(place) {
 
 .place-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 0.75fr) minmax(420px, 1.4fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(280px, 0.75fr) minmax(280px, 0.82fr) minmax(420px, 1.45fr);
   gap: 16px;
   min-height: calc(100vh - 136px);
+}
+
+.search-panel {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.detail-panel {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.map-panel {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .search-panel,
@@ -671,8 +686,19 @@ function pinClass(place) {
     grid-template-columns: 310px 1fr;
   }
 
+  .search-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .detail-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .map-panel {
     grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
 
@@ -681,6 +707,18 @@ function pinClass(place) {
   .place-shell {
     display: flex;
     flex-direction: column;
+  }
+
+  .search-panel {
+    order: 1;
+  }
+
+  .detail-panel {
+    order: 2;
+  }
+
+  .map-panel {
+    order: 3;
   }
 
   .map-panel {
