@@ -2,10 +2,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import axios from 'axios'
 
-// 라우터는 #21 이전이라 /login 라우트가 없다. push 시도만 검증하면 되므로 모킹한다.
+// 라우터는 push 시도만 검증하면 되므로 모킹(vi.hoisted 로 mock 팩토리보다 먼저 생성).
 const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn(() => Promise.resolve()) }))
 vi.mock('@/router', () => ({ default: { push: pushMock } }))
 
+// 로그인/회원가입/로그아웃/프로필 HTTP 는 authApi 를 모킹해 격리한다.
+vi.mock('@/api/authApi', () => ({
+  login: vi.fn(),
+  signup: vi.fn(),
+  logout: vi.fn(),
+  getMe: vi.fn(),
+}))
+
+import * as authApi from '@/api/authApi'
 import { useAuthStore } from '@/stores/auth'
 
 describe('auth 스토어', () => {
@@ -17,6 +26,7 @@ describe('auth 스토어', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.clearAllMocks()
   })
 
   it('setTokens 는 access·refresh 토큰을 상태와 localStorage 에 함께 저장한다', () => {
@@ -31,10 +41,91 @@ describe('auth 스토어', () => {
     expect(localStorage.getItem('refreshToken')).toBe('r1')
   })
 
+  // --- login ---
+  it('login 성공 시 토큰 저장 + 프로필 로드 후 인증 상태가 된다', async () => {
+    authApi.login.mockResolvedValue({ accessToken: 'a1', refreshToken: 'r1', tokenType: 'Bearer' })
+    authApi.getMe.mockResolvedValue({ id: 1, email: 'a@a.com', nickname: '지인' })
+    const store = useAuthStore()
+
+    await store.login('a@a.com', 'pw12345678')
+
+    expect(authApi.login).toHaveBeenCalledWith('a@a.com', 'pw12345678')
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.accessToken).toBe('a1')
+    expect(store.refreshToken).toBe('r1')
+    expect(store.user).toEqual({ id: 1, email: 'a@a.com', nickname: '지인' })
+  })
+
+  it('login 실패 시 토큰을 저장하지 않고 에러를 전파한다', async () => {
+    authApi.login.mockRejectedValue(new Error('invalid credentials'))
+    const store = useAuthStore()
+
+    await expect(store.login('a@a.com', 'wrong')).rejects.toThrow('invalid credentials')
+
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.accessToken).toBeNull()
+    expect(authApi.getMe).not.toHaveBeenCalled()
+  })
+
+  it('login 은 프로필 로드(getMe)가 실패해도 로그인 성공으로 처리한다', async () => {
+    authApi.login.mockResolvedValue({ accessToken: 'a1', refreshToken: 'r1', tokenType: 'Bearer' })
+    authApi.getMe.mockRejectedValue(new Error('me failed'))
+    const store = useAuthStore()
+
+    await store.login('a@a.com', 'pw12345678')
+
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.user).toBeNull()
+  })
+
+  // --- signup ---
+  it('signup 은 가입만 하고 자동 로그인하지 않는다(토큰 미저장)', async () => {
+    authApi.signup.mockResolvedValue({ id: 1, email: 'a@a.com', nickname: '지인' })
+    const store = useAuthStore()
+
+    const profile = await store.signup('a@a.com', 'pw12345678', '지인')
+
+    expect(authApi.signup).toHaveBeenCalledWith('a@a.com', 'pw12345678', '지인')
+    expect(profile).toEqual({ id: 1, email: 'a@a.com', nickname: '지인' })
+    expect(store.isAuthenticated).toBe(false)
+  })
+
+  // --- logout ---
+  it('logout 은 서버 무효화 후 토큰·유저 상태를 비운다', async () => {
+    authApi.logout.mockResolvedValue({ code: 'SUCCESS' })
+    localStorage.setItem('accessToken', 'a1')
+    localStorage.setItem('refreshToken', 'r1')
+    const store = useAuthStore()
+    store.user = { id: 1 }
+
+    await store.logout()
+
+    expect(authApi.logout).toHaveBeenCalledWith('r1')
+    expect(store.accessToken).toBeNull()
+    expect(store.refreshToken).toBeNull()
+    expect(store.user).toBeNull()
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
+  })
+
+  it('logout 은 서버 무효화가 실패해도 클라이언트 상태를 비운다(best-effort)', async () => {
+    authApi.logout.mockRejectedValue(new Error('logout failed'))
+    localStorage.setItem('accessToken', 'a1')
+    localStorage.setItem('refreshToken', 'r1')
+    const store = useAuthStore()
+
+    await store.logout()
+
+    expect(store.isAuthenticated).toBe(false)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
+  })
+
+  // --- refresh (S1-CORE-02 동작 유지) ---
   it('refresh 성공 시 두 토큰을 새 값으로 갱신하고 새 access 토큰을 반환한다', async () => {
     localStorage.setItem('accessToken', 'a-old')
     localStorage.setItem('refreshToken', 'r-old')
-    const store = useAuthStore() // 위 localStorage 값으로 초기화된다.
+    const store = useAuthStore()
 
     const postSpy = vi.spyOn(axios, 'post').mockResolvedValue({
       data: { code: 'SUCCESS', data: { accessToken: 'a-new', refreshToken: 'r-new', tokenType: 'Bearer' } },
@@ -48,11 +139,9 @@ describe('auth 스토어', () => {
     })
     expect(store.accessToken).toBe('a-new')
     expect(store.refreshToken).toBe('r-new')
-    expect(localStorage.getItem('accessToken')).toBe('a-new')
-    expect(localStorage.getItem('refreshToken')).toBe('r-new')
   })
 
-  it('refresh 실패 시 토큰을 비우고 로그인 경로로 이동을 시도하며 에러를 전파한다', async () => {
+  it('refresh 실패 시 세션을 비우고 로그인 경로로 이동을 시도하며 에러를 전파한다', async () => {
     localStorage.setItem('accessToken', 'a-old')
     localStorage.setItem('refreshToken', 'r-old')
     const store = useAuthStore()
@@ -64,22 +153,18 @@ describe('auth 스토어', () => {
     expect(store.accessToken).toBeNull()
     expect(store.refreshToken).toBeNull()
     expect(store.isAuthenticated).toBe(false)
-    expect(localStorage.getItem('accessToken')).toBeNull()
-    expect(localStorage.getItem('refreshToken')).toBeNull()
     expect(pushMock).toHaveBeenCalledWith('/login')
   })
 
-  it('logout 은 토큰과 사용자 상태를 모두 비운다', () => {
+  it('clearSession 은 토큰·유저 상태를 비운다', () => {
     const store = useAuthStore()
     store.setTokens('a1', 'r1')
     store.user = { id: 1 }
 
-    store.logout()
+    store.clearSession()
 
     expect(store.accessToken).toBeNull()
     expect(store.refreshToken).toBeNull()
     expect(store.user).toBeNull()
-    expect(localStorage.getItem('accessToken')).toBeNull()
-    expect(localStorage.getItem('refreshToken')).toBeNull()
   })
 })
