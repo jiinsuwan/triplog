@@ -39,10 +39,7 @@ const filteredPlaces = computed(() =>
   }),
 )
 const selectedPlace = computed(
-  () =>
-    regionPlaces.value.find((place) => place.id === selectedPlaceId.value) ??
-    filteredPlaces.value[0] ??
-    null,
+  () => regionPlaces.value.find((place) => place.id === selectedPlaceId.value) ?? null,
 )
 
 onMounted(() => {
@@ -64,8 +61,8 @@ watch(
 watch(
   filteredPlaces,
   (places) => {
-    if (!places.some((place) => place.id === selectedPlaceId.value)) {
-      selectedPlaceId.value = places[0]?.id ?? ''
+    if (selectedPlaceId.value && !places.some((place) => place.id === selectedPlaceId.value)) {
+      selectedPlaceId.value = ''
     }
   },
   { immediate: true },
@@ -77,6 +74,10 @@ function goBack() {
 
 function selectPlace(place) {
   selectedPlaceId.value = place.id
+}
+
+function clearSelection() {
+  selectedPlaceId.value = ''
 }
 
 function togglePlace(place) {
@@ -121,7 +122,12 @@ function pinClass(place) {
       <span>여행 정보를 불러오는 중입니다.</span>
     </section>
 
-    <section v-else class="place-shell">
+    <section
+      v-else
+      class="place-shell"
+      :class="{ 'has-detail': selectedPlace }"
+      @click.self="clearSelection"
+    >
       <aside class="search-panel">
         <div class="search-head">
           <Select
@@ -158,7 +164,7 @@ function pinClass(place) {
             class="place-row"
             :class="{ active: selectedPlace?.id === place.id }"
             type="button"
-            @click="selectPlace(place)"
+            @click.stop="selectPlace(place)"
           >
             <span class="place-thumb">{{ place.categoryLabel }}</span>
             <span class="place-copy">
@@ -175,31 +181,7 @@ function pinClass(place) {
         </div>
       </aside>
 
-      <section class="map-panel" aria-label="장소 지도">
-        <div class="mock-map">
-          <span class="road road-main" />
-          <span class="road road-river" />
-          <span class="road road-small one" />
-          <span class="road road-small two" />
-          <span class="park" />
-          <span class="water" />
-
-          <button
-            v-for="place in regionPlaces"
-            :key="place.id"
-            class="map-pin"
-            :class="pinClass(place)"
-            type="button"
-            :style="{ left: `${place.x}%`, top: `${place.y}%` }"
-            @click="selectPlace(place)"
-          >
-            <i class="pi pi-map-marker" />
-            <span>{{ place.name }}</span>
-          </button>
-        </div>
-      </section>
-
-      <aside class="detail-panel">
+      <aside v-if="selectedPlace" class="detail-panel">
         <template v-if="selectedPlace">
           <div class="detail-visual">
             <span>{{ selectedPlace.categoryLabel }}</span>
@@ -250,6 +232,30 @@ function pinClass(place) {
           <p v-else>지도의 핀이나 목록에서 장소를 골라 담아보세요.</p>
         </div>
       </aside>
+
+      <section class="map-panel" aria-label="장소 지도">
+        <div class="mock-map" @click="clearSelection">
+          <span class="road road-main" />
+          <span class="road road-river" />
+          <span class="road road-small one" />
+          <span class="road road-small two" />
+          <span class="park" />
+          <span class="water" />
+
+          <button
+            v-for="place in regionPlaces"
+            :key="place.id"
+            class="map-pin"
+            :class="pinClass(place)"
+            type="button"
+            :style="{ left: `${place.x}%`, top: `${place.y}%` }"
+            @click.stop="selectPlace(place)"
+          >
+            <i class="pi pi-map-marker" />
+            <span>{{ place.name }}</span>
+          </button>
+        </div>
+      </section>
     </section>
   </main>
 </template>
@@ -294,9 +300,14 @@ function pinClass(place) {
 
 .place-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 0.75fr) minmax(280px, 0.82fr) minmax(420px, 1.45fr);
+  grid-template-columns: minmax(280px, 0.7fr) minmax(520px, 1.6fr);
   gap: 16px;
   min-height: calc(100vh - 136px);
+  transition: grid-template-columns 0.2s ease;
+}
+
+.place-shell.has-detail {
+  grid-template-columns: minmax(280px, 0.75fr) minmax(280px, 0.82fr) minmax(420px, 1.45fr);
 }
 
 .search-panel {
@@ -310,8 +321,12 @@ function pinClass(place) {
 }
 
 .map-panel {
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1;
+}
+
+.place-shell.has-detail .map-panel {
+  grid-column: 3;
 }
 
 .search-panel,
@@ -686,6 +701,10 @@ function pinClass(place) {
     grid-template-columns: 310px 1fr;
   }
 
+  .place-shell.has-detail {
+    grid-template-columns: 310px 1fr;
+  }
+
   .search-panel {
     grid-column: 1;
     grid-row: 1;
@@ -697,6 +716,11 @@ function pinClass(place) {
   }
 
   .map-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .place-shell.has-detail .map-panel {
     grid-column: 1 / -1;
     grid-row: 2;
   }
