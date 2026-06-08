@@ -26,6 +26,10 @@ function goCreate() {
   router.push({ name: 'trip-create' })
 }
 
+function goDetail(trip) {
+  router.push({ name: 'trip-detail', params: { tripId: trip.id } })
+}
+
 function statusLabel(status) {
   return normalizeStatus(status) === 'DONE' ? '다녀옴' : '계획 중'
 }
@@ -102,7 +106,12 @@ function accentFor(region = '') {
             v-for="trip in planningTrips"
             :key="trip.id"
             class="trip-card"
+            role="button"
+            tabindex="0"
             :style="{ '--card-accent': accentFor(trip.region) }"
+            @click="goDetail(trip)"
+            @keydown.enter.prevent="goDetail(trip)"
+            @keydown.space.prevent="goDetail(trip)"
           >
             <div class="story-lines" aria-hidden="true"><span /><span /><span /></div>
             <Tag :value="statusLabel(trip.status)" :severity="statusSeverity(trip.status)" />
@@ -133,7 +142,12 @@ function accentFor(region = '') {
             v-for="trip in pastTrips"
             :key="trip.id"
             class="trip-card past"
+            role="button"
+            tabindex="0"
             :style="{ '--card-accent': accentFor(trip.region) }"
+            @click="goDetail(trip)"
+            @keydown.enter.prevent="goDetail(trip)"
+            @keydown.space.prevent="goDetail(trip)"
           >
             <div class="story-lines" aria-hidden="true"><span /><span /><span /></div>
             <Tag :value="statusLabel(trip.status)" :severity="statusSeverity(trip.status)" />
@@ -328,6 +342,12 @@ function accentFor(region = '') {
   color: #fff;
   background: var(--card-accent);
   border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+}
+
+.trip-card:focus-visible {
+  outline: 4px solid rgba(49, 130, 246, 0.44);
+  outline-offset: 4px;
 }
 
 .trip-card::after {

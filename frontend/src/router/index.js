@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import { useAuthStore } from '@/stores/auth'
 import TripCreateView from '@/views/trip/TripCreateView.vue'
+import TripDetailView from '@/views/trip/TripDetailView.vue'
 import TripListView from '@/views/trip/TripListView.vue'
 
 // 라우터 (architecture §3, 공유 영역).
@@ -31,6 +32,11 @@ const routes = [
     name: 'trip-create',
     component: TripCreateView,
     meta: { requiresAuth: true },
+  },
+  {
+    path: '/trips/:tripId',
+    name: 'trip-detail',
+    component: TripDetailView,
   },
 ]
 
