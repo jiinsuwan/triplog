@@ -221,8 +221,21 @@ function changeRouteMode(edgeId, mode) {
   routeEdges.value = updateRouteMode(routeEdges.value, edgeId, mode)
 }
 
+function cycleRouteMode(edgeId) {
+  const edge = routeEdges.value.find((item) => item.id === edgeId)
+  if (!edge) return
+
+  const index = ROUTE_MODE_OPTIONS.findIndex((option) => option.value === edge.mode)
+  const nextMode = ROUTE_MODE_OPTIONS[(index + 1) % ROUTE_MODE_OPTIONS.length].value
+  changeRouteMode(edgeId, nextMode)
+}
+
 function deleteRouteEdge(edgeId) {
   routeEdges.value = removeRouteEdge(routeEdges.value, edgeId)
+}
+
+function routeEdgeAfter(placeId) {
+  return activeRouteEdges.value.find((edge) => edge.from === placeId)
 }
 
 function routeOrderNumber(placeId) {
@@ -231,7 +244,29 @@ function routeOrderNumber(placeId) {
 }
 
 function routePath(edge) {
-  return `M ${edge.fromPlace.x} ${edge.fromPlace.y} L ${edge.toPlace.x} ${edge.toPlace.y}`
+  const from = { x: edge.fromPlace.x, y: edge.fromPlace.y }
+  const to = { x: edge.toPlace.x, y: edge.toPlace.y }
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const distance = Math.hypot(dx, dy)
+  const trim = Math.min(3.8, Math.max(0, distance / 4))
+
+  if (!distance || distance <= trim * 2) {
+    return `M ${from.x} ${from.y} L ${to.x} ${to.y}`
+  }
+
+  const unitX = dx / distance
+  const unitY = dy / distance
+  const start = {
+    x: from.x + unitX * trim,
+    y: from.y + unitY * trim,
+  }
+  const end = {
+    x: to.x - unitX * trim,
+    y: to.y - unitY * trim,
+  }
+
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} L ${end.x.toFixed(2)} ${end.y.toFixed(2)}`
 }
 
 function routeModeLabel(mode) {
@@ -359,13 +394,30 @@ function routeModeLabel(mode) {
           <section class="route-summary">
             <h3>{{ activeDay }}일차 경로</h3>
             <ol v-if="activeRoutePlaces.length" class="route-steps">
-              <li v-for="(place, index) in activeRoutePlaces" :key="place.id">
-                <span>{{ index + 1 }}</span>
-                <div>
-                  <strong>{{ place.name }}</strong>
-                  <small>{{ place.categoryLabel }} · {{ place.area }}</small>
-                </div>
-              </li>
+              <template v-for="(place, index) in activeRoutePlaces" :key="place.id">
+                <li class="route-step">
+                  <span>{{ index + 1 }}</span>
+                  <div>
+                    <strong>{{ place.name }}</strong>
+                    <small>{{ place.categoryLabel }} · {{ place.area }}</small>
+                  </div>
+                </li>
+                <li
+                  v-if="routeEdgeAfter(place.id)"
+                  :key="`${place.id}-mode`"
+                  class="route-step-mode"
+                >
+                  <span class="route-step-line" />
+                  <button
+                    class="route-mode-inline"
+                    :class="`mode-${routeEdgeAfter(place.id).mode}`"
+                    type="button"
+                    @click="cycleRouteMode(routeEdgeAfter(place.id).id)"
+                  >
+                    {{ routeModeLabel(routeEdgeAfter(place.id).mode) }}
+                  </button>
+                </li>
+              </template>
             </ol>
             <p v-else>지도 위 담긴 장소를 순서대로 눌러 경로를 만들어보세요.</p>
           </section>
@@ -501,8 +553,15 @@ function routeModeLabel(mode) {
             aria-hidden="true"
           >
             <defs>
-              <marker id="route-arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
-                <path d="M0,0 L5,2.5 L0,5 Z" />
+              <marker
+                id="route-arrow"
+                markerWidth="2.4"
+                markerHeight="2.4"
+                refX="2.1"
+                refY="1.2"
+                orient="auto"
+              >
+                <path d="M0,0 L2.4,1.2 L0,2.4 Z" />
               </marker>
             </defs>
             <path
@@ -810,7 +869,8 @@ function routeModeLabel(mode) {
   list-style: none;
 }
 
-.route-steps li,
+.route-step,
+.route-step-mode,
 .candidate-row {
   display: grid;
   grid-template-columns: 34px 1fr;
@@ -818,7 +878,7 @@ function routeModeLabel(mode) {
   gap: 10px;
 }
 
-.route-steps li > span,
+.route-step > span,
 .candidate-row > span {
   width: 34px;
   height: 34px;
@@ -829,6 +889,64 @@ function routeModeLabel(mode) {
   color: #fff;
   font-size: 12px;
   font-weight: 950;
+}
+
+.route-step-mode {
+  min-height: 36px;
+}
+
+.route-step-line {
+  width: 2px;
+  min-height: 34px;
+  justify-self: center;
+  border-radius: 999px;
+  background: linear-gradient(#c8d8d1, #2e8f6b, #c8d8d1);
+}
+
+.route-mode-inline {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: #fff;
+  color: #151d25;
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+}
+
+.route-mode-inline.mode-walk {
+  border-color: rgba(46, 143, 107, 0.24);
+  background: #eef8f3;
+  color: #1f6f56;
+}
+
+.route-mode-inline.mode-bus {
+  border-color: rgba(49, 130, 246, 0.24);
+  background: #edf5ff;
+  color: #2568c7;
+}
+
+.route-mode-inline.mode-subway {
+  border-color: rgba(128, 111, 209, 0.24);
+  background: #f3f0ff;
+  color: #6252bc;
+}
+
+.route-mode-inline.mode-taxi {
+  border-color: rgba(237, 191, 83, 0.34);
+  background: #fff8e6;
+  color: #956d10;
+}
+
+.route-mode-inline.mode-car {
+  border-color: rgba(21, 29, 37, 0.16);
+  background: #f2f4f7;
+  color: #151d25;
 }
 
 .route-steps strong,
@@ -997,21 +1115,21 @@ function routeModeLabel(mode) {
 }
 
 .route-svg marker path {
-  fill: #151d25;
+  fill: #1f6f56;
 }
 
 .route-path {
   fill: none;
   stroke: #151d25;
-  stroke-width: 0.78;
+  stroke-width: 0.58;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.28));
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.18));
 }
 
 .route-path.mode-walk {
   stroke: #2e8f6b;
-  stroke-dasharray: 1.8 1.3;
+  stroke-dasharray: 1.5 1.2;
 }
 
 .route-path.mode-bus {
@@ -1020,12 +1138,12 @@ function routeModeLabel(mode) {
 
 .route-path.mode-subway {
   stroke: #806fd1;
-  stroke-width: 0.9;
+  stroke-width: 0.66;
 }
 
 .route-path.mode-taxi {
   stroke: #edbf53;
-  stroke-dasharray: 4 1.2;
+  stroke-dasharray: 3 1;
 }
 
 .route-path.mode-car {
@@ -1035,7 +1153,7 @@ function routeModeLabel(mode) {
 .map-pin {
   position: absolute;
   z-index: 3;
-  transform: translate(-50%, -50%);
+  transform: translate(-17px, -17px);
   border: 0;
   display: flex;
   align-items: center;
