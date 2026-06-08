@@ -29,6 +29,7 @@
 - [ ] **[S1-CORE-01]** 인증 마무리 (F01) — 회원가입/로그인/로그아웃/프로필 + Access+Refresh(DB `refresh_token`). 공유 영역 → PR 리뷰 필수.
 - [ ] **[S1-CORE-02]** 프론트 axios interceptor — 토큰 주입 + 401 → `/auth/refresh` 자동 재발급 → 원요청 재시도. 공유 영역 → PR 리뷰 필수.
 - [ ] **[S1-CORE-03]** architecture 문서 반영 (docs) — §3-1 PrimeVue(Aura)·§6-1 Spring AI(BOM) 확정 반영. **초안 작성 완료(이 세션) → docs PR로 머지만 남음.**
+- [ ] **[S1-CORE-04]** 로그인·회원가입 화면 + 라우트 가드 (#21) — 종료조건① "프론트 인증 동작"을 담는 항목(기존 분해 누락 보완). LoginView/SignupView + auth store(login·signup·logout) + 보호 라우트 가드. 공유 영역 → PR 리뷰 필수.
 
 ## 종료 조건
 - [ ] 회원가입·로그인이 프론트에서 동작하고, 보호 API 인증이 동작한다.
