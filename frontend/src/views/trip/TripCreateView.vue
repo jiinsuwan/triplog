@@ -56,8 +56,8 @@ async function submit() {
   if (Object.keys(errors.value).length > 0) return
 
   try {
-    await tripStore.createTrip(toTripPayload(form))
-    await router.push({ name: 'trip-list' })
+    const created = await tripStore.createTrip(toTripPayload(form))
+    await router.push({ name: 'trip-place-search', params: { tripId: created.id } })
   } catch {
     submitError.value = tripStore.error || '여행을 생성하지 못했습니다.'
   }
