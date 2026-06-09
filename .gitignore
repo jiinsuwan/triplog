@@ -47,6 +47,9 @@ AGENTS.local.md
 .claude/
 .codex/
 
+# 회고/플래닝 staging 등 비공식 작업 노트 (커밋 안 함)
+*.wip.md
+
 # ========== 임시 / 빌드 산출물 ==========
 *.tmp
 *.bak
@@ -55,3 +58,6 @@ coverage/
 
 # ========== 사진 업로드 (로컬 저장) ==========
 uploads/
+
+# 대용량 PoC 참고 PDF (커밋 제외)
+docs/poc/*.pdf
