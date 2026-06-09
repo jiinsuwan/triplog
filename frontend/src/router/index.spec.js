@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
-import { authGuard } from '@/router'
+import router, { authGuard } from '@/router'
 import { useAuthStore } from '@/stores/auth'
 
 // to 객체 최소 형태(가드는 path·fullPath·meta 만 본다).
@@ -38,5 +38,11 @@ describe('router authGuard — 보호 라우트 가드', () => {
 
   it('미인증 사용자는 /login 에 그대로 접근한다', () => {
     expect(authGuard(route('/login'))).toBe(true)
+  })
+
+  it('여행 상세 라우트는 보호 라우트로 등록한다', () => {
+    const detailRoute = router.getRoutes().find((item) => item.name === 'trip-detail')
+
+    expect(detailRoute?.meta.requiresAuth).toBe(true)
   })
 })

@@ -62,6 +62,15 @@ onMounted(() => {
   loadTrip()
 })
 
+watch(tripId, (nextId, previousId) => {
+  if (nextId && nextId !== previousId) {
+    isEditing.value = false
+    submitError.value = ''
+    errors.value = {}
+    loadTrip()
+  }
+})
+
 watch(
   () => trip.value,
   (nextTrip) => {

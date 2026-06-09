@@ -178,4 +178,53 @@ describe('trip 스토어', () => {
     expect(store.total).toBe(0)
     expect(store.deleting).toBe(false)
   })
+
+  it('fetchTripDetail 실패 시 사용자 메시지를 저장하고 상세 로딩 상태를 복원한다', async () => {
+    tripApi.fetchTrip.mockRejectedValue({
+      response: { data: { message: '상세를 찾을 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(store.fetchTripDetail(404)).rejects.toBeTruthy()
+
+    expect(store.error).toBe('상세를 찾을 수 없습니다.')
+    expect(store.detailLoading).toBe(false)
+    expect(store.selectedTrip).toBeNull()
+  })
+
+  it('updateTrip 실패 시 사용자 메시지를 저장하고 수정 상태를 복원한다', async () => {
+    tripApi.updateTrip.mockRejectedValue({
+      response: { data: { message: '수정할 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(
+      store.updateTrip(1, {
+        title: '실패하는 수정',
+        startDate: '2026-06-20',
+        endDate: '2026-06-22',
+        region: '전주',
+        theme: '미식',
+        status: 'PLANNING',
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(store.error).toBe('수정할 수 없습니다.')
+    expect(store.updating).toBe(false)
+    expect(store.selectedTrip).toBeNull()
+  })
+
+  it('deleteTrip 실패 시 사용자 메시지를 저장하고 삭제 상태를 복원한다', async () => {
+    tripApi.deleteTrip.mockRejectedValue({
+      response: { data: { message: '삭제할 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(store.deleteTrip(1)).rejects.toBeTruthy()
+
+    expect(store.error).toBe('삭제할 수 없습니다.')
+    expect(store.deleting).toBe(false)
+    expect(store.trips).toEqual([])
+    expect(store.total).toBe(0)
+  })
 })

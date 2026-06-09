@@ -37,6 +37,7 @@ const routes = [
     path: '/trips/:tripId',
     name: 'trip-detail',
     component: TripDetailView,
+    meta: { requiresAuth: true },
   },
 ]
 
