@@ -17,6 +17,12 @@ function isAuthEndpoint(url = '') {
   return AUTH_ENDPOINTS.some((path) => url.includes(path))
 }
 
+// 로그인 화면으로 이동. router 를 정적 import 하면 instance↔router 순환이 생기므로
+// 지연(dynamic) import 로 런타임에만 가져온다. (refresh 실패 시 호출)
+function redirectToLogin() {
+  import('@/router').then((m) => m.default.push('/login')).catch(() => {})
+}
+
 // 요청 인터셉터: 액세스 토큰 주입.
 instance.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken')
@@ -64,7 +70,8 @@ instance.interceptors.response.use(
       config.headers.Authorization = `Bearer ${newAccessToken}`
       return instance(config)
     } catch (refreshError) {
-      // refresh 실패 시 토큰 clear + 로그인 이동은 authStore.refresh() 가 처리한다.
+      // refresh 실패: 세션은 store(refresh)가 비웠고, 로그인 화면 이동은 여기서 처리한다.
+      redirectToLogin()
       return Promise.reject(refreshError)
     }
   },

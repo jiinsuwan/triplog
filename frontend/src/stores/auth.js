@@ -1,11 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import axios from 'axios'
-import router from '@/router'
 import { API_BASE_URL } from '@/api/config'
 import * as authApi from '@/api/authApi'
-
-const LOGIN_ROUTE = '/login'
 
 // 인증 스토어 (architecture §3·§7, 공유 영역).
 // access/refresh 토큰·유저 상태를 보관하고, 로그인/회원가입/로그아웃/리프레시를 담당한다.
@@ -83,9 +80,9 @@ export const useAuthStore = defineStore('auth', () => {
       setTokens(tokens.accessToken, tokens.refreshToken)
       return tokens.accessToken
     } catch (error) {
-      // refresh 실패(만료·재사용·네트워크) → 세션 초기화 후 로그인 화면으로.
+      // refresh 실패(만료·재사용·네트워크) → 세션만 비운다.
+      // 로그인 화면 이동은 호출 측(인터셉터/가드)이 담당한다 — store 는 router 의존 없음.
       clearSession()
-      router.push(LOGIN_ROUTE).catch(() => {}) // 라우트 미존재 시 무시.
       throw error
     }
   }

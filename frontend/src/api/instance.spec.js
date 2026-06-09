@@ -126,6 +126,7 @@ describe('axios instance — 401 refresh 인터셉터', () => {
 
     expect(localStorage.getItem('accessToken')).toBeNull()
     expect(localStorage.getItem('refreshToken')).toBeNull()
-    expect(pushMock).toHaveBeenCalledWith('/login')
+    // 인터셉터가 동적 import 로 라우터를 가져와 이동 → 비동기이므로 waitFor 로 확인.
+    await vi.waitFor(() => expect(pushMock).toHaveBeenCalledWith('/login'))
   })
 })

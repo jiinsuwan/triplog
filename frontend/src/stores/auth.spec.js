@@ -2,11 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import axios from 'axios'
 
-// 라우터는 push 시도만 검증하면 되므로 모킹(vi.hoisted 로 mock 팩토리보다 먼저 생성).
-const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn(() => Promise.resolve()) }))
-vi.mock('@/router', () => ({ default: { push: pushMock } }))
-
 // 로그인/회원가입/로그아웃/프로필 HTTP 는 authApi 를 모킹해 격리한다.
+// (store 는 더 이상 router 에 의존하지 않는다 — 화면 이동은 인터셉터/가드 책임)
 vi.mock('@/api/authApi', () => ({
   login: vi.fn(),
   signup: vi.fn(),
@@ -21,7 +18,6 @@ describe('auth 스토어', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
-    pushMock.mockClear()
   })
 
   afterEach(() => {
@@ -141,7 +137,7 @@ describe('auth 스토어', () => {
     expect(store.refreshToken).toBe('r-new')
   })
 
-  it('refresh 실패 시 세션을 비우고 로그인 경로로 이동을 시도하며 에러를 전파한다', async () => {
+  it('refresh 실패 시 세션을 비우고 에러를 전파한다(화면 이동은 store 책임 아님)', async () => {
     localStorage.setItem('accessToken', 'a-old')
     localStorage.setItem('refreshToken', 'r-old')
     const store = useAuthStore()
@@ -153,7 +149,6 @@ describe('auth 스토어', () => {
     expect(store.accessToken).toBeNull()
     expect(store.refreshToken).toBeNull()
     expect(store.isAuthenticated).toBe(false)
-    expect(pushMock).toHaveBeenCalledWith('/login')
   })
 
   it('clearSession 은 토큰·유저 상태를 비운다', () => {
