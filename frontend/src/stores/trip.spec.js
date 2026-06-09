@@ -92,4 +92,27 @@ describe('trip 스토어', () => {
     expect(store.total).toBe(2)
     expect(store.creating).toBe(false)
   })
+
+  it('createTrip 실패 시 사용자 메시지를 저장하고 생성 상태를 복원한다', async () => {
+    tripApi.createTrip.mockRejectedValue({
+      response: { data: { message: '여행을 생성할 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(
+      store.createTrip({
+        title: '실패하는 여행',
+        startDate: '2026-07-01',
+        endDate: '2026-07-03',
+        region: '전주',
+        theme: '미식',
+        status: 'PLANNING',
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(store.error).toBe('여행을 생성할 수 없습니다.')
+    expect(store.creating).toBe(false)
+    expect(store.trips).toEqual([])
+    expect(store.total).toBe(0)
+  })
 })

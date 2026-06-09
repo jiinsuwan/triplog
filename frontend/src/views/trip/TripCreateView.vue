@@ -13,6 +13,7 @@ import {
   createDefaultTripForm,
   toDateOnly,
   toTripPayload,
+  tripDurationDays,
   validateTripForm,
 } from '@/utils/tripForm'
 
@@ -42,10 +43,7 @@ const endDateModel = computed({
 
 const previewNights = computed(() => {
   if (!form.startDate || !form.endDate || form.startDate > form.endDate) return '기간을 선택해주세요'
-  const start = new Date(`${form.startDate}T00:00:00`)
-  const end = new Date(`${form.endDate}T00:00:00`)
-  const days = Math.round((end - start) / 86400000) + 1
-  return `${days}일 여행`
+  return `${tripDurationDays(form)}일 여행`
 })
 
 async function submit() {
