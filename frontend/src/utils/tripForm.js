@@ -14,6 +14,11 @@ export const THEME_OPTIONS = [
 
 export const DEFAULT_TRIP_STATUS = 'PLANNING'
 
+export const STATUS_OPTIONS = [
+  { label: '계획 중', value: 'PLANNING' },
+  { label: '다녀옴', value: 'DONE' },
+]
+
 export function createDefaultTripForm(today = new Date()) {
   const startDate = toDateOnly(today)
   return {
@@ -23,6 +28,17 @@ export function createDefaultTripForm(today = new Date()) {
     region: REGION_OPTIONS[0].value,
     theme: THEME_OPTIONS[0].value,
     status: DEFAULT_TRIP_STATUS,
+  }
+}
+
+export function createTripFormFromTrip(trip) {
+  return {
+    title: trip?.title ?? '',
+    startDate: trip?.startDate ?? '',
+    endDate: trip?.endDate ?? '',
+    region: trip?.region ?? REGION_OPTIONS[0].value,
+    theme: trip?.theme ?? THEME_OPTIONS[0].value,
+    status: trip?.status ?? DEFAULT_TRIP_STATUS,
   }
 }
 
@@ -53,6 +69,10 @@ export function validateTripForm(form) {
 
   if (!form.theme) {
     errors.theme = '테마를 선택해주세요.'
+  }
+
+  if (!form.status) {
+    errors.status = '상태를 선택해주세요.'
   }
 
   return errors

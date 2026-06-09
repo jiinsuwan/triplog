@@ -4,6 +4,9 @@ import { createPinia, setActivePinia } from 'pinia'
 vi.mock('@/api/tripApi', () => ({
   fetchTrips: vi.fn(),
   createTrip: vi.fn(),
+  fetchTrip: vi.fn(),
+  updateTrip: vi.fn(),
+  deleteTrip: vi.fn(),
 }))
 
 import * as tripApi from '@/api/tripApi'
@@ -112,6 +115,115 @@ describe('trip 스토어', () => {
 
     expect(store.error).toBe('여행을 생성할 수 없습니다.')
     expect(store.creating).toBe(false)
+    expect(store.trips).toEqual([])
+    expect(store.total).toBe(0)
+  })
+
+  it('fetchTripDetail 은 상세 응답을 selectedTrip 과 목록에 반영한다', async () => {
+    const detail = { ...sampleTrips[0], title: '상세로 본 전주 일정' }
+    tripApi.fetchTrip.mockResolvedValue(detail)
+    const store = useTripStore()
+
+    const result = await store.fetchTripDetail(1)
+
+    expect(result).toEqual(detail)
+    expect(store.selectedTrip).toEqual(detail)
+    expect(store.trips[0]).toEqual(detail)
+    expect(store.detailLoading).toBe(false)
+    expect(tripApi.fetchTrip).toHaveBeenCalledWith(1)
+  })
+
+  it('updateTrip 은 수정된 Trip 을 selectedTrip 과 목록에 반영한다', async () => {
+    tripApi.fetchTrips.mockResolvedValue({
+      items: sampleTrips,
+      page: 0,
+      total: 1,
+    })
+    const updated = { ...sampleTrips[0], title: '수정된 전주 일정', theme: '골목' }
+    tripApi.updateTrip.mockResolvedValue(updated)
+    const store = useTripStore()
+    await store.fetchTripList()
+
+    const result = await store.updateTrip(1, {
+      title: '수정된 전주 일정',
+      startDate: '2026-06-20',
+      endDate: '2026-06-22',
+      region: '전주',
+      theme: '골목',
+      status: 'PLANNING',
+    })
+
+    expect(result).toEqual(updated)
+    expect(store.selectedTrip).toEqual(updated)
+    expect(store.trips[0]).toEqual(updated)
+    expect(store.updating).toBe(false)
+  })
+
+  it('deleteTrip 은 삭제된 Trip 을 목록과 selectedTrip 에서 제거한다', async () => {
+    tripApi.fetchTrips.mockResolvedValue({
+      items: sampleTrips,
+      page: 0,
+      total: 1,
+    })
+    tripApi.fetchTrip.mockResolvedValue(sampleTrips[0])
+    tripApi.deleteTrip.mockResolvedValue(null)
+    const store = useTripStore()
+    await store.fetchTripList()
+    await store.fetchTripDetail(1)
+
+    await store.deleteTrip(1)
+
+    expect(store.trips).toEqual([])
+    expect(store.selectedTrip).toBeNull()
+    expect(store.total).toBe(0)
+    expect(store.deleting).toBe(false)
+  })
+
+  it('fetchTripDetail 실패 시 사용자 메시지를 저장하고 상세 로딩 상태를 복원한다', async () => {
+    tripApi.fetchTrip.mockRejectedValue({
+      response: { data: { message: '상세를 찾을 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(store.fetchTripDetail(404)).rejects.toBeTruthy()
+
+    expect(store.error).toBe('상세를 찾을 수 없습니다.')
+    expect(store.detailLoading).toBe(false)
+    expect(store.selectedTrip).toBeNull()
+  })
+
+  it('updateTrip 실패 시 사용자 메시지를 저장하고 수정 상태를 복원한다', async () => {
+    tripApi.updateTrip.mockRejectedValue({
+      response: { data: { message: '수정할 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(
+      store.updateTrip(1, {
+        title: '실패하는 수정',
+        startDate: '2026-06-20',
+        endDate: '2026-06-22',
+        region: '전주',
+        theme: '미식',
+        status: 'PLANNING',
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(store.error).toBe('수정할 수 없습니다.')
+    expect(store.updating).toBe(false)
+    expect(store.selectedTrip).toBeNull()
+  })
+
+  it('deleteTrip 실패 시 사용자 메시지를 저장하고 삭제 상태를 복원한다', async () => {
+    tripApi.deleteTrip.mockRejectedValue({
+      response: { data: { message: '삭제할 수 없습니다.' } },
+    })
+    const store = useTripStore()
+
+    await expect(store.deleteTrip(1)).rejects.toBeTruthy()
+
+    expect(store.error).toBe('삭제할 수 없습니다.')
+    expect(store.deleting).toBe(false)
     expect(store.trips).toEqual([])
     expect(store.total).toBe(0)
   })
