@@ -23,8 +23,8 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(email.value, password.value)
-    // 보호 라우트에서 튕겨온 경우 그 경로로, 아니면 홈으로.
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    // 보호 라우트에서 튕겨온 경우 그 경로로, 아니면 여행 목록으로.
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/trips'
     router.push(redirect)
   } catch (e) {
     error.value = e?.response?.data?.message ?? '로그인에 실패했습니다.'
