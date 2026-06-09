@@ -1,6 +1,6 @@
 # Sprint 1 — 인증 완성 & Trip CRUD & 카드 PoC 완료
 
-> 상태: 🟢 진행 중
+> 상태: ✅ 완료 (2026-06-09)
 > 기간: 2026-05-29 ~ (종료 조건 충족 시)
 
 ## 목표
@@ -15,29 +15,32 @@
 > 각 항목 = GitHub Issue 1개 (conventions §3). 실행/진행상황 SSOT는 Issue/PR. 아래 체크박스는 종료(회고) 때 한 번 맞춘다.
 
 ### trip
-- [ ] **[S1-TRIP-01]** Trip CRUD API (F02) — Trip 엔티티(title·startDate·endDate·region·theme·status) + 생성/목록/상세/수정/삭제. 본인 소유 Trip만 접근(인증 사용자 스코프). service 로직·MockMvc 통합테스트.
-- [ ] **[S1-TRIP-02]** Trip 목록 / 생성 화면 — 목록 뷰 + 생성 폼(PrimeVue). `tripApi.js` + `useTripStore`로 API 연동.
-- [ ] **[S1-TRIP-03]** Trip 상세 / 수정 / 삭제 화면 — 상세 뷰 + 수정 폼 + 삭제 확인.
+- [x] **[S1-TRIP-01]** Trip CRUD API (F02) — Trip 엔티티(title·startDate·endDate·region·theme·status) + 생성/목록/상세/수정/삭제. 본인 소유 Trip만 접근(인증 사용자 스코프). service 로직·MockMvc 통합테스트.
+- [x] **[S1-TRIP-02]** Trip 목록 / 생성 화면 — 목록 뷰 + 생성 폼(PrimeVue). `tripApi.js` + `useTripStore`로 API 연동.
+- [x] **[S1-TRIP-03]** Trip 상세 / 수정 / 삭제 화면 — 상세 뷰 + 수정 폼 + 삭제 확인.
 
 > trip 트랙 작업은 담당자에게 **프롬프트로 전달** → 담당자가 로컬 agent(Codex 등)로 진행한다. 첫 로컬 셋업(clone·Java·MySQL·`.env`)은 담당자가 직접, AGENTS.md / `.env.example` 따라.
 
 ### log
-- [ ] **[S1-LOG-01]** 카드 PoC 완료 ([poc/card-poc.md](../poc/card-poc.md)) — Vision/텍스트 LLM 비교 + Vue+Konva 합성 실험을 끝내고, **정성 평가 + 비용 실측** 정리. **AC에 "세로(1080×1920) 레이아웃에서 사진·텍스트·하단 정보 배치가 자연스러운지 확인" 포함** (치수 정정만으론 세로 카드 품질이 보장되지 않으므로). (S0 이월 착수분 흡수)
-- [ ] **[S1-LOG-02]** `decisions/0004-card-poc-result.md` 작성 — PoC 결과로 **텍스트/Vision 모델 확정(Q6)** + Vision·텍스트 합침 여부 결정.
+- [x] **[S1-LOG-01]** 카드 PoC 완료 ([poc/card-poc.md](../poc/card-poc.md)) — Vision/텍스트 LLM 비교 + Vue+Konva 합성 실험을 끝내고, **정성 평가 + 비용 실측** 정리. **AC에 "세로(1080×1920) 레이아웃에서 사진·텍스트·하단 정보 배치가 자연스러운지 확인" 포함** (치수 정정만으론 세로 카드 품질이 보장되지 않으므로). (S0 이월 착수분 흡수)
+- [x] **[S1-LOG-02]** `decisions/0004-card-poc-result.md` 작성 — PoC 결과로 **텍스트/Vision 모델 확정(Q6)** + Vision·텍스트 합침 여부 결정.
 
 ### core (공통)
-- [ ] **[S1-CORE-01]** 인증 마무리 (F01) — 회원가입/로그인/로그아웃/프로필 + Access+Refresh(DB `refresh_token`). 공유 영역 → PR 리뷰 필수.
-- [ ] **[S1-CORE-02]** 프론트 axios interceptor — 토큰 주입 + 401 → `/auth/refresh` 자동 재발급 → 원요청 재시도. 공유 영역 → PR 리뷰 필수.
-- [ ] **[S1-CORE-03]** architecture 문서 반영 (docs) — §3-1 PrimeVue(Aura)·§6-1 Spring AI(BOM) 확정 반영. **초안 작성 완료(이 세션) → docs PR로 머지만 남음.**
-- [ ] **[S1-CORE-04]** 로그인·회원가입 화면 + 라우트 가드 (#21) — 종료조건① "프론트 인증 동작"을 담는 항목(기존 분해 누락 보완). LoginView/SignupView + auth store(login·signup·logout) + 보호 라우트 가드. 공유 영역 → PR 리뷰 필수.
+- [x] **[S1-CORE-01]** 인증 마무리 (F01) — 회원가입/로그인/로그아웃/프로필 + Access+Refresh(DB `refresh_token`). 공유 영역 → PR 리뷰 필수.
+- [x] **[S1-CORE-02]** 프론트 axios interceptor — 토큰 주입 + 401 → `/auth/refresh` 자동 재발급 → 원요청 재시도. 공유 영역 → PR 리뷰 필수.
+- [x] **[S1-CORE-03]** architecture 문서 반영 (docs) — §3-1 PrimeVue(Aura)·§6-1 Spring AI(BOM) 확정 반영. **초안 작성 완료(이 세션) → docs PR로 머지만 남음.**
+- [x] **[S1-CORE-04]** 로그인·회원가입 화면 + 라우트 가드 (#21) — 종료조건① "프론트 인증 동작"을 담는 항목(기존 분해 누락 보완). LoginView/SignupView + auth store(login·signup·logout) + 보호 라우트 가드. 공유 영역 → PR 리뷰 필수.
 
 ## 종료 조건
-- [ ] 회원가입·로그인이 프론트에서 동작하고, 보호 API 인증이 동작한다.
-- [ ] 로그인 사용자가 Trip을 생성·조회·수정·삭제할 수 있다.
-- [ ] 카드 PoC 결과로 P0 카드 생성 실현 가능성이 확인되고 모델(Q6)이 확정된다 (`decisions/0004`).
+- [x] 회원가입·로그인이 프론트에서 동작하고, 보호 API 인증이 동작한다.
+- [x] 로그인 사용자가 Trip을 생성·조회·수정·삭제할 수 있다.
+- [x] 카드 PoC 결과로 P0 카드 생성 실현 가능성이 확인되고 모델(Q6)이 확정된다 (`decisions/0004`).
 
-## 회고 (스프린트 종료 시 작성)
-- 완료 / 이월:
-- 트랙 결정 요약 (서로 검토):
-- `proposal` Issue 검토 결과:
-- 배운 점 · 다음 입력:
+## 회고 (2026-06-09)
+- **완료**: 인증(F01) 프론트+API #3·#4·#21 / Trip CRUD(F02) #5·#6·#7 / 카드 PoC + 모델확정(Q6) #8·#9 = `decisions/0004`. **종료조건 3개 모두 충족.**
+- **이월**: #28 → Sprint 2(카카오 SDK 화면에 흡수) · #29 → Sprint 3(일정 에디터). PR #30·#31은 머지 안 함 — Draft 보존·실 SDK로 재작성 (`decisions/0005`).
+- **트랙 결정 요약 (서로 검토)**:
+  - (log) 카드 = 사진 위 overlay 확정. Vision per-card·전체 카드 JSON·Konva **폐기**, **SAM2 = 카드 핵심 품질로 격상**(Sprint 3, 3제약) → requirements·roadmap을 0004에 정합 패치.
+  - (trip/core) stacked 금지 재확인(base=main) · **self-merge 게이트** 신설 · `requiresAuth` 라우트 보호 컨벤션 + 자동 테스트.
+- **`proposal` 검토 결과**: requiresAuth 라우트 보호 컨벤션 **채택** → conventions §6-4 + 자동 테스트(S2-CORE-02).
+- **배운 점 · 다음 입력**: ①주석-only 규칙은 샌다 → 객관 규칙은 테스트로 강제 ②stacked는 CI 안 돌고 회귀 위험 → base=main ③AI는 자기 작업물에 덜 냉정 → 새 세션/다른 AI 적대적 리뷰로 보완. **다음**: Sprint 2 발행(보고·결정 후) + 디자인 방향/목업 논의.
