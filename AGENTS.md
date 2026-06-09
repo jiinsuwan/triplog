@@ -15,7 +15,7 @@ TripLog는 "AI 기능이 있는 여행 서비스"가 아니라, **AI agent를 �
 
 > 🟢 **현재 단계 (2026-06-09)**: **Sprint 2 진행 중** — [`docs/sprints/sprint-2.md`](docs/sprints/sprint-2.md). 관광지 탐색 & 사진 업로드(데이터·API 중심). Sprint 1 완료(회고 = [sprint-1.md](docs/sprints/sprint-1.md), 협업 결정 = [decisions/0005](docs/decisions/0005-collab-flow-and-carryover.md)).
 >
-> **다음 할 일**: Sprint 2 이슈(#33~#40 · #28 · #17) 중 **자기 트랙**을 골라 진행 ([conventions §1-2](docs/conventions.md), self-merge 게이트 §1-3). 사진/지도 *화면(FE)*과 디자인 방향/목업은 **별도 논의 중** — 확정 전 FE 시작 보류.
+> **다음 할 일**: Sprint 2 이슈(#33~#40 · #28 · #17) 중 **자기 트랙**을 골라 진행 ([conventions §1-2](docs/conventions.md), self-merge 게이트 §1-3). **프론트 정본 = [frontend-structure.md](docs/frontend-structure.md) + [목업](docs/design/trip-planner-flow.html)** — FE는 PrimeVue Aura 매핑(§7) 기준으로 구현. (log 사진 화면 FE는 S2 백엔드 이후.)
 
 ### 🚦 세션 진입 절차 — 이 순서로 시작한다 (맥락 없이 문서만으로 따라갈 수 있어야 함)
 
