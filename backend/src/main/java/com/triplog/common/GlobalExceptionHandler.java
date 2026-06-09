@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.stream.Collectors;
 
@@ -43,6 +44,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
         ErrorCode errorCode = ErrorCode.DATA_INTEGRITY_VIOLATION;
+        return ResponseEntity.status(errorCode.getStatus())
+                .body(ApiResponse.error(errorCode));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        ErrorCode errorCode = ErrorCode.PHOTO_TOO_LARGE;
         return ResponseEntity.status(errorCode.getStatus())
                 .body(ApiResponse.error(errorCode));
     }
