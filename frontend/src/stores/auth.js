@@ -1,15 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import axios from 'axios'
-import router from '@/router'
 import { API_BASE_URL } from '@/api/config'
-
-// 로그인 화면 경로. 실제 라우트는 #21(로그인·회원가입 화면)에서 추가된다.
-// 그 전까지는 push 가 실패할 수 있으므로 refresh 실패 처리에서 catch 로 무시한다.
-const LOGIN_ROUTE = '/login'
+import * as authApi from '@/api/authApi'
 
 // 인증 스토어 (architecture §3·§7, 공유 영역).
-// access/refresh 토큰을 보관하고, 401 시 인터셉터가 호출하는 refresh 액션을 제공한다.
+// access/refresh 토큰·유저 상태를 보관하고, 로그인/회원가입/로그아웃/리프레시를 담당한다.
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('accessToken'))
   const refreshToken = ref(localStorage.getItem('refreshToken'))
@@ -34,11 +30,41 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 클라이언트 측 인증 상태 초기화.
-  // (백엔드 refresh 토큰 무효화/로그아웃 API 연동은 #21 로그인 흐름에서 다룬다.)
-  function logout() {
+  // 클라이언트 측 인증 상태 초기화(토큰·유저). 서버 호출 없음.
+  function clearSession() {
     setTokens(null, null)
     user.value = null
+  }
+
+  // 로그인: 토큰 저장 후 프로필 로드(프로필 실패는 로그인 성공을 막지 않음).
+  async function login(email, password) {
+    const tokens = await authApi.login(email, password)
+    setTokens(tokens.accessToken, tokens.refreshToken)
+    await fetchMe().catch(() => {})
+    return tokens
+  }
+
+  // 회원가입: 백엔드가 토큰을 주지 않으므로 자동 로그인하지 않는다(가입 → 로그인 유도).
+  async function signup(email, password, nickname) {
+    return authApi.signup(email, password, nickname)
+  }
+
+  // 로그아웃: 서버측 refresh 토큰 무효화는 best-effort. 실패해도 클라이언트는 비운다.
+  async function logout() {
+    const token = refreshToken.value
+    try {
+      if (token) await authApi.logout(token)
+    } catch {
+      // 서버 무효화 실패(만료 등)는 무시 — 클라이언트 상태는 어떻든 초기화한다.
+    } finally {
+      clearSession()
+    }
+  }
+
+  // 현재 사용자 프로필 로드.
+  async function fetchMe() {
+    user.value = await authApi.getMe()
+    return user.value
   }
 
   // 401 시 인터셉터가 호출한다. /auth/refresh 로 토큰을 재발급받아 새 access 토큰을 반환한다.
@@ -54,12 +80,24 @@ export const useAuthStore = defineStore('auth', () => {
       setTokens(tokens.accessToken, tokens.refreshToken)
       return tokens.accessToken
     } catch (error) {
-      // refresh 실패(만료·재사용·네트워크) → 로그아웃 후 로그인 화면으로.
-      logout()
-      router.push(LOGIN_ROUTE).catch(() => {}) // 라우트 미구현(#21 이전)이면 무시.
+      // refresh 실패(만료·재사용·네트워크) → 세션만 비운다.
+      // 로그인 화면 이동은 호출 측(인터셉터/가드)이 담당한다 — store 는 router 의존 없음.
+      clearSession()
       throw error
     }
   }
 
-  return { accessToken, refreshToken, user, isAuthenticated, setTokens, logout, refresh }
+  return {
+    accessToken,
+    refreshToken,
+    user,
+    isAuthenticated,
+    setTokens,
+    clearSession,
+    login,
+    signup,
+    logout,
+    fetchMe,
+    refresh,
+  }
 })
