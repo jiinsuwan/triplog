@@ -1,0 +1,127 @@
+# Frontend 화면 구조 가이드 (제안 / draft)
+
+> **상태**: 🟢 **정본 베이스 채택** (Sprint 1 회고 후) — proposal 목업을 프론트 정본으로 삼고, 이 문서가 그 IA·컴포넌트 매핑이다. 공유 성격이라 [conventions](conventions.md)대로 **본 PR 리뷰로 최종 확정**. 정본 목업 = §5.
+> **출처**: 프론트 구조 mock → **정본 [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 비주얼 보강 = v3(팀원) 흡수(§6). + 교차 리뷰.
+> **선행 정본**: [requirements](requirements.md) · [decisions/0004](decisions/0004-card-poc-result.md) · [architecture](architecture.md) · [router](../frontend/src/router/index.js).
+
+---
+
+## 1. 목적
+
+여행 목록/생성/탐색/일정(Plan)부터 사진/카드(Capture→Share)까지 화면을 **성격별로 올바른 자리에 배치**하기 위한 기준. 핵심 원칙: **탭 바에는 "여행의 큰 단계"만 두고, 도구/보조/계정 기능은 각자 다른 자리에 둔다.**
+
+## 2. 확정 사실 (근거 있는 항목 — 그대로 따른다)
+
+| # | 확정 내용 | 근거 |
+|---|---|---|
+| C1 | **라우팅 = vue-router**. 화면 전환은 URL 라우트로(`/trips/:id/...`). 보호 라우트는 `meta.requiresAuth` 명시. | [router/index.js](../frontend/src/router/index.js) |
+| C2 | **일정(F04) = 날짜별 "순서 있는 리스트" + 드래그 순서조정(P0)**. 동선은 단순 위치 핀. 경로 최적화/TSP는 제외. | [requirements §2-1 F04 / §2-4](requirements.md) |
+| C3 | **데이터 출처 구분**: 관광지 = 표준데이터 JSON(DB 적재, 관광공사 큐레이션) / 식당·카페·숙소 = 카카오맵 검색. TourAPI는 P2. | [requirements §4 Q3](requirements.md) |
+| C4 | **여행(F02)에 '상태' 속성** 존재(제목·기간·지역·테마·**상태**). 목록/생성/수정/삭제 포함. | [requirements §2-1 F02](requirements.md) |
+| C5 | **카드 생성 구조 = 사진 위 overlay(Canvas2D, 편집 가능)**. ⬇ 상세 | [decisions/0004](decisions/0004-card-poc-result.md), [card-poc-v3](poc/card-poc-v3-report.md) |
+| C6 | 카드 포맷 = **세로 1080×1920 메인(P0)** / 정사각 1080×1080 = F09(P1). | [requirements §6 Q7](requirements.md) |
+
+### C5 상세 — 카드 화면이 따라야 할 흐름 (옛 방향 폐기)
+- **흐름**: 사진 ≤10장 선택 → 객체별 **짧은 문구 LLM**(`{objects:[{label,note}],closing}`) → 사진 위 overlay 자동 배치 → 편집(드래그/문구/외곽선) → **PNG export**.
+- **Vision = 업로드 시 SAM2 1회 전처리**(접시 외곽·앵커). **카드당 비전 API 호출 없음.**
+- **위치·화살표·외곽선·장식·가독성 = 전부 코드(Canvas2D)**. Konva 미채택, rough.js 미사용.
+- 자동 배치 실패(밀집·저대비 사진) 시 **수동 배치 모드 폴백**(편집기 드래그).
+- ⚠️ **폐기**: "Vision LLM → 카드 전체 JSON 생성 → Canvas 합성" (옛 가설). UI 문구/구조에 이 방향을 남기지 말 것.
+- ✅ **해소**: `requirements.md` F07·§3 AI기능표의 옛 문구는 Sprint 1 회고 PR #32에서 0004 구조로 정정 완료.
+
+## 3. 제안 IA (미승인 — 합의 대상)
+
+### 3-1. 여행 내부 네비 = 큰 단계만
+`개요 · 관광지 탐색 · 일정 │ 사진 · 카드 (+공유)` — `│`는 trip/log 트랙 구분.
+- **공유(F18·F22)는 P2 → 기본 비활성**. 주 공유 행동은 카드 PNG 다운로드.
+
+### 3-2. 탭이 아닌 자리에 두는 것
+| 기능 | 자리 | 우선순위 |
+|---|---|---|
+| 여행 챗봇 | **우하단 플로팅 버튼 → 사이드 채팅** (현재 보는 장소/날짜 맥락 주입) | P1 |
+| 보관함(pocket) | **탐색·일정 공통 우측 상시 레일** (담으면 즉시 보임) | P0 |
+| AI 자동 일정 | **일정 화면의 ✨ 버튼** (별도 화면 아님) | P2 |
+| 위시리스트(저장) | **탐색의 ★저장 필터 / 장소별 ★** | P1 |
+| 카드 편집 | **카드 3단계(미리보기·편집) 안** | P1 |
+| 사진 라이브러리(지도/타임라인) | **사진 화면의 뷰 토글** | P1 |
+
+### 3-3. 데이터 모델 (제안)
+```
+Trip { id, title, region, theme, startDate, dayCount, status, days[], pocket[], wish[] }
+   status: 'planning' | 'upcoming' | 'past'        // C4의 '상태'
+Day  { lodging: placeId | null, stops: Stop[] }     // 숙소는 그 날의 베이스(체크인/아웃) — 시퀀스에 안 섞음
+Stop { placeId, type, time?: "HH:MM", memo? }       // 시간·유형·메모 1급 속성
+   type: 관광지 | 식당 | 카페 | 숙소                  // 아이콘·색·데이터출처와 매핑
+```
+- **시간**: 각 stop에 선택적 시각. 순서(드래그)는 그대로 — 시간은 라벨.
+- **숙소**: `Day.lodging`으로 분리(연박·야간이동 표현). 관광지/식당/카페만 시퀀스.
+
+### 3-4. 화면별 핵심 규칙
+- **홈**: status로 "계획 중·예정 / 다녀온 여행" 분리. 빈 상태 안내. 카드에 상태 배지.
+- **개요(상세)**: status로 **모드 분기** — `past`=기록(시간순 타임라인+사진+카드 CTA, 읽기), 그 외=계획(요약+"일정 이어서" CTA). 수정/삭제 버튼 상시.
+- **탐색**: 검색어 없으면 **추천 리스트**, 입력 시 **검색 결과**로 라벨 전환(기본 검색어로 후보를 가리지 말 것). 장소 카드에 **데이터 출처 배지**. **장소 상세 패널** 제공. 카테고리에 **숙소** 포함.
+- **일정**: stop에 시각·유형 아이콘·메모. **드래그 + 터치 대체 버튼(↑↓× / 이 날 추가)** 둘 다 제공. 숙소는 day 헤더.
+- **사진**: 드롭존 + 업로드 큐(EXIF GPS/시간 상태, 실패 재시도) + 여행 연결 상태 + 뷰 토글.
+- **카드**: §C5 흐름을 stepper로. 10장 제한·처리 상태·폴백·PNG 완료 표시.
+
+### 3-5. 흐름(CTA) · 반응형 · 접근성
+- **CTA 체인**: 일정 → "사진 업로드" / 사진 → "카드 만들기" / 카드 → "PNG 다운로드".
+- **반응형**: 3열 레이아웃은 좁은 폭에서 단을 쌓고 가로 overflow 금지. 상단 바 wrap, 좁은 폭에서 URL바 숨김.
+- **접근성**: 아이콘 버튼(★ 💬 ⚙ × ↑↓ ＋)에 `aria-label`, 터치 타깃 ≥34px.
+
+## 4. 열린 결정 (합의 필요)
+1. **위시리스트 귀속** — 여행별 vs 계정 전역(마이페이지). 현재 제안은 탐색 ★필터(여행별).
+2. **테마 필드 용도** — 추천/카드 톤에 쓸지, 안 쓰면 F02에서 제거할지.
+3. **탐색·일정 통합 여부** — 두 탭을 "계획" 한 탭의 토글로 합칠지.
+4. ~~requirements F07 본문 정정~~ — 완료(PR #32).
+
+## 5. 정본 목업 (채택)
+
+- **정본 = [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 색·폰트·IA의 기준.
+- **디자인 언어** (proposal·v3 이미 일치): Pretendard / 배경 `#f2f4f6` / 주색 파랑 `#3182f6` / 초록 `#16c47e` / 회색 `#191f28`·`#8b95a1`·`#e5e8eb` / 보조 보라`#8b5cf6`·코랄`#f04452`·노랑`#f59e0b`.
+- **PrimeVue 적용**: Aura preset를 `definePreset`로 **primary=파랑(`#3182f6`) + Pretendard + surface 그레이**에 맞춘다. (현재 빌드된 trip 화면의 임시 색은 이 톤으로 수렴 — 정리는 화면 작업 중/후.)
+
+## 6. v3에서 흡수할 비주얼
+
+proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
+- **홈**: 강한 히어로 카피 + 여행 카드 갤러리(story-grid) 무드.
+- **카드/공유**: 사진 풀배경 + `DAY n · 지역` 스탬프 + 감성 한두 줄(share-card). 단 **카드 생성 흐름은 0004(overlay 편집·stepper) 유지** — v3의 정적 카드는 비주얼 참고만.
+- **사진**: masonry 타일(시간 라벨) — 사진 라이브러리 뷰 무드.
+- **탐색**: 검색바(lens) + 지역/카테고리 탭 + 지도 줌 컨트롤(+/−/⌂).
+- **분할 화면**: 좌/우 패널 폭 드래그 리사이즈 — 선택 편의.
+- **일정**: 지도 위 "노드 드래그로 선 연결" 제스처 — proposal 경로빌더와 절충.
+
+## 7. 화면 → PrimeVue 컴포넌트 매핑
+
+> 실제 룩은 구현하며 PrimeVue Aura로 확정. **"커스텀"은 PrimeVue에 없어 직접 구현**.
+
+| 화면 / 요소 | PrimeVue (Aura) |
+|---|---|
+| 상단바·브레드크럼·아바타 | `Menubar`(또는 커스텀) · `Breadcrumb` · `Avatar` |
+| 여행 탭(개요·탐색·일정·사진·카드) | `Tabs`(TabMenu) |
+| 구성 토글 패널 | `Drawer`/`Popover` + `ToggleSwitch` |
+| 홈 여행 그리드 + 상태 배지 | `DataView` + `Card` + `Tag` |
+| 여행 생성/수정 폼 | `InputText`·`DatePicker`·`Select`·`SelectButton`·`Textarea` + `Button` + `Message` |
+| 탐색 검색바 | `IconField` + `InputText` |
+| 카테고리 / ★저장 필터 | `SelectButton` / `ToggleButton` |
+| 장소 리스트 + 출처 배지 + ★ | `DataView` + `Tag` + `Button`(toggle) |
+| **지도·핀·경로·노드연결** | **카카오맵 SDK + 커스텀** (PrimeVue 없음) |
+| 장소 상세 패널 | `Drawer` |
+| 보관함 레일 | 커스텀 `Card` + 리스트 |
+| 일정 날짜 탭 / stop 리스트 | `Tabs` + **커스텀 DnD** + `Button`(↑↓×) + `Textarea` |
+| 개요 타임라인 | `Timeline` + `Card` |
+| 사진 드롭존·업로드 큐 | `FileUpload` + 커스텀 큐 + `Tag`(EXIF 상태) |
+| 사진 뷰 토글(그리드/지도/타임라인) | `SelectButton` + `DataView`/`Galleria` |
+| 카드 단계 | `Steps` |
+| 카드 사진 고르기(≤10) | 커스텀 그리드 + `Checkbox` |
+| **카드 overlay 캔버스(편집)** | **Canvas2D 커스텀**(render-overlay.mjs, 0004) |
+| 챗봇 FAB→사이드 | `Button`(FAB) + `Drawer` + 커스텀 말풍선 |
+| 알림 | `Toast` |
+
+→ **커스텀 필요(3곳)**: 지도(카카오), 카드 overlay 캔버스, 일정 드래그/경로. 나머지는 표준 컴포넌트로 커버.
+
+## 8. 변경 이력
+| 버전 | 날짜 | 변경 |
+|---|---|---|
+| draft v0 | 2026-06-08 | 프론트 구조 mock + 교차 리뷰 기반 초안. 미승인. |
+| v1 | 2026-06-09 | 정본 채택(docs/design/trip-planner-flow.html) + v3 비주얼 흡수(§6) + PrimeVue 컴포넌트 매핑(§7). F07 정정 완료(PR #32) 반영. |
