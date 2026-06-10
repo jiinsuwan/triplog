@@ -19,6 +19,8 @@ public class Photo {
     private LocalDateTime takenAt;
     private Double latitude;
     private Double longitude;
+    // 여행 연결(S2-LOG-03 #37) — 연결 안 된 사진은 null
+    private Long tripId;
 
     public Long getId() {
         return id;
@@ -98,5 +100,13 @@ public class Photo {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public Long getTripId() {
+        return tripId;
+    }
+
+    public void setTripId(Long tripId) {
+        this.tripId = tripId;
     }
 }

@@ -42,6 +42,8 @@ public enum ErrorCode {
     PHOTO_NO_FILES("PHOTO_001", HttpStatus.BAD_REQUEST, "업로드할 사진이 없습니다."),
     PHOTO_UNSUPPORTED_TYPE("PHOTO_002", HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식입니다."),
     PHOTO_TOO_LARGE("PHOTO_003", HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 제한을 초과했습니다."),
+    PHOTO_NOT_FOUND("PHOTO_004", HttpStatus.NOT_FOUND, "사진을 찾을 수 없습니다."),
+    PHOTO_ACCESS_DENIED("PHOTO_005", HttpStatus.FORBIDDEN, "사진 접근 권한이 없습니다."),
     PHOTO_STORAGE_FAILED("PHOTO_500", HttpStatus.INTERNAL_SERVER_ERROR, "사진 저장에 실패했습니다.");
 
     private final String code;

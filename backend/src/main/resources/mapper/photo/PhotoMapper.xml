@@ -15,6 +15,7 @@
         <result property="takenAt" column="taken_at"/>
         <result property="latitude" column="latitude"/>
         <result property="longitude" column="longitude"/>
+        <result property="tripId" column="trip_id"/>
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
@@ -26,8 +27,24 @@
 
     <select id="findById" resultMap="PhotoResultMap">
         SELECT id, user_id, original_filename, stored_filename, content_type, size_bytes, created_at,
-               taken_at, latitude, longitude
+               taken_at, latitude, longitude, trip_id
         FROM photos
         WHERE id = #{id}
     </select>
+
+    <select id="findByTripId" resultMap="PhotoResultMap">
+        SELECT id, user_id, original_filename, stored_filename, content_type, size_bytes, created_at,
+               taken_at, latitude, longitude, trip_id
+        FROM photos
+        WHERE trip_id = #{tripId}
+        ORDER BY created_at, id
+    </select>
+
+    <select id="findStoredFilenamesByTrip" resultType="string">
+        SELECT stored_filename FROM photos WHERE trip_id = #{tripId}
+    </select>
+
+    <update id="updateTripId">
+        UPDATE photos SET trip_id = #{tripId} WHERE id = #{id}
+    </update>
 </mapper>

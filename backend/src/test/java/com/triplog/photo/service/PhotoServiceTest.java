@@ -5,6 +5,7 @@ import com.triplog.photo.exif.ExifData;
 import com.triplog.photo.exif.ExifExtractor;
 import com.triplog.photo.mapper.PhotoMapper;
 import com.triplog.photo.storage.PhotoStorage;
+import com.triplog.trip.mapper.TripMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
@@ -39,6 +40,8 @@ class PhotoServiceTest {
     private PhotoStorage photoStorage;
     @Mock
     private ExifExtractor exifExtractor;
+    @Mock
+    private TripMapper tripMapper;
     @InjectMocks
     private PhotoService photoService;
 

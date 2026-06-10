@@ -1,6 +1,7 @@
 package com.triplog.photo.controller;
 
 import com.triplog.common.ApiResponse;
+import com.triplog.photo.dto.LinkPhotoTripRequest;
 import com.triplog.photo.dto.PhotoResponse;
 import com.triplog.photo.service.PhotoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,7 +9,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -35,5 +41,32 @@ public class PhotoController {
             @AuthenticationPrincipal Long userId,
             @RequestParam(value = "files", required = false) List<MultipartFile> files) {
         return ApiResponse.success("Photos uploaded.", photoService.upload(userId, files));
+    }
+
+    @Operation(summary = "Link a photo to a trip (or move)")
+    @PatchMapping("/{photoId}/trip")
+    public ApiResponse<PhotoResponse> linkToTrip(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @RequestBody LinkPhotoTripRequest request) {
+        return ApiResponse.success("Photo linked to trip.",
+                photoService.linkToTrip(userId, photoId, request.tripId()));
+    }
+
+    @Operation(summary = "Unlink a photo from its trip")
+    @DeleteMapping("/{photoId}/trip")
+    public ApiResponse<PhotoResponse> unlinkFromTrip(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId) {
+        return ApiResponse.success("Photo unlinked from trip.",
+                photoService.unlinkFromTrip(userId, photoId));
+    }
+
+    @Operation(summary = "List photos linked to a trip")
+    @GetMapping(params = "tripId")
+    public ApiResponse<List<PhotoResponse>> listByTrip(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam Long tripId) {
+        return ApiResponse.success("Trip photos.", photoService.listByTrip(userId, tripId));
     }
 }

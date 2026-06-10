@@ -2,6 +2,7 @@ package com.triplog.trip.service;
 
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
+import com.triplog.photo.service.PhotoTripCleanup;
 import com.triplog.trip.domain.Trip;
 import com.triplog.trip.dto.CreateTripRequest;
 import com.triplog.trip.mapper.TripMapper;
@@ -25,12 +26,14 @@ class TripServiceTest {
 
     @Mock
     private TripMapper tripMapper;
+    @Mock
+    private PhotoTripCleanup photoTripCleanup;
 
     private TripService tripService;
 
     @BeforeEach
     void setUp() {
-        tripService = new TripService(tripMapper);
+        tripService = new TripService(tripMapper, photoTripCleanup);
     }
 
     @Test
