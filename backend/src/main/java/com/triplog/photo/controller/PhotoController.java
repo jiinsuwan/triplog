@@ -2,12 +2,16 @@ package com.triplog.photo.controller;
 
 import com.triplog.common.ApiResponse;
 import com.triplog.photo.dto.LinkPhotoTripRequest;
+import com.triplog.photo.dto.PhotoContent;
 import com.triplog.photo.dto.PhotoResponse;
 import com.triplog.photo.service.PhotoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -68,5 +72,19 @@ public class PhotoController {
             @AuthenticationPrincipal Long userId,
             @RequestParam Long tripId) {
         return ApiResponse.success("Trip photos.", photoService.listByTrip(userId, tripId));
+    }
+
+    @Operation(summary = "Serve a photo's original image (owner only)")
+    @GetMapping("/{photoId}/content")
+    public ResponseEntity<Resource> content(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId) {
+        PhotoContent photo = photoService.loadOwnedContent(userId, photoId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(photo.contentType()))
+                // 소유자 전용 민감 이미지 → 캐시 금지. private max-age 캐시는 로그아웃·계정전환 후에도
+                // 브라우저 캐시에서 재검증 없이 노출돼 인증을 우회할 수 있다.
+                .cacheControl(CacheControl.noStore())
+                .body(photo.resource());
     }
 }
