@@ -26,7 +26,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PhotoControllerIntegrationTest {
 
     private static final long USER_ID = 2001L;
+    private static final long OTHER_ID = 2002L;
 
     // @TempDir + @DynamicPropertySource 의 초기화 순서가 보장되지 않아, 직접 생성한다.
     private static final Path UPLOAD_DIR = createTempDir();
@@ -169,6 +174,73 @@ class PhotoControllerIntegrationTest {
         assertThat(withoutGps).isEqualTo(1);
     }
 
+    @Test
+    void links_photo_to_my_trip() throws Exception {
+        long tripId = insertTrip(USER_ID);
+        long photoId = insertPhoto(USER_ID, null);
+
+        mockMvc.perform(patch("/photos/" + photoId + "/trip")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tripId\": " + tripId + "}")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tripId").value(tripId));
+
+        Long linked = jdbcTemplate.queryForObject(
+                "SELECT trip_id FROM photos WHERE id = ?", Long.class, photoId);
+        assertThat(linked).isEqualTo(tripId);
+    }
+
+    @Test
+    void rejects_linking_to_others_trip() throws Exception {
+        insertUser(OTHER_ID, "other@example.com");
+        long othersTrip = insertTrip(OTHER_ID);
+        long myPhoto = insertPhoto(USER_ID, null);
+
+        mockMvc.perform(patch("/photos/" + myPhoto + "/trip")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tripId\": " + othersTrip + "}")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("TRIP_002"));
+    }
+
+    @Test
+    void rejects_linking_others_photo() throws Exception {
+        insertUser(OTHER_ID, "other@example.com");
+        long myTrip = insertTrip(USER_ID);
+        long othersPhoto = insertPhoto(OTHER_ID, null);
+
+        mockMvc.perform(patch("/photos/" + othersPhoto + "/trip")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tripId\": " + myTrip + "}")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PHOTO_005"));
+    }
+
+    @Test
+    void lists_then_unlinks_trip_photos() throws Exception {
+        long tripId = insertTrip(USER_ID);
+        long p1 = insertPhoto(USER_ID, tripId);
+        insertPhoto(USER_ID, tripId);
+        insertPhoto(USER_ID, null); // 연결 안 된 사진은 목록에 안 나온다
+
+        mockMvc.perform(get("/photos").param("tripId", String.valueOf(tripId))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2));
+
+        mockMvc.perform(delete("/photos/" + p1 + "/trip")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tripId").value(nullValue()));
+
+        Long after = jdbcTemplate.queryForObject(
+                "SELECT trip_id FROM photos WHERE id = ?", Long.class, p1);
+        assertThat(after).isNull();
+    }
+
     private byte[] fixtureBytes(String classpathLocation) throws IOException {
         try (InputStream in = getClass().getResourceAsStream(classpathLocation)) {
             assertThat(in).as("픽스처 %s 가 존재해야 한다", classpathLocation).isNotNull();
@@ -216,6 +288,27 @@ class PhotoControllerIntegrationTest {
                         VALUES (?, ?, ?, ?)
                         """,
                 id, email, "{noop}password", "tester");
+    }
+
+    private long insertTrip(long userId) {
+        jdbcTemplate.update("""
+                        INSERT INTO trips (user_id, title, start_date, end_date, region, theme, status)
+                        VALUES (?, '제주 여행', '2026-06-01', '2026-06-03', '제주', '힐링', 'PLANNED')
+                        """,
+                userId);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM trips WHERE user_id = ? ORDER BY id DESC LIMIT 1", Long.class, userId);
+    }
+
+    private long insertPhoto(long userId, Long tripId) {
+        String stored = "stored-" + userId + "-" + System.nanoTime() + ".jpg";
+        jdbcTemplate.update("""
+                        INSERT INTO photos (user_id, original_filename, stored_filename, content_type, size_bytes, trip_id)
+                        VALUES (?, 'o.jpg', ?, 'image/jpeg', 100, ?)
+                        """,
+                userId, stored, tripId);
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM photos WHERE stored_filename = ?", Long.class, stored);
     }
 
     private static Path createTempDir() {

@@ -8,6 +8,8 @@ import com.triplog.photo.exif.ExifData;
 import com.triplog.photo.exif.ExifExtractor;
 import com.triplog.photo.mapper.PhotoMapper;
 import com.triplog.photo.storage.PhotoStorage;
+import com.triplog.trip.domain.Trip;
+import com.triplog.trip.mapper.TripMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -41,11 +43,14 @@ public class PhotoService {
     private final PhotoMapper photoMapper;
     private final PhotoStorage photoStorage;
     private final ExifExtractor exifExtractor;
+    private final TripMapper tripMapper;
 
-    public PhotoService(PhotoMapper photoMapper, PhotoStorage photoStorage, ExifExtractor exifExtractor) {
+    public PhotoService(PhotoMapper photoMapper, PhotoStorage photoStorage, ExifExtractor exifExtractor,
+                        TripMapper tripMapper) {
         this.photoMapper = photoMapper;
         this.photoStorage = photoStorage;
         this.exifExtractor = exifExtractor;
+        this.tripMapper = tripMapper;
     }
 
     @Transactional
@@ -86,6 +91,60 @@ public class PhotoService {
             responses.add(PhotoResponse.from(photoMapper.findById(photo.getId())));
         }
         return responses;
+    }
+
+    /** 사진을 여행에 연결(이미 연결돼 있으면 이동). 내 사진을 내 여행에만 연결할 수 있다. */
+    @Transactional
+    public PhotoResponse linkToTrip(Long userId, Long photoId, Long tripId) {
+        Photo photo = requireOwnedPhoto(userId, photoId);
+        requireOwnedTrip(userId, tripId);
+        photoMapper.updateTripId(photo.getId(), tripId);
+        return PhotoResponse.from(photoMapper.findById(photo.getId()));
+    }
+
+    /** 사진의 여행 연결을 해제(trip_id = null). 사진은 삭제하지 않는다. */
+    @Transactional
+    public PhotoResponse unlinkFromTrip(Long userId, Long photoId) {
+        Photo photo = requireOwnedPhoto(userId, photoId);
+        photoMapper.updateTripId(photo.getId(), null);
+        return PhotoResponse.from(photoMapper.findById(photo.getId()));
+    }
+
+    /** 여행에 연결된 사진 목록. 내 여행만 조회할 수 있다. */
+    @Transactional(readOnly = true)
+    public List<PhotoResponse> listByTrip(Long userId, Long tripId) {
+        requireOwnedTrip(userId, tripId);
+        return photoMapper.findByTripId(tripId).stream().map(PhotoResponse::from).toList();
+    }
+
+    // 사진 소유권 확인. 없으면 NOT_FOUND, 남의 사진이면 ACCESS_DENIED.
+    private Photo requireOwnedPhoto(Long userId, Long photoId) {
+        validateUserId(userId);
+        if (photoId == null) {
+            throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+        }
+        Photo photo = photoMapper.findById(photoId);
+        if (photo == null) {
+            throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+        }
+        if (!userId.equals(photo.getUserId())) {
+            throw new BusinessException(ErrorCode.PHOTO_ACCESS_DENIED);
+        }
+        return photo;
+    }
+
+    // 여행 소유권 확인(연결/조회용). TripService 를 거치지 않고 TripMapper 만 재사용해 순환 의존을 피한다.
+    private void requireOwnedTrip(Long userId, Long tripId) {
+        if (tripId == null) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        Trip trip = tripMapper.findById(tripId);
+        if (trip == null) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        if (!userId.equals(trip.getUserId())) {
+            throw new BusinessException(ErrorCode.TRIP_ACCESS_DENIED);
+        }
     }
 
     // 트랜잭션이 롤백되면(메서드 내 예외 또는 commit 실패) 이미 저장한 파일을 정리한다.

@@ -7,8 +7,8 @@ import java.time.LocalDateTime;
 /**
  * 업로드 결과 사진 메타 응답. storedFilename 은 후속 정적 서빙(#38)에서 URL 로 파생할 참조다.
  *
- * EXIF(takenAt/위경도)는 추출·저장(#36)하되 의도적으로 이 응답엔 노출하지 않는다 —
- * 사진 화면(FE)이 S2 범위 밖이라 응답 계약을 아직 넓히지 않는다. FE 도입 시 필드를 추가한다.
+ * tripId(여행 연결, #37)는 연결 API 의 직접 결과라 노출한다. 반면 EXIF(takenAt/위경도, #36)는
+ * 화면(갤러리)용이라 FE 도입 시까지 미노출 — 응답 계약을 아직 넓히지 않는다.
  */
 public record PhotoResponse(
         Long id,
@@ -17,7 +17,8 @@ public record PhotoResponse(
         String storedFilename,
         String contentType,
         long sizeBytes,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        Long tripId) {
 
     public static PhotoResponse from(Photo photo) {
         return new PhotoResponse(
@@ -27,6 +28,7 @@ public record PhotoResponse(
                 photo.getStoredFilename(),
                 photo.getContentType(),
                 photo.getSizeBytes(),
-                photo.getCreatedAt());
+                photo.getCreatedAt(),
+                photo.getTripId());
     }
 }
