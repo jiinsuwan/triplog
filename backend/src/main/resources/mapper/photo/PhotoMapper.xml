@@ -12,15 +12,21 @@
         <result property="contentType" column="content_type"/>
         <result property="sizeBytes" column="size_bytes"/>
         <result property="createdAt" column="created_at"/>
+        <result property="takenAt" column="taken_at"/>
+        <result property="latitude" column="latitude"/>
+        <result property="longitude" column="longitude"/>
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
-        INSERT INTO photos (user_id, original_filename, stored_filename, content_type, size_bytes)
-        VALUES (#{userId}, #{originalFilename}, #{storedFilename}, #{contentType}, #{sizeBytes})
+        INSERT INTO photos (user_id, original_filename, stored_filename, content_type, size_bytes,
+                            taken_at, latitude, longitude)
+        VALUES (#{userId}, #{originalFilename}, #{storedFilename}, #{contentType}, #{sizeBytes},
+                #{takenAt}, #{latitude}, #{longitude})
     </insert>
 
     <select id="findById" resultMap="PhotoResultMap">
-        SELECT id, user_id, original_filename, stored_filename, content_type, size_bytes, created_at
+        SELECT id, user_id, original_filename, stored_filename, content_type, size_bytes, created_at,
+               taken_at, latitude, longitude
         FROM photos
         WHERE id = #{id}
     </select>

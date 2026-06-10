@@ -4,6 +4,8 @@ import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import com.triplog.photo.domain.Photo;
 import com.triplog.photo.dto.PhotoResponse;
+import com.triplog.photo.exif.ExifData;
+import com.triplog.photo.exif.ExifExtractor;
 import com.triplog.photo.mapper.PhotoMapper;
 import com.triplog.photo.storage.PhotoStorage;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -36,10 +40,12 @@ public class PhotoService {
 
     private final PhotoMapper photoMapper;
     private final PhotoStorage photoStorage;
+    private final ExifExtractor exifExtractor;
 
-    public PhotoService(PhotoMapper photoMapper, PhotoStorage photoStorage) {
+    public PhotoService(PhotoMapper photoMapper, PhotoStorage photoStorage, ExifExtractor exifExtractor) {
         this.photoMapper = photoMapper;
         this.photoStorage = photoStorage;
+        this.exifExtractor = exifExtractor;
     }
 
     @Transactional
@@ -60,6 +66,9 @@ public class PhotoService {
         List<PhotoResponse> responses = new ArrayList<>(targets.size());
         for (int i = 0; i < targets.size(); i++) {
             MultipartFile file = targets.get(i);
+            // EXIF 는 store() *전에* 읽는다. store() 의 transferTo() 가 내부 임시파일을 옮기면
+            // 그 뒤 getInputStream() 이 비어버릴 수 있다(스트림 소비 순서, #36 설계 검토).
+            ExifData exif = extractExif(file);
             String storedName = photoStorage.store(file, extensions.get(i));
             storedNames.add(storedName);
 
@@ -69,6 +78,9 @@ public class PhotoService {
             photo.setStoredFilename(storedName);
             photo.setContentType(file.getContentType());
             photo.setSizeBytes(file.getSize());
+            photo.setTakenAt(exif.takenAt());
+            photo.setLatitude(exif.latitude());
+            photo.setLongitude(exif.longitude());
             photoMapper.insert(photo);
 
             responses.add(PhotoResponse.from(photoMapper.findById(photo.getId())));
@@ -102,6 +114,15 @@ public class PhotoService {
             throw new BusinessException(ErrorCode.PHOTO_NO_FILES);
         }
         return targets;
+    }
+
+    // EXIF 추출은 업로드를 막지 않는다 — 스트림을 못 열어도 빈 결과로 진행한다(#36).
+    private ExifData extractExif(MultipartFile file) {
+        try (InputStream in = file.getInputStream()) {
+            return exifExtractor.extract(in);
+        } catch (IOException e) {
+            return ExifData.empty();
+        }
     }
 
     private String resolveExtension(MultipartFile file) {
