@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.triplog.place.mapper.PlaceMapper">
+
+    <resultMap id="PlaceResultMap" type="com.triplog.place.domain.Place">
+        <id property="id" column="id"/>
+        <result property="source" column="source"/>
+        <result property="sourceId" column="source_id"/>
+        <result property="placeType" column="place_type"/>
+        <result property="name" column="name"/>
+        <result property="category" column="category"/>
+        <result property="region1" column="region1"/>
+        <result property="region2" column="region2"/>
+        <result property="address" column="address"/>
+        <result property="roadAddress" column="road_address"/>
+        <result property="latitude" column="latitude"/>
+        <result property="longitude" column="longitude"/>
+        <result property="phone" column="phone"/>
+        <result property="summary" column="summary"/>
+        <result property="description" column="description"/>
+        <result property="facilities" column="facilities"/>
+        <result property="homepage" column="homepage"/>
+        <result property="imageUrl" column="image_url"/>
+        <result property="rawPayload" column="raw_payload"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="PlaceRegionResultMap" type="com.triplog.place.domain.PlaceRegion">
+        <result property="region1" column="region1"/>
+        <result property="region2" column="region2"/>
+        <result property="count" column="count"/>
+    </resultMap>
+
+    <sql id="PlaceColumns">
+        id, source, source_id, place_type, name, category, region1, region2,
+        address, road_address, latitude, longitude, phone, summary, description,
+        facilities, homepage, image_url, raw_payload, created_at, updated_at
+    </sql>
+
+    <sql id="PlaceWhere">
+        <where>
+            <if test="region1 != null">
+                AND region1 = #{region1}
+            </if>
+            <if test="region2 != null">
+                AND region2 = #{region2}
+            </if>
+            <if test="category != null">
+                AND category = #{category}
+            </if>
+            <if test="keyword != null">
+                AND (
+                    name LIKE CONCAT('%', #{keyword}, '%')
+                    OR COALESCE(summary, '') LIKE CONCAT('%', #{keyword}, '%')
+                    OR COALESCE(description, '') LIKE CONCAT('%', #{keyword}, '%')
+                    OR COALESCE(address, '') LIKE CONCAT('%', #{keyword}, '%')
+                    OR COALESCE(road_address, '') LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+    </sql>
+
+    <select id="find" resultMap="PlaceResultMap">
+        SELECT <include refid="PlaceColumns"/>
+        FROM places
+        <include refid="PlaceWhere"/>
+        ORDER BY region1 ASC, region2 ASC, name ASC, id ASC
+        LIMIT #{limit}
+        OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM places
+        <include refid="PlaceWhere"/>
+    </select>
+
+    <select id="findRegions" resultMap="PlaceRegionResultMap">
+        SELECT region1, region2, COUNT(*) AS count
+        FROM places
+        GROUP BY region1, region2
+        ORDER BY region1 ASC, region2 ASC
+    </select>
+
+    <select id="findCategories" resultType="string">
+        SELECT DISTINCT category
+        FROM places
+        ORDER BY category ASC
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*)
+        FROM places
+    </select>
+</mapper>
