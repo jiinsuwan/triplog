@@ -8,6 +8,8 @@ import com.triplog.photo.mapper.PhotoMapper;
 import com.triplog.photo.storage.PhotoStorage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -45,32 +47,48 @@ public class PhotoService {
         validateUserId(userId);
         List<MultipartFile> targets = nonEmpty(files);
 
-        // 1차: 전부 형식 검증. 한 장이라도 invalid 면 디스크에 아무것도 쓰지 않고 실패한다.
-        targets.forEach(this::resolveExtension);
+        // 1차: 전부 형식 검증 + 확장자 계산. 한 장이라도 invalid 면 디스크에 아무것도 쓰지 않고 실패한다.
+        List<String> extensions = targets.stream().map(this::resolveExtension).toList();
 
-        // 2차: 저장 + 메타 기록. 도중 실패 시 이미 저장한 파일을 정리(고아 방지) 후 롤백.
+        // 저장한 파일명을 모아 두고, 트랜잭션이 롤백되면 정리한다(고아 파일 방지).
+        // try/catch 는 "메서드 실행 중" 예외만 잡는다. 그러나 DB commit 은 이 메서드가 반환된 *뒤*
+        // 일어나므로, commit 단계에서 실패하면 롤백이 메서드 밖에서 발생해 catch 가 돌지 않는다.
+        // afterCompletion 동기화는 그 경우(및 메서드 내 예외)까지 모두 잡는다. (리뷰 반영, #46)
         List<String> storedNames = new ArrayList<>();
-        try {
-            List<PhotoResponse> responses = new ArrayList<>(targets.size());
-            for (MultipartFile file : targets) {
-                String storedName = photoStorage.store(file, resolveExtension(file));
-                storedNames.add(storedName);
+        registerRollbackCleanup(storedNames);
 
-                Photo photo = new Photo();
-                photo.setUserId(userId);
-                photo.setOriginalFilename(safeOriginalName(file.getOriginalFilename()));
-                photo.setStoredFilename(storedName);
-                photo.setContentType(file.getContentType());
-                photo.setSizeBytes(file.getSize());
-                photoMapper.insert(photo);
+        List<PhotoResponse> responses = new ArrayList<>(targets.size());
+        for (int i = 0; i < targets.size(); i++) {
+            MultipartFile file = targets.get(i);
+            String storedName = photoStorage.store(file, extensions.get(i));
+            storedNames.add(storedName);
 
-                responses.add(PhotoResponse.from(photoMapper.findById(photo.getId())));
-            }
-            return responses;
-        } catch (RuntimeException e) {
-            storedNames.forEach(photoStorage::delete);
-            throw e;
+            Photo photo = new Photo();
+            photo.setUserId(userId);
+            photo.setOriginalFilename(safeOriginalName(file.getOriginalFilename()));
+            photo.setStoredFilename(storedName);
+            photo.setContentType(file.getContentType());
+            photo.setSizeBytes(file.getSize());
+            photoMapper.insert(photo);
+
+            responses.add(PhotoResponse.from(photoMapper.findById(photo.getId())));
         }
+        return responses;
+    }
+
+    // 트랜잭션이 롤백되면(메서드 내 예외 또는 commit 실패) 이미 저장한 파일을 정리한다.
+    private void registerRollbackCleanup(List<String> storedNames) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    storedNames.forEach(photoStorage::delete);
+                }
+            }
+        });
     }
 
     private List<MultipartFile> nonEmpty(List<MultipartFile> files) {
