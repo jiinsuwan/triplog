@@ -16,6 +16,13 @@ public class ExternalApiException extends BusinessException {
         this.attempts = attempts;
     }
 
+    public ExternalApiException(ErrorCode errorCode, String provider, Integer statusCode, int attempts, Throwable cause) {
+        super(errorCode, errorCode.getMessage(), cause);
+        this.provider = provider;
+        this.statusCode = statusCode;
+        this.attempts = attempts;
+    }
+
     public String getProvider() {
         return provider;
     }

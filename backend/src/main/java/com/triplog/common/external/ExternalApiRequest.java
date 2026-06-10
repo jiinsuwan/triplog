@@ -9,7 +9,8 @@ public record ExternalApiRequest(
         ExternalHttpMethod method,
         URI uri,
         Map<String, String> headers,
-        String body
+        String body,
+        boolean retryable
 ) {
 
     public ExternalApiRequest {
@@ -33,17 +34,23 @@ public record ExternalApiRequest(
         return new Builder(provider, ExternalHttpMethod.POST, uri);
     }
 
+    public static Builder method(String provider, ExternalHttpMethod method, URI uri) {
+        return new Builder(provider, method, uri);
+    }
+
     public static final class Builder {
         private final String provider;
         private final ExternalHttpMethod method;
         private final URI uri;
         private final Map<String, String> headers = new LinkedHashMap<>();
         private String body;
+        private boolean retryable;
 
         private Builder(String provider, ExternalHttpMethod method, URI uri) {
             this.provider = provider;
             this.method = method;
             this.uri = uri;
+            this.retryable = method == ExternalHttpMethod.GET;
         }
 
         public Builder header(String name, String value) {
@@ -56,8 +63,14 @@ public record ExternalApiRequest(
             return this;
         }
 
+        // Defaults to GET-only retry. Enable explicitly for idempotent non-GET calls.
+        public Builder retryable(boolean retryable) {
+            this.retryable = retryable;
+            return this;
+        }
+
         public ExternalApiRequest build() {
-            return new ExternalApiRequest(provider, method, uri, headers, body);
+            return new ExternalApiRequest(provider, method, uri, headers, body, retryable);
         }
     }
 }

@@ -76,6 +76,23 @@ class ExternalApiClientTest {
     }
 
     @Test
+    void exchange_retries_too_many_requests_then_succeeds() {
+        CapturingTransport transport = new CapturingTransport(
+                success(429, "rate limited"),
+                success(200, "ok"));
+        ExternalApiClient client = client(transport);
+
+        ExternalApiResponse response = client.exchange(ExternalApiRequest
+                .get("tour-api", URI.create("https://api.data.go.kr/openapi/tn_pubr_public_trrsrt_api"))
+                .build());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.attempts()).isEqualTo(2);
+        assertThat(transport.requests()).hasSize(2);
+        assertThat(sleeps).containsExactly(Duration.ofMillis(10));
+    }
+
+    @Test
     void exchange_does_not_retry_client_error() {
         CapturingTransport transport = new CapturingTransport(success(400, "bad request"));
         ExternalApiClient client = client(transport);
@@ -95,6 +112,46 @@ class ExternalApiClientTest {
     }
 
     @Test
+    void exchange_does_not_retry_post_by_default() {
+        CapturingTransport transport = new CapturingTransport(success(502, "bad gateway"));
+        ExternalApiClient client = client(transport);
+
+        assertThatThrownBy(() -> client.exchange(ExternalApiRequest
+                .post("payment-api", URI.create("https://api.example.com/orders"))
+                .body("{\"name\":\"trip\"}")
+                .build()))
+                .isInstanceOfSatisfying(ExternalApiException.class, e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_FAILURE);
+                    assertThat(e.getStatusCode()).isEqualTo(502);
+                    assertThat(e.getAttempts()).isEqualTo(1);
+                });
+
+        assertThat(transport.requests()).hasSize(1);
+        assertThat(transport.requests().getFirst().method()).isEqualTo("POST");
+        assertThat(transport.requests().getFirst().bodyPublisher()).isPresent();
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    void exchange_retries_post_when_explicitly_enabled() {
+        CapturingTransport transport = new CapturingTransport(
+                success(502, "bad gateway"),
+                success(200, "ok"));
+        ExternalApiClient client = client(transport);
+
+        ExternalApiResponse response = client.exchange(ExternalApiRequest
+                .post("idempotent-post-api", URI.create("https://api.example.com/search"))
+                .body("{\"keyword\":\"cafe\"}")
+                .retryable(true)
+                .build());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.attempts()).isEqualTo(2);
+        assertThat(transport.requests()).hasSize(2);
+        assertThat(sleeps).containsExactly(Duration.ofMillis(10));
+    }
+
+    @Test
     void exchange_retries_timeout_until_max_attempts() {
         CapturingTransport transport = new CapturingTransport(
                 failure(new HttpTimeoutException("timeout")),
@@ -110,10 +167,44 @@ class ExternalApiClientTest {
                     assertThat(e.getProvider()).isEqualTo("weather");
                     assertThat(e.getStatusCode()).isNull();
                     assertThat(e.getAttempts()).isEqualTo(3);
+                    assertThat(e).hasCauseInstanceOf(HttpTimeoutException.class);
                 });
 
         assertThat(transport.requests()).hasSize(3);
         assertThat(sleeps).containsExactly(Duration.ofMillis(10), Duration.ofMillis(10));
+    }
+
+    @Test
+    void exchange_retries_io_failure_until_max_attempts_and_keeps_cause() {
+        IOException ioException = new IOException("network down");
+        CapturingTransport transport = new CapturingTransport(
+                failure(ioException),
+                failure(ioException),
+                failure(ioException));
+        ExternalApiClient client = client(transport);
+
+        assertThatThrownBy(() -> client.exchange(ExternalApiRequest
+                .get("tour-api", URI.create("https://api.data.go.kr/openapi/tn_pubr_public_trrsrt_api"))
+                .build()))
+                .isInstanceOfSatisfying(ExternalApiException.class, e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EXTERNAL_API_FAILURE);
+                    assertThat(e.getStatusCode()).isNull();
+                    assertThat(e.getAttempts()).isEqualTo(3);
+                    assertThat(e).hasCauseInstanceOf(IOException.class);
+                });
+
+        assertThat(transport.requests()).hasSize(3);
+        assertThat(sleeps).containsExactly(Duration.ofMillis(10), Duration.ofMillis(10));
+    }
+
+    @Test
+    void redact_for_log_removes_query_parameters() {
+        ExternalApiClient client = client(new CapturingTransport(success(200, "ok")));
+
+        String redacted = client.redactForLog(URI.create(
+                "https://api.example.com/search?serviceKey=secret&query=cafe"));
+
+        assertThat(redacted).isEqualTo("https://api.example.com/search");
     }
 
     private ExternalApiClient client(CapturingTransport transport) {

@@ -39,42 +39,46 @@ public class ExternalApiClient {
                 int statusCode = response.statusCode();
                 long durationMs = elapsedMillis(totalStartedAt);
 
-                if (shouldRetry(statusCode) && attempt < maxAttempts) {
+                if (shouldRetry(request, statusCode) && attempt < maxAttempts) {
                     log.warn("External API retry provider={} method={} uri={} status={} attempt={}/{}",
-                            request.provider(), request.method(), redact(request.uri()), statusCode, attempt, maxAttempts);
+                            request.provider(), request.method(), redactForLog(request.uri()), statusCode, attempt, maxAttempts);
                     sleepBeforeRetry(request, attempt);
                     continue;
                 }
 
                 if (!isSuccess(statusCode)) {
                     log.warn("External API failed provider={} method={} uri={} status={} attempts={} durationMs={}",
-                            request.provider(), request.method(), redact(request.uri()), statusCode, attempt, durationMs);
+                            request.provider(), request.method(), redactForLog(request.uri()), statusCode, attempt, durationMs);
                     throw new ExternalApiException(
                             ErrorCode.EXTERNAL_API_FAILURE, request.provider(), statusCode, attempt);
                 }
 
                 log.info("External API success provider={} method={} uri={} status={} attempts={} durationMs={}",
-                        request.provider(), request.method(), redact(request.uri()), statusCode, attempt, durationMs);
+                        request.provider(), request.method(), redactForLog(request.uri()), statusCode, attempt, durationMs);
                 return new ExternalApiResponse(statusCode, response.body(), attempt, durationMs);
             } catch (HttpTimeoutException e) {
-                if (attempt < maxAttempts) {
+                if (request.retryable() && attempt < maxAttempts) {
                     log.warn("External API timeout retry provider={} method={} uri={} attempt={}/{}",
-                            request.provider(), request.method(), redact(request.uri()), attempt, maxAttempts);
+                            request.provider(), request.method(), redactForLog(request.uri()), attempt, maxAttempts);
                     sleepBeforeRetry(request, attempt);
                     continue;
                 }
-                throw new ExternalApiException(ErrorCode.EXTERNAL_API_TIMEOUT, request.provider(), null, attempt);
+                log.warn("External API timeout failed provider={} method={} uri={} attempts={} cause={}",
+                        request.provider(), request.method(), redactForLog(request.uri()), attempt, causeSummary(e));
+                throw new ExternalApiException(ErrorCode.EXTERNAL_API_TIMEOUT, request.provider(), null, attempt, e);
             } catch (IOException e) {
-                if (attempt < maxAttempts) {
+                if (request.retryable() && attempt < maxAttempts) {
                     log.warn("External API IO retry provider={} method={} uri={} attempt={}/{}",
-                            request.provider(), request.method(), redact(request.uri()), attempt, maxAttempts);
+                            request.provider(), request.method(), redactForLog(request.uri()), attempt, maxAttempts);
                     sleepBeforeRetry(request, attempt);
                     continue;
                 }
-                throw new ExternalApiException(ErrorCode.EXTERNAL_API_FAILURE, request.provider(), null, attempt);
+                log.warn("External API IO failed provider={} method={} uri={} attempts={} cause={}",
+                        request.provider(), request.method(), redactForLog(request.uri()), attempt, causeSummary(e));
+                throw new ExternalApiException(ErrorCode.EXTERNAL_API_FAILURE, request.provider(), null, attempt, e);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new ExternalApiException(ErrorCode.EXTERNAL_API_FAILURE, request.provider(), null, attempt);
+                throw new ExternalApiException(ErrorCode.EXTERNAL_API_FAILURE, request.provider(), null, attempt, e);
             }
         }
 
@@ -96,8 +100,8 @@ public class ExternalApiClient {
         return builder.build();
     }
 
-    private boolean shouldRetry(int statusCode) {
-        return statusCode == 429 || statusCode >= 500;
+    private boolean shouldRetry(ExternalApiRequest request, int statusCode) {
+        return request.retryable() && (statusCode == 429 || statusCode >= 500);
     }
 
     private boolean isSuccess(int statusCode) {
@@ -111,7 +115,7 @@ public class ExternalApiClient {
                 sleeper.sleep(backoff);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new ExternalApiException(ErrorCode.EXTERNAL_API_FAILURE, request.provider(), null, attempt);
+                throw new ExternalApiException(ErrorCode.EXTERNAL_API_FAILURE, request.provider(), null, attempt, e);
             }
         }
     }
@@ -120,10 +124,18 @@ public class ExternalApiClient {
         return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
-    private String redact(URI uri) {
+    String redactForLog(URI uri) {
         if (uri.getQuery() == null) {
             return uri.toString();
         }
         return URI.create(uri.getScheme() + "://" + uri.getAuthority() + uri.getPath()).toString();
+    }
+
+    private String causeSummary(Exception exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return exception.getClass().getSimpleName();
+        }
+        return exception.getClass().getSimpleName() + ": " + message;
     }
 }
