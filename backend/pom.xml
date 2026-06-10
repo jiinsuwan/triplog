@@ -31,6 +31,7 @@
 		<springdoc.version>2.8.6</springdoc.version>
 		<jjwt.version>0.12.6</jjwt.version>
 		<spring-ai.version>1.0.0</spring-ai.version>
+		<metadata-extractor.version>2.19.0</metadata-extractor.version>
 	</properties>
 
 	<!-- Spring AI 채택(architecture §6). Sprint 0에서는 버전 관리용 BOM만 둔다.
@@ -105,6 +106,13 @@
 			<version>${jjwt.version}</version>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- EXIF 파싱 (S2-LOG-02 #36): 촬영시각·GPS 추출. 좌표 도/분/초→십진수 변환 포함 -->
+		<dependency>
+			<groupId>com.drewnoakes</groupId>
+			<artifactId>metadata-extractor</artifactId>
+			<version>${metadata-extractor.version}</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>

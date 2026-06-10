@@ -3,8 +3,8 @@ package com.triplog.photo.domain;
 import java.time.LocalDateTime;
 
 /**
- * 업로드된 사진의 메타. S2-LOG-01(#35)이 다루는 칸만 모델링한다.
- * EXIF(taken_at/lat/lng, #36)·여행 연결(trip_id, #37) 칸은 해당 이슈에서 도메인에 추가한다.
+ * 업로드된 사진의 메타.
+ * EXIF(taken_at/lat/lng)는 S2-LOG-02(#36)에서 채운다. 여행 연결(trip_id)은 S2-LOG-03(#37).
  */
 public class Photo {
 
@@ -15,6 +15,10 @@ public class Photo {
     private String contentType;
     private long sizeBytes;
     private LocalDateTime createdAt;
+    // EXIF(S2-LOG-02 #36) — 없는 사진은 null. 위도·경도는 항상 세트(둘 다 있거나 둘 다 null).
+    private LocalDateTime takenAt;
+    private Double latitude;
+    private Double longitude;
 
     public Long getId() {
         return id;
@@ -70,5 +74,29 @@ public class Photo {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getTakenAt() {
+        return takenAt;
+    }
+
+    public void setTakenAt(LocalDateTime takenAt) {
+        this.takenAt = takenAt;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
     }
 }

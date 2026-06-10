@@ -17,11 +17,15 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -111,6 +115,65 @@ class PhotoControllerIntegrationTest {
 
         assertThat(countPhotos()).isZero();
         assertThat(storedFileCount()).isZero();
+    }
+
+    @Test
+    void extracts_and_stores_exif_when_present() throws Exception {
+        // EXIF·GPS 가 박힌 실제 사진(제주, 2026-06-04 12:17:56) → 촬영시각·좌표가 DB 에 채워진다.
+        byte[] jpg = fixtureBytes("/fixtures/exif/with-gps.jpg");
+        mockMvc.perform(multipart("/photos")
+                        .file(new MockMultipartFile("files", "jeju.jpg", MediaType.IMAGE_JPEG_VALUE, jpg))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isCreated());
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT taken_at, latitude, longitude FROM photos WHERE user_id = ?", USER_ID);
+        // taken_at 은 타임존 없는 현지시각 그대로 저장된다(서버 TZ 무관).
+        assertThat(LocalDateTime.parse(row.get("taken_at").toString()))
+                .isEqualTo(LocalDateTime.of(2026, 6, 4, 12, 17, 56));
+        assertThat(((Number) row.get("latitude")).doubleValue()).isCloseTo(33.518747, within(1e-4));
+        assertThat(((Number) row.get("longitude")).doubleValue()).isCloseTo(126.499594, within(1e-4));
+    }
+
+    @Test
+    void stores_null_exif_when_absent() throws Exception {
+        // EXIF 없는 사진도 오류 없이 업로드되고, 촬영시각·좌표는 null 로 남는다.
+        mockMvc.perform(multipart("/photos")
+                        .file(imageFile("blank.png", MediaType.IMAGE_PNG_VALUE, 2048))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isCreated());
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT taken_at, latitude, longitude FROM photos WHERE user_id = ?", USER_ID);
+        assertThat(row.get("taken_at")).isNull();
+        assertThat(row.get("latitude")).isNull();
+        assertThat(row.get("longitude")).isNull();
+    }
+
+    @Test
+    void extracts_exif_per_file_in_multi_upload() throws Exception {
+        // 다중 업로드에서 EXIF 가 파일별로 독립 처리되는가:
+        // EXIF 있는 사진만 좌표가 채워지고, 없는 사진은 null 로 남는다(좌표가 새지 않음).
+        byte[] jpg = fixtureBytes("/fixtures/exif/with-gps.jpg");
+        mockMvc.perform(multipart("/photos")
+                        .file(new MockMultipartFile("files", "jeju.jpg", MediaType.IMAGE_JPEG_VALUE, jpg))
+                        .file(imageFile("blank.png", MediaType.IMAGE_PNG_VALUE, 2048))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isCreated());
+
+        Integer withGps = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM photos WHERE user_id = ? AND latitude IS NOT NULL", Integer.class, USER_ID);
+        Integer withoutGps = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM photos WHERE user_id = ? AND latitude IS NULL", Integer.class, USER_ID);
+        assertThat(withGps).isEqualTo(1);
+        assertThat(withoutGps).isEqualTo(1);
+    }
+
+    private byte[] fixtureBytes(String classpathLocation) throws IOException {
+        try (InputStream in = getClass().getResourceAsStream(classpathLocation)) {
+            assertThat(in).as("픽스처 %s 가 존재해야 한다", classpathLocation).isNotNull();
+            return in.readAllBytes();
+        }
     }
 
     private MockMultipartFile imageFile(String filename, String contentType, int size) {
