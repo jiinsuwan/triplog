@@ -3,11 +3,14 @@ package com.triplog.photo.storage;
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
@@ -50,5 +53,21 @@ public class PhotoStorage {
         } catch (IOException ignored) {
             // best-effort: 정리 실패는 업로드 자체를 막지 않는다.
         }
+    }
+
+    /**
+     * 저장된 사진을 읽기용 Resource 로 돌려준다(S2-LOG-04 #38).
+     * store() 와 같은 경로 방어(normalize + startsWith root)를 재사용한다.
+     * 경로 이탈·미존재·읽기불가는 모두 PHOTO_NOT_FOUND(404)로 처리한다.
+     */
+    public Resource load(String storedName) {
+        Path target = root.resolve(storedName).normalize();
+        // 경로 이탈 + 일반 파일이 아닌 것(디렉터리·symlink) + 읽기불가는 모두 404 로 고정한다.
+        if (!target.startsWith(root)
+                || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isReadable(target)) {
+            throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+        }
+        return new FileSystemResource(target);
     }
 }

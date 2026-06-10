@@ -3,6 +3,7 @@ package com.triplog.photo.service;
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import com.triplog.photo.domain.Photo;
+import com.triplog.photo.dto.PhotoContent;
 import com.triplog.photo.dto.PhotoResponse;
 import com.triplog.photo.exif.ExifData;
 import com.triplog.photo.exif.ExifExtractor;
@@ -10,6 +11,7 @@ import com.triplog.photo.mapper.PhotoMapper;
 import com.triplog.photo.storage.PhotoStorage;
 import com.triplog.trip.domain.Trip;
 import com.triplog.trip.mapper.TripMapper;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -115,6 +117,17 @@ public class PhotoService {
     public List<PhotoResponse> listByTrip(Long userId, Long tripId) {
         requireOwnedTrip(userId, tripId);
         return photoMapper.findByTripId(tripId).stream().map(PhotoResponse::from).toList();
+    }
+
+    /** 본인 사진의 원본을 서빙용으로 읽어 돌려준다(소유자만, S2-LOG-04 #38). */
+    @Transactional(readOnly = true)
+    public PhotoContent loadOwnedContent(Long userId, Long photoId) {
+        Photo photo = requireOwnedPhoto(userId, photoId);
+        // 원본 bytes 를 그대로 서빙한다 → 파일에 박힌 EXIF(GPS 등)도 포함된다(#38 검토).
+        // 업로더 본인에게만 노출되므로 현재는 무관. 단 원본 사진을 남과 공유하는 기능이 생기면
+        // 여기서 EXIF 스트립이 필요하다(현재는 소유자만 접근하므로 미적용).
+        Resource resource = photoStorage.load(photo.getStoredFilename());
+        return new PhotoContent(resource, photo.getContentType(), photo.getStoredFilename());
     }
 
     // 사진 소유권 확인. 없으면 NOT_FOUND, 남의 사진이면 ACCESS_DENIED.

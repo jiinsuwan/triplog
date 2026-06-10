@@ -31,6 +31,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -239,6 +241,60 @@ class PhotoControllerIntegrationTest {
         Long after = jdbcTemplate.queryForObject(
                 "SELECT trip_id FROM photos WHERE id = ?", Long.class, p1);
         assertThat(after).isNull();
+    }
+
+    @Test
+    void serves_owner_photo_content() throws Exception {
+        long photoId = uploadAndGetId();
+
+        mockMvc.perform(get("/photos/" + photoId + "/content")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", MediaType.IMAGE_JPEG_VALUE))
+                // 소유자 전용 민감 이미지 → 캐시 금지(인증 우회 방지).
+                .andExpect(header().string("Cache-Control", "no-store"))
+                // 올린 사진이 그대로 나오는가: 업로드 64바이트 == 응답 본문.
+                .andExpect(content().bytes(new byte[64]));
+    }
+
+    @Test
+    void rejects_unauthenticated_content() throws Exception {
+        long photoId = uploadAndGetId();
+
+        mockMvc.perform(get("/photos/" + photoId + "/content"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_001"));
+    }
+
+    @Test
+    void rejects_serving_others_photo_content() throws Exception {
+        insertUser(OTHER_ID, "other@example.com");
+        long myPhoto = uploadAndGetId();
+
+        mockMvc.perform(get("/photos/" + myPhoto + "/content")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(OTHER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("PHOTO_005"));
+    }
+
+    @Test
+    void returns_404_when_file_missing() throws Exception {
+        // photos row 는 있지만 디스크 파일이 없는 경우(이슈 Test: 존재하지 않는 파일 404).
+        long photoId = insertPhoto(USER_ID, null);
+
+        mockMvc.perform(get("/photos/" + photoId + "/content")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PHOTO_004"));
+    }
+
+    private long uploadAndGetId() throws Exception {
+        mockMvc.perform(multipart("/photos")
+                        .file(imageFile("a.jpg", MediaType.IMAGE_JPEG_VALUE, 64))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
+                .andExpect(status().isCreated());
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM photos WHERE user_id = ? ORDER BY id DESC LIMIT 1", Long.class, USER_ID);
     }
 
     private byte[] fixtureBytes(String classpathLocation) throws IOException {
