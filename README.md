@@ -1,8 +1,24 @@
 # TripLog
 
+[![CI](https://github.com/jiinsuwan/triplog/actions/workflows/ci.yml/badge.svg)](https://github.com/jiinsuwan/triplog/actions/workflows/ci.yml)
+
 > 지도 기반 여행 계획 · 사진 기반 여행 기록 · AI 기반 공유 콘텐츠 생성을 연결하는 여행 로그 서비스
 
 **팀**: 2인 · **기간**: 약 1개월 · **방식**: AI agent 기반 협업 개발
+
+---
+
+## 🟢 Project Status — Sprint 2 진행 중
+
+> 2026-06-10 기준. 스프린트 상세: [docs/sprints/sprint-2.md](docs/sprints/sprint-2.md) · 전체 계획: [docs/roadmap.md](docs/roadmap.md)
+
+| 상태 | 내용 |
+|---|---|
+| ✅ 완료 | JWT 인증(Access/Refresh rotation) · 로그인/회원가입/프로필 화면 · 라우트 보호 |
+| ✅ 완료 | 여행 CRUD API + 목록/생성/상세 화면 |
+| ✅ 완료 | AI 카드 생성 PoC ([decisions/0004](docs/decisions/0004-card-poc-result.md)) · 사진 다중 업로드 API |
+| 🔨 진행 중 | 외부 API 공통 인프라 (#39) · 카카오맵 장소·지도 탐색 화면 (#28) |
+| ⏭ 예정 | 관광지 데이터 적재 (#33) · 관광지 상세 화면 (#34) · EXIF 추출 (#36) · 사진-여행 연결 (#37) · 사진 정적 서빙 (#38) · Trip 하드닝 (#17) |
 
 ---
 
@@ -16,7 +32,39 @@ TripLog는 단순한 "AI 여행 서비스"가 아닙니다.
 
 ---
 
-## 빠른 시작
+## 처음 보는 분들께 — How to Review
+
+개발 진행 중인 레포입니다. 아래 순서로 보면 범위와 진행 흐름을 파악하기 쉽습니다.
+
+1. 이 README — 개요와 현재 상태
+2. [docs/requirements.md](docs/requirements.md) — 확정된 기능 범위 (P0/P1/P2)와 완료 조건
+3. [docs/architecture.md](docs/architecture.md) — 시스템 구조와 설계 원칙
+4. [docs/conventions.md](docs/conventions.md) — Issue/Branch/Commit/PR 규칙과 AI agent 운용 원칙
+5. [docs/sprints/](docs/sprints/) · [docs/decisions/](docs/decisions/) — 스프린트 기록과 의사결정 로그
+6. GitHub Issues / Pull Requests — 실제 구현·리뷰 기록
+   - 대표 예시: [PR #14](https://github.com/jiinsuwan/triplog/pull/14) (공유 영역 리뷰 → 반영 → 승인 흐름) · [PR #46](https://github.com/jiinsuwan/triplog/pull/46) (에이전틱 협업 로그 + AC↔테스트 매핑)
+
+---
+
+## 실행 방법 (Quick Run)
+
+```bash
+# 0. 최초 1회 — 환경 점검 (Node 20+ / Java 21 / MySQL 8 / .env)
+#    .env는 .env.example를 복사해 작성한다
+bash scripts/preflight.sh
+
+# 1. Backend — http://localhost:8080 (Swagger: /swagger-ui.html)
+cd backend && ./mvnw spring-boot:run
+
+# 2. Frontend — http://localhost:5173
+cd frontend && npm install && npm run dev
+```
+
+환경변수·DB 셋업 상세: [backend/README.md](backend/README.md) · [frontend/README.md](frontend/README.md)
+
+---
+
+## 팀원 · AI agent 온보딩
 
 | 역할 | 먼저 읽을 문서 |
 |---|---|
