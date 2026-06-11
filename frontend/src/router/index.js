@@ -34,6 +34,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/trips/:tripId/places',
+    name: 'trip-place-search',
+    component: () => import('@/views/trip/TripPlaceSearchView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/trips/:tripId',
     name: 'trip-detail',
     component: TripDetailView,

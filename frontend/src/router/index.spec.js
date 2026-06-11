@@ -45,6 +45,13 @@ describe('router authGuard — 보호 라우트 가드', () => {
 
     expect(detailRoute?.meta.requiresAuth).toBe(true)
   })
+
+  it('장소 탐색 라우트는 보호 라우트로 등록한다', () => {
+    const placeRoute = router.getRoutes().find((item) => item.name === 'trip-place-search')
+
+    expect(placeRoute?.path).toBe('/trips/:tripId/places')
+    expect(placeRoute?.meta.requiresAuth).toBe(true)
+  })
 })
 
 describe('router 라우트 등록 — 보호 누락 방지 (S2-CORE-02)', () => {

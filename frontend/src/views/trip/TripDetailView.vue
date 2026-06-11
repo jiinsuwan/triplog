@@ -137,6 +137,10 @@ function goList() {
   router.push({ name: 'trip-list' })
 }
 
+function goPlaceSearch() {
+  router.push({ name: 'trip-place-search', params: { tripId: tripId.value } })
+}
+
 function fillForm(sourceTrip) {
   Object.assign(form, createTripFormFromTrip(sourceTrip))
 }
@@ -186,6 +190,12 @@ function toDate(dateOnly) {
         </div>
 
         <div class="summary-actions">
+          <Button
+            label="장소 탐색"
+            icon="pi pi-map-marker"
+            severity="success"
+            @click="goPlaceSearch"
+          />
           <Button
             label="수정"
             icon="pi pi-pencil"
