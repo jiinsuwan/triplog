@@ -23,6 +23,4 @@ public interface PlaceMapper {
     List<PlaceRegion> findRegions();
 
     List<String> findCategories();
-
-    long countAll();
 }

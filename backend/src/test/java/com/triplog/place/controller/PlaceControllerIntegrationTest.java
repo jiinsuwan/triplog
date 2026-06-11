@@ -70,6 +70,17 @@ class PlaceControllerIntegrationTest {
     }
 
     @Test
+    void public_place_paths_do_not_open_protected_trip_api() throws Exception {
+        mockMvc.perform(get("/places")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+        mockMvc.perform(get("/trips"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void list_regions_and_categories() throws Exception {
         mockMvc.perform(get("/places/regions"))
                 .andExpect(status().isOk())

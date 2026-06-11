@@ -198,5 +198,6 @@ for ($i = 0; $i -lt $valueLines.Count; $i++) {
     $lines.Add($valueLines[$i] + $suffix)
 }
 
-Set-Content -LiteralPath $Output -Value $lines -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllLines($Output, $lines, $utf8NoBom)
 Write-Output "Generated $($valueLines.Count) place rows -> $Output"

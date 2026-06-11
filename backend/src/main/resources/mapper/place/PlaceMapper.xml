@@ -90,9 +90,4 @@
         FROM places
         ORDER BY category ASC
     </select>
-
-    <select id="countAll" resultType="long">
-        SELECT COUNT(*)
-        FROM places
-    </select>
 </mapper>
