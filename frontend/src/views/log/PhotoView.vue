@@ -17,14 +17,23 @@ const { items, addFiles, retry, remove, failedCount, linkedCount } = useUploadQu
 // 모든 항목이 실제로 "연결됨"일 때만 완료 안내(거부·취소가 섞이면 띄우지 않는다).
 const allLinked = computed(() => items.length > 0 && linkedCount.value === items.length)
 
-// 어느 여행에 연결되는지 맥락 표시(읽기 전용 cross-track 조회 — 실패해도 화면은 동작).
+// 여행 컨텍스트: 무효 tripId 나 조회 실패(없음·권한없음·삭제됨)면 업로드를 막아
+// 연결 불가능한 사진(orphan)이 서버에 쌓이는 것을 방지한다.
 const tripTitle = ref('')
+const tripStatus = ref('loading') // 'loading' | 'ready' | 'invalid'
+const canUpload = computed(() => tripStatus.value === 'ready')
+
 onMounted(async () => {
+  if (!Number.isInteger(tripId) || tripId <= 0) {
+    tripStatus.value = 'invalid'
+    return
+  }
   try {
     const trip = await fetchTrip(tripId)
     tripTitle.value = trip?.title ?? ''
+    tripStatus.value = 'ready'
   } catch {
-    tripTitle.value = ''
+    tripStatus.value = 'invalid'
   }
 })
 
@@ -32,6 +41,7 @@ const fileInput = ref(null)
 const dragOver = ref(false)
 
 function openPicker() {
+  if (!canUpload.value) return
   fileInput.value?.click()
 }
 function onPicked(event) {
@@ -40,6 +50,7 @@ function onPicked(event) {
 }
 function onDrop(event) {
   dragOver.value = false
+  if (!canUpload.value) return
   addFiles(event.dataTransfer?.files)
 }
 function onKeydown(event) {
@@ -64,8 +75,6 @@ function statusTag(item) {
       return { label: item.error?.message ?? '실패', severity: 'danger' }
     case QueueStatus.REJECTED:
       return { label: item.error?.message ?? '업로드 불가', severity: 'warn' }
-    case QueueStatus.CANCELLED:
-      return { label: '취소됨', severity: 'secondary' }
     default:
       return { label: item.status, severity: 'secondary' }
   }
@@ -102,12 +111,17 @@ const connectLabel = computed(() =>
       />
     </header>
 
-    <!-- 드롭존: 끌어다 놓거나 클릭/Enter 로 파일 선택 -->
+    <Message v-if="tripStatus === 'invalid'" severity="error" :closable="false">
+      유효하지 않거나 접근할 수 없는 여행입니다. 여행 목록에서 다시 선택해 주세요.
+    </Message>
+
+    <!-- 드롭존: 끌어다 놓거나 클릭/Enter 로 파일 선택 (여행이 유효할 때만 활성) -->
     <div
       class="dropzone"
-      :class="{ 'drag-over': dragOver }"
+      :class="{ 'drag-over': dragOver, disabled: !canUpload }"
       role="button"
-      tabindex="0"
+      :tabindex="canUpload ? 0 : -1"
+      :aria-disabled="!canUpload"
       aria-label="사진을 끌어다 놓거나 눌러서 업로드"
       @click="openPicker"
       @keydown="onKeydown"
@@ -255,6 +269,12 @@ const connectLabel = computed(() =>
 .dropzone.drag-over {
   background: #eaf2ff;
   border-color: #3182f6;
+}
+
+.dropzone.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-color: #c9d2dc;
 }
 
 .dropzone .pi-cloud-upload {

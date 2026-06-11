@@ -11,27 +11,37 @@ const UPLOAD_TIMEOUT_MS = 0
 // POST /photos (multipart) — 파일 1개씩 보낸다. 백엔드는 다중(List)을 지원하지만,
 // 큐의 "행별 진행률·개별 재시도"를 위해 의도적으로 파일당 1요청을 쓴다(원자적 배치는 포기).
 // 응답은 List<PhotoResponse> 이므로 단일 업로드의 결과는 첫 항목이다.
-export function uploadPhoto(file, { onUploadProgress, signal } = {}) {
+//
+// 알려진 한계: 업로드 중 액세스 토큰이 만료되면 공용 인터셉터(instance.js)가 동일 config(이미
+// 소비된 FormData)로 401 재시도를 시도한다 → 본문 손상으로 회복이 깨질 수 있다(데이터 정합성
+// 사고는 아니고, 실패 시 큐가 재시도로 회복). 대용량 업로드 401 회복 강화는 후속 과제.
+export async function uploadPhoto(file, { onUploadProgress, signal } = {}) {
   const formData = new FormData()
   // 키는 반드시 'files' — 컨트롤러 @RequestParam("files") 와 일치해야 한다.
   // Content-Type 은 지정하지 않는다: axios 가 FormData 의 boundary 를 자동으로 채운다.
   formData.append('files', file)
-  return instance
-    .post('/photos', formData, { timeout: UPLOAD_TIMEOUT_MS, onUploadProgress, signal })
-    .then((res) => res.data.data[0])
+  const { data } = await instance.post('/photos', formData, {
+    timeout: UPLOAD_TIMEOUT_MS,
+    onUploadProgress,
+    signal,
+  })
+  return data.data[0]
 }
 
 // PATCH /photos/{id}/trip { tripId } → 연결 후 갱신된 PhotoResponse
-export function linkPhotoToTrip(photoId, tripId) {
-  return instance.patch(`/photos/${photoId}/trip`, { tripId }).then((res) => res.data.data)
+export async function linkPhotoToTrip(photoId, tripId) {
+  const { data } = await instance.patch(`/photos/${photoId}/trip`, { tripId })
+  return data.data
 }
 
 // DELETE /photos/{id}/trip → 연결 해제 후 갱신된 PhotoResponse(사진 자체는 삭제 안 함)
-export function unlinkPhotoFromTrip(photoId) {
-  return instance.delete(`/photos/${photoId}/trip`).then((res) => res.data.data)
+export async function unlinkPhotoFromTrip(photoId) {
+  const { data } = await instance.delete(`/photos/${photoId}/trip`)
+  return data.data
 }
 
 // GET /photos?tripId= → 해당 여행에 연결된 사진 목록(#55 갤러리에서 재사용)
-export function fetchTripPhotos(tripId) {
-  return instance.get('/photos', { params: { tripId } }).then((res) => res.data.data)
+export async function fetchTripPhotos(tripId) {
+  const { data } = await instance.get('/photos', { params: { tripId } })
+  return data.data
 }

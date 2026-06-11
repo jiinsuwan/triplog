@@ -164,4 +164,14 @@ describe('useUploadQueue', () => {
     q.remove(q.items[0].id)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake')
   })
+
+  it('스코프 해제(언마운트) 시 모든 objectURL 을 해제한다', () => {
+    const api = { uploadPhoto: vi.fn(() => new Promise(() => {})), linkPhotoToTrip: vi.fn() }
+    const q = run(() => useUploadQueue(TRIP_ID, { api }))
+    q.addFiles([jpeg()])
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+
+    q.dispose() // effectScope.stop() → onScopeDispose 발화
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake')
+  })
 })
