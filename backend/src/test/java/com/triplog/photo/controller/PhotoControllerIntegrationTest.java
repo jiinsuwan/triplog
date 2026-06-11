@@ -131,7 +131,13 @@ class PhotoControllerIntegrationTest {
         mockMvc.perform(multipart("/photos")
                         .file(new MockMultipartFile("files", "jeju.jpg", MediaType.IMAGE_JPEG_VALUE, jpg))
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                // 응답(PhotoResponse)에 EXIF 상태가 노출된다(#54 업로드 화면용): 촬영시각 + GPS 유무.
+                .andExpect(jsonPath("$.data[0].takenAt").value("2026-06-04T12:17:56"))
+                .andExpect(jsonPath("$.data[0].hasGps").value(true))
+                // 좌표 실값(위경도)은 응답에 싣지 않는다 — 유무만 노출(데이터 최소화).
+                .andExpect(jsonPath("$.data[0].latitude").doesNotExist())
+                .andExpect(jsonPath("$.data[0].longitude").doesNotExist());
 
         Map<String, Object> row = jdbcTemplate.queryForMap(
                 "SELECT taken_at, latitude, longitude FROM photos WHERE user_id = ?", USER_ID);
@@ -148,7 +154,10 @@ class PhotoControllerIntegrationTest {
         mockMvc.perform(multipart("/photos")
                         .file(imageFile("blank.png", MediaType.IMAGE_PNG_VALUE, 2048))
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                // EXIF 없는 사진: 응답의 촬영시각은 null, GPS 유무는 false.
+                .andExpect(jsonPath("$.data[0].takenAt").value(nullValue()))
+                .andExpect(jsonPath("$.data[0].hasGps").value(false));
 
         Map<String, Object> row = jdbcTemplate.queryForMap(
                 "SELECT taken_at, latitude, longitude FROM photos WHERE user_id = ?", USER_ID);
