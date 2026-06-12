@@ -1,0 +1,179 @@
+name: PR Guardrail
+
+# decisions/0007 D3(= #59 채택) 구현 — PR 형식 · 공유 경로 · reviewer 지정을
+# 사람 기억이 아닌 CI가 보조한다 (#65 / S3-CORE-01).
+#
+# 핵심 제약(이슈 #65 사전 조사): 검사 job은 "모든 PR에서 항상 실행"한다.
+# feat·fix / docs·chore / Draft 분기는 job을 조건부 skip하지 않고 job 내부에서
+# pass / fail / 경고로 처리한다. (job 자체를 skip하면 required check가 미보고되어
+# 해당 PR 머지가 영구 차단됨.)
+#
+# - body-check : required 후보. feat·fix = 누락 시 fail / docs·chore = 경고만 / Draft = 스킵.
+# - advisory   : 비차단. 공유 경로 감지(track:core 라벨 + 코멘트) + reviewer 미지정 경고.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+jobs:
+  body-check:
+    name: PR Body Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required PR body sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            const type = (pr.head.ref || '').split('/')[0];        // 브랜치 네이밍 {type}/s{n}-... (conventions §4-2)
+            const lenient = (type === 'docs' || type === 'chore'); // 완화 대상 = 경고만
+
+            // Draft = 검사 스킵 (job 자체는 실행되어 required check가 보고됨)
+            if (pr.draft) {
+              core.info('Draft PR — 본문 검사 스킵 (ready_for_review 시 재검사)');
+              return;
+            }
+
+            // 필수 헤더 (conventions §6-2, 헤더 문구 고정). 접두 매칭으로 괄호 suffix 허용.
+            const required = [
+              '## Related Issue',
+              '## Summary',
+              '## Agent 작업',
+              '## 테스트 증거',
+              '## 공유 영역 영향',
+            ];
+            const problems = [];
+
+            for (const h of required) {
+              if (!body.includes(h)) problems.push(`필수 섹션 누락: \`${h}\``);
+            }
+
+            // Related Issue = 이슈 번호(#N) 명시 필요 (템플릿 기본값 "closes #"는 미작성으로 판정)
+            const rel = body.match(/## Related Issue[\s\S]*?(?=\n## |$)/);
+            if (rel && !/#\d+/.test(rel[0])) {
+              problems.push('Related Issue에 이슈 번호(#N)가 없습니다 (예: `closes #65`)');
+            }
+
+            // Summary 내용 비어있음 검사 (헤더 다음 본문이 빈 불릿 / 공백 / 주석뿐이면 미작성)
+            const sum = body.match(/## Summary[^\n]*\n([\s\S]*?)(?=\n## |$)/);
+            if (sum) {
+              const content = sum[1]
+                .replace(/<!--[\s\S]*?-->/g, '')
+                .split('\n')
+                .map(l => l.replace(/^[-*\s]+/, '').trim())
+                .filter(Boolean);
+              if (content.length === 0) problems.push('Summary 내용이 비어 있습니다');
+            }
+
+            if (problems.length === 0) {
+              core.info('PR 본문 검사 통과');
+              return;
+            }
+
+            const msg = '본문 검사 문제:\n- ' + problems.join('\n- ');
+            if (lenient) {
+              core.warning(`[경고 · docs/chore 완화] ${msg}`); // 경고만 → pass
+            } else {
+              core.setFailed(msg);                            // feat·fix = required fail
+            }
+
+  advisory:
+    name: PR Advisory
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Shared-path & reviewer advisory
+        uses: actions/github-script@v7
+        continue-on-error: true   # 안내성 job — 실패해도(예: 포크 PR 읽기전용 토큰) 머지 차단하지 않음
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const number = pr.number;
+
+            // --- §6-3 공유 경로 → 실제 경로 매핑 (접두 / 접미 / .sql 패턴) ---
+            const sharedPrefixes = [
+              '.github/',                                          // CI / 워크플로우
+              'backend/pom.xml',                                  // build
+              'backend/src/main/resources/application',           // env 구조 (application*.yml)
+              'backend/src/main/java/com/triplog/config/',        // SecurityConfig 등 공통 설정
+              'backend/src/main/java/com/triplog/auth/',          // 인증
+              'backend/src/main/java/com/triplog/common/',        // 공통 응답 / 예외
+              'backend/src/main/java/com/triplog/user/',          // user (인증 인접 — 포함)
+              'frontend/package.json',                            // build
+              'frontend/package-lock.json',                       // build
+              'frontend/vite.config.js',                          // build
+              'frontend/src/router/',                             // router 가드 / layout
+              'frontend/src/api/instance.js',                     // 공통 API 클라이언트
+              'frontend/src/api/config.js',                       // 공통 API 베이스 설정 (포함)
+              'frontend/src/components/common/',                  // 공통 UI
+              'frontend/src/stores/auth.js',                      // 인증 상태 (포함)
+              'frontend/src/App.vue',                             // layout 루트
+              'frontend/src/main.js',                             // 부트스트랩
+            ];
+            const isShared = (f) =>
+              sharedPrefixes.some(p => f.startsWith(p)) ||
+              f.endsWith('.env.example') ||                        // env 구조
+              (f.startsWith('backend/src/main/resources/') && f.endsWith('.sql')); // DB schema
+
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: number, per_page: 100 });
+            const touched = files.map(f => f.filename).filter(isShared);
+
+            // 마커로 코멘트 1개만 유지 (upsert / 해소 시 삭제)
+            async function findComment(marker) {
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: number, per_page: 100 });
+              return comments.find(c => c.body && c.body.includes(marker));
+            }
+            async function upsert(marker, content) {
+              const full = `${marker}\n${content}`;
+              const existing = await findComment(marker);
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: full });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: number, body: full });
+              }
+            }
+            async function removeIfExists(marker) {
+              const existing = await findComment(marker);
+              if (existing) await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+            }
+
+            // 1) 공유 경로 감지 → track:core 라벨 + 안내 코멘트 (fail 아님)
+            const SHARE_MARKER = '<!-- pr-guardrail:shared-path -->';
+            if (touched.length > 0) {
+              try {
+                await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: ['track:core'] });
+              } catch (e) { core.warning(`track:core 라벨 추가 실패: ${e.message}`); }
+              const list = touched.map(f => `- \`${f}\``).join('\n');
+              await upsert(SHARE_MARKER,
+                '**공유 영역(core) 변경 감지** — 아래 파일은 `conventions §6-3` 공유 경로입니다. ' +
+                '**상대 리뷰 필수**이며, PR 본문 "공유 영역 영향"에 변경 내용을 명시하세요.\n\n' + list);
+            } else {
+              await removeIfExists(SHARE_MARKER);
+            }
+
+            // 2) reviewer 미지정 경고 (fail 아님)
+            const REV_MARKER = '<!-- pr-guardrail:reviewer -->';
+            const requested = (pr.requested_reviewers || []).length + (pr.requested_teams || []).length;
+            let reviewInProgress = false;
+            if (requested === 0) {
+              const reviews = await github.paginate(github.rest.pulls.listReviews,
+                { owner, repo, pull_number: number, per_page: 100 });
+              reviewInProgress = reviews.some(r => r.user && r.user.login !== pr.user.login); // 작성자 외 리뷰 존재
+            }
+            if (requested === 0 && !reviewInProgress && !pr.draft) {
+              await upsert(REV_MARKER,
+                '**Reviewer 미지정** — 상호 리뷰(conventions §1-3)를 위해 상대를 reviewer로 지정하세요. ' +
+                '머지는 상대 Approve 후 가능합니다.');
+            } else {
+              await removeIfExists(REV_MARKER);
+            }
