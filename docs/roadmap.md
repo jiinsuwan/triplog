@@ -135,7 +135,7 @@ Sprint 4  ─ P1 추가 (소셜로그인·즐겨찾기·챗봇 / 사진 라이�
 - [ ] **[S3-CORE-01]** 사진/카드 서빙·권한 검증 보강 — **S2에서 인증 엔드포인트 서빙으로 선반영(#38), 잔여 범위 재검토 후 이슈화**
 - [ ] **[S3-CORE-02]** AI 호출 공통 인프라 (`LlmAdapter`, provider 1개=GMS 우선, AiCallLog) — **Sprint 2에서 이동**
 - [ ] **[S3-CORE-03]** IA 라우팅 + status 체계 — 계획/기록 2워크스페이스·상태 기반 진입([frontend-structure §3-0](frontend-structure.md)), status 허용값·검증, 목록 응답 size (**#17 잔여 흡수 → #17 닫기**) — S2 회고
-- [ ] **[S3-CORE-04]** PR guardrail — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + 템플릿 헤더 고정 (**#59 채택**) — S2 회고
+- [ ] **[S3-CORE-04]** PR guardrail — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + reviewer 미지정 경고 (**#59 채택** — required check 가능 여부 선행 확인) — S2 회고
 - [ ] **[S3-CORE-05]** 비밀번호 찾기 — 이메일 인프라 없는 방식 우선 확인, P0 지장 시 S4 이월 (S2 회고, 심사기준 갭)
 
 ### 종료 조건 (P0 완성)

@@ -31,7 +31,7 @@
 ### core (공통)
 - [ ] **[S3-CORE-02]** AI 호출 공통 인프라 — `LlmAdapter`, provider 1개 = GMS 우선, AiCallLog (S2에서 이동)
 - [ ] **[S3-CORE-03]** IA 라우팅 + status 체계 — 계획/기록 2워크스페이스·상태 기반 진입([frontend-structure §3-0](../frontend-structure.md)) + Trip `status` 허용값·검증 + 목록 응답 `size` — **#17 잔여 흡수, 리뷰 필수**
-- [ ] **[S3-CORE-04]** PR guardrail — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + 템플릿 헤더 고정 — **#59 채택 구현**
+- [ ] **[S3-CORE-04]** PR guardrail — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + **reviewer 미지정 경고 코멘트** — **#59 채택 구현**. 선행: required check 설정(ruleset) 가능 여부 확인 — 불가 시 "CI 표시 + 컨벤션"으로 운용 강도 하향. 공유 경로 목록 확정(`api/config.js`·`user/` 포함 여부)도 이 이슈에서
 - [ ] **[S3-CORE-05]** 비밀번호 찾기 — 이메일 인프라 없는 방식 우선 확인, **P0 지장 시 S4 이월** (심사기준 갭)
 - (재검토) S3-CORE-01 서빙 권한 보강 — S2에서 인증 엔드포인트 서빙(#38)으로 선반영. 잔여 범위 확인 후 이슈화 여부 결정
 

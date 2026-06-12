@@ -279,7 +279,7 @@ ai/
 
 ### 9-2. CI / 빌드
 
-- GitHub Actions: `frontend build` / `backend test` / `backend build` ([conventions §8-2](conventions.md#8-2-ci-최소-구성)).
+- GitHub Actions: `frontend build` / `backend test` / `backend build` ([conventions §8-3](conventions.md#8-3-ci-최소-구성)).
 - 현재 `.github/workflows/ci.yml`은 skeleton (`if: false`). Sprint 0에서 활성화. **CI는 MySQL service container**를 띄워 mapper 테스트 실행(`triplog_test` 스키마).
 - 빌드 시 `.env`는 Repository Secret으로 주입.
 

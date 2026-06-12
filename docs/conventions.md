@@ -56,7 +56,7 @@ Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Action
 
 ### 1-3. 상호 리뷰 (S2 회고: self-merge 게이트 폐지)
 
-모든 PR은 **상대를 reviewer로 지정**하고 **상대 리뷰(Approve) 후 머지**한다. 트랙 내부 변경도 예외가 아니다. (기존 self-merge 게이트는 S2 회고에서 폐지 — 운영 결과 reviewer 지정 0건·본문 형식 파편화·발행 단계 누락이 확인되어, 분기 없는 단일 규칙으로 교체. 근거 기록: [sprints/sprint-2.md](sprints/sprint-2.md) 회고.)
+모든 PR은 **상대를 reviewer로 지정**하고 **상대 리뷰(Approve) 후 머지**한다. 트랙 내부 변경도 예외가 아니다. (기존 self-merge 게이트는 S2 회고에서 폐지 — 운영 결과 reviewer 지정 0건·본문 형식 파편화·발행 단계 누락이 확인되어, 분기 없는 단일 규칙으로 교체. 결정 로그: [decisions/0007](decisions/0007-pr-process.md) · [sprints/sprint-2.md](sprints/sprint-2.md) 회고.)
 
 1. **발행** — 작업 완료(AC 충족 + 로컬 테스트 통과) 시 사람 확인을 받아 PR을 발행하고, 상대를 reviewer로 지정한다.
 2. **리뷰** — 상대는 리뷰 요청 알림을 받아 검토한다. 알림 수신·리뷰 준비 방식(메일/앱/로컬 자동화)은 각자 자율이다(§9-3).
@@ -253,7 +253,23 @@ priority:p2
 | 단순 Vue 화면 | 선택 |
 | CSS / 레이아웃 | 수동 확인 중심 |
 
-### 8-2. CI 최소 구성
+### 8-2. API 계약 테스트 기준표 (S2 회고, #59 채택)
+
+API를 새로 만들거나 수정하는 Issue/PR은 **Test Criteria 작성 시 아래 표에서 해당 항목을 골라 명시**한다. 전 항목 테스트 코드화 의무가 아니다 — 반복되는 항목은 공통 테스트 유틸/자동화로 승격한다. (응답 형식 자체의 정의 = requirements F00 · architecture 에러코드 카탈로그.)
+
+| API 유형 | 최소 확인 항목 |
+|---|---|
+| 모든 API | `ApiResponse { code, message, data }` 형식 |
+| 인증 필요 API | 토큰 없음/위조 토큰 → 401 |
+| 사용자 소유 리소스 API | 타인 리소스 접근 → 403 |
+| 단건 조회 API | 없는 id → 404 |
+| 생성/수정 API | 잘못된 body → 400 |
+| 목록 API | page/size/query/filter 동작 |
+| DB migration 포함 PR | 깨끗한 DB에서 Flyway migration 적용 |
+| 외부 API 연동 | timeout/retry/fallback 또는 실패 응답 처리 |
+| 파일 업로드/서빙 API | 용량/확장자/권한/cache 정책 |
+
+### 8-3. CI 최소 구성
 
 GitHub Actions에서 다음을 실행합니다.
 
