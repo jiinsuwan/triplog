@@ -137,6 +137,10 @@ function goList() {
   router.push({ name: 'trip-list' })
 }
 
+function goPlaceSearch() {
+  router.push({ name: 'trip-place-search', params: { tripId: tripId.value } })
+}
+
 function fillForm(sourceTrip) {
   Object.assign(form, createTripFormFromTrip(sourceTrip))
 }
@@ -216,32 +220,44 @@ function toDate(dateOnly) {
           {{ submitError }}
         </Message>
 
-        <div v-if="!isEditing" class="info-grid">
-          <dl>
-            <dt>여행 제목</dt>
-            <dd>{{ trip.title }}</dd>
-          </dl>
-          <dl>
-            <dt>기간</dt>
-            <dd>{{ formatTripDateRange(trip) }}</dd>
-          </dl>
-          <dl>
-            <dt>지역</dt>
-            <dd>{{ trip.region }}</dd>
-          </dl>
-          <dl>
-            <dt>테마</dt>
-            <dd>{{ trip.theme }}</dd>
-          </dl>
-          <dl>
-            <dt>상태</dt>
-            <dd>{{ statusMeta.label }}</dd>
-          </dl>
-          <dl>
-            <dt>생성일</dt>
-            <dd>{{ trip.createdAt?.replace('T', ' ') ?? '확인 불가' }}</dd>
-          </dl>
-        </div>
+        <template v-if="!isEditing">
+          <div class="info-grid">
+            <dl>
+              <dt>여행 제목</dt>
+              <dd>{{ trip.title }}</dd>
+            </dl>
+            <dl>
+              <dt>기간</dt>
+              <dd>{{ formatTripDateRange(trip) }}</dd>
+            </dl>
+            <dl>
+              <dt>지역</dt>
+              <dd>{{ trip.region }}</dd>
+            </dl>
+            <dl>
+              <dt>테마</dt>
+              <dd>{{ trip.theme }}</dd>
+            </dl>
+            <dl>
+              <dt>상태</dt>
+              <dd>{{ statusMeta.label }}</dd>
+            </dl>
+            <dl>
+              <dt>생성일</dt>
+              <dd>{{ trip.createdAt?.replace('T', ' ') ?? '확인 불가' }}</dd>
+            </dl>
+          </div>
+
+          <div class="detail-next-actions">
+            <Button
+              label="장소 담기 시작"
+              icon="pi pi-map-marker"
+              severity="success"
+              size="large"
+              @click="goPlaceSearch"
+            />
+          </div>
+        </template>
 
         <form v-else class="trip-form" @submit.prevent="save">
           <label class="field" for="title">
@@ -533,6 +549,13 @@ function toDate(dateOnly) {
   overflow-wrap: anywhere;
 }
 
+.detail-next-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
 .trip-form {
   display: grid;
   gap: 18px;
@@ -607,6 +630,14 @@ function toDate(dateOnly) {
   .form-actions,
   .summary-actions {
     flex-direction: column-reverse;
+  }
+
+  .detail-next-actions {
+    justify-content: stretch;
+  }
+
+  .detail-next-actions :deep(.p-button) {
+    width: 100%;
   }
 }
 </style>
