@@ -70,6 +70,33 @@ class PlaceControllerIntegrationTest {
     }
 
     @Test
+    void get_place_detail_returns_seeded_place() throws Exception {
+        Long placeId = jdbcTemplate.queryForObject("""
+                        SELECT id
+                        FROM places
+                        WHERE source = 'PUBLIC_TOURIST_STANDARD'
+                        ORDER BY id
+                        LIMIT 1
+                        """,
+                Long.class);
+
+        mockMvc.perform(get("/places/{id}", placeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.id").value(placeId))
+                .andExpect(jsonPath("$.data.source").value("PUBLIC_TOURIST_STANDARD"))
+                .andExpect(jsonPath("$.data.name").isNotEmpty())
+                .andExpect(jsonPath("$.data.description").isNotEmpty());
+    }
+
+    @Test
+    void get_place_detail_returns_not_found_for_unknown_id() throws Exception {
+        mockMvc.perform(get("/places/{id}", 999_999_999L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PLACE_001"));
+    }
+
+    @Test
     void public_place_paths_do_not_open_protected_trip_api() throws Exception {
         mockMvc.perform(get("/places")
                         .param("size", "1"))

@@ -38,6 +38,9 @@ public enum ErrorCode {
     TRIP_ACCESS_DENIED("TRIP_002", HttpStatus.FORBIDDEN, "Trip access denied."),
     TRIP_INVALID_INPUT("TRIP_003", HttpStatus.BAD_REQUEST, "Invalid trip input."),
 
+    // --- PLACE ---
+    PLACE_NOT_FOUND("PLACE_001", HttpStatus.NOT_FOUND, "Place not found."),
+
     // --- PHOTO ---
     PHOTO_NO_FILES("PHOTO_001", HttpStatus.BAD_REQUEST, "업로드할 사진이 없습니다."),
     PHOTO_UNSUPPORTED_TYPE("PHOTO_002", HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식입니다."),

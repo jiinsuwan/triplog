@@ -20,6 +20,8 @@ public interface PlaceMapper {
                @Param("category") String category,
                @Param("keyword") String keyword);
 
+    Place findById(@Param("id") Long id);
+
     List<PlaceRegion> findRegions();
 
     List<String> findCategories();

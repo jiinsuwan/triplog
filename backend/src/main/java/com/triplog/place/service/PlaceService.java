@@ -1,5 +1,8 @@
 package com.triplog.place.service;
 
+import com.triplog.common.BusinessException;
+import com.triplog.common.ErrorCode;
+import com.triplog.place.dto.PlaceDetailResponse;
 import com.triplog.place.dto.PlaceListResponse;
 import com.triplog.place.dto.PlaceRegionResponse;
 import com.triplog.place.dto.PlaceResponse;
@@ -52,6 +55,18 @@ public class PlaceService {
     @Transactional(readOnly = true)
     public List<String> categories() {
         return placeMapper.findCategories();
+    }
+
+    @Transactional(readOnly = true)
+    public PlaceDetailResponse get(Long id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCode.PLACE_NOT_FOUND);
+        }
+        var place = placeMapper.findById(id);
+        if (place == null) {
+            throw new BusinessException(ErrorCode.PLACE_NOT_FOUND);
+        }
+        return PlaceDetailResponse.from(place);
     }
 
     private String normalizeText(String value) {

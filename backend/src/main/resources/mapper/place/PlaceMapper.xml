@@ -78,6 +78,12 @@
         <include refid="PlaceWhere"/>
     </select>
 
+    <select id="findById" resultMap="PlaceResultMap">
+        SELECT <include refid="PlaceColumns"/>
+        FROM places
+        WHERE id = #{id}
+    </select>
+
     <select id="findRegions" resultMap="PlaceRegionResultMap">
         SELECT region1, region2, COUNT(*) AS count
         FROM places

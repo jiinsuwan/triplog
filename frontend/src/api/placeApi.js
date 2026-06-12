@@ -14,6 +14,11 @@ export async function fetchPlaces(params = {}) {
   return data.data
 }
 
+export async function fetchPlaceDetail(placeId) {
+  const { data } = await instance.get(`/places/${placeId}`)
+  return data.data
+}
+
 export async function fetchPlaceRegions() {
   const { data } = await instance.get('/places/regions')
   return data.data
