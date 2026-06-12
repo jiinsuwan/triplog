@@ -63,7 +63,7 @@ export function normalizeDbPlace(place) {
     name: place.name,
     category: place.category || '관광지',
     categoryGroup: '관광지',
-    markerLabel: '관광지',
+    markerLabel: place.name || '관광지',
     region1: place.region1 || '',
     region2: place.region2 || '',
     address: place.roadAddress || place.address || '',

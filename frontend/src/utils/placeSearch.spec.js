@@ -26,7 +26,7 @@ describe('placeSearch utils', () => {
       uid: 'db-7',
       origin: 'db',
       name: '경기전 돌담길',
-      markerLabel: '관광지',
+      markerLabel: '경기전 돌담길',
       latitude: 35.814,
       longitude: 127.153,
       sourceLabel: 'DB 관광지',

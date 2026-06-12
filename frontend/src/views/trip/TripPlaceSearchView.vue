@@ -1190,7 +1190,6 @@ function markerIconClass(place) {
 }
 
 function mapMarkerLabel(place) {
-  if (place.origin === 'db') return place.markerLabel
   return truncateMarkerName(place.name)
 }
 
