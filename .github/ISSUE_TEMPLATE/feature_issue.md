@@ -26,6 +26,7 @@ assignees: []
 ## Test Criteria
 
 - [ ] 테스트 코드 추가 또는 기존 테스트 통과
+- [ ] (API 신규/수정 시) docs/conventions.md §8-2 API 계약 기준표에서 해당 항목을 골라 명시
 - [ ] 예외 케이스 확인
 - [ ] GitHub Actions 통과
 
@@ -38,7 +39,7 @@ assignees: []
 ## Definition of Done
 
 - [ ] AC / Test 충족 + CI green
-- [ ] (공유 영역이면) 상대 트랙 리뷰 승인
+- [ ] 상대 리뷰(Approve) 후 머지 — 모든 PR 공통 (docs/conventions.md §1-3 상호 리뷰)
 - [ ] (API면) Swagger 노출
 
 ## Notes

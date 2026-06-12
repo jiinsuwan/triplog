@@ -205,7 +205,7 @@ Issue 제목과 동일하게.
 - Spring Security / 인증
 - 공통 API 응답 형식
 - 공통 UI 컴포넌트
-- router **가드 로직 · layout 구조** (자기 트랙 *라우트 추가*는 self-merge 가능 — 아래 라우트 보호 컨벤션 준수)
+- router **가드 로직 · layout 구조** (자기 트랙 *라우트 추가*는 이 특별 주의 목록에 해당하지 않음 — §6-4 라우트 보호 컨벤션 준수 전제. 머지 자체는 어느 경우든 상호 리뷰 §1-3)
 - build 설정
 - GitHub Actions
 - 환경변수 구조
