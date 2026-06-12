@@ -12,6 +12,7 @@ import {
   linkPhotoToTrip,
   unlinkPhotoFromTrip,
   fetchTripPhotos,
+  fetchPhotoContent,
 } from '@/api/photoApi'
 
 // 공통 ApiResponse<T> 래퍼 형태의 성공 응답.
@@ -65,5 +66,20 @@ describe('photoApi', () => {
 
     expect(result).toEqual([{ id: 1 }])
     expect(instance.get).toHaveBeenCalledWith('/photos', { params: { tripId: 7 } })
+  })
+
+  it('fetchPhotoContent: responseType blob 으로 GET 하고 응답 바디(Blob)를 그대로 반환한다', async () => {
+    const blob = new Blob(['binary'], { type: 'image/jpeg' })
+    // content 는 ApiResponse 래퍼가 아니라 raw 바이너리 → response.data 가 곧 Blob.
+    instance.get.mockResolvedValue({ data: blob })
+    const controller = new AbortController()
+
+    const result = await fetchPhotoContent(3, { signal: controller.signal })
+
+    expect(result).toBe(blob) // data.data 언랩 없이 그대로
+    const [url, config] = instance.get.mock.calls[0]
+    expect(url).toBe('/photos/3/content')
+    expect(config.responseType).toBe('blob')
+    expect(config.signal).toBe(controller.signal)
   })
 })
