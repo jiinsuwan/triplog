@@ -17,7 +17,7 @@ describe('trip form 유틸', () => {
       endDate: '2026-06-10',
       region: '전주',
       theme: '미식',
-      status: 'PLANNING',
+      status: 'planning',
     })
   })
 
@@ -38,6 +38,19 @@ describe('trip form 유틸', () => {
     expect(errors.status).toBe('상태를 선택해주세요.')
   })
 
+  it('지원하지 않는 status 값은 폼에서 막는다', () => {
+    const errors = validateTripForm({
+      title: '전주 여행',
+      startDate: '2026-06-10',
+      endDate: '2026-06-12',
+      region: '전주',
+      theme: '미식',
+      status: 'PLANNING',
+    })
+
+    expect(errors.status).toBe('상태를 다시 선택해주세요.')
+  })
+
   it('Trip 상세 응답을 수정 폼 초기값으로 변환한다', () => {
     const form = createTripFormFromTrip({
       title: '제주 바다 산책',
@@ -45,7 +58,7 @@ describe('trip form 유틸', () => {
       endDate: '2026-07-03',
       region: '제주',
       theme: '바다',
-      status: 'DONE',
+      status: 'past',
     })
 
     expect(form).toEqual({
@@ -54,7 +67,7 @@ describe('trip form 유틸', () => {
       endDate: '2026-07-03',
       region: '제주',
       theme: '바다',
-      status: 'DONE',
+      status: 'past',
     })
   })
 
@@ -65,7 +78,7 @@ describe('trip form 유틸', () => {
       endDate: '2026-07-03',
       region: '제주',
       theme: '바다',
-      status: 'PLANNING',
+      status: 'planning',
     })
 
     expect(payload).toEqual({
@@ -74,7 +87,7 @@ describe('trip form 유틸', () => {
       endDate: '2026-07-03',
       region: '제주',
       theme: '바다',
-      status: 'PLANNING',
+      status: 'planning',
     })
   })
 

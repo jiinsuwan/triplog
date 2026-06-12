@@ -3,10 +3,11 @@ import { setActivePinia, createPinia } from 'pinia'
 
 import router, { authGuard } from '@/router'
 import { useAuthStore } from '@/stores/auth'
+import { useTripStore } from '@/stores/trip'
 
 // to 객체 최소 형태(가드는 path·fullPath·meta 만 본다).
-function route(path, meta = {}) {
-  return { path, fullPath: path, meta }
+function route(path, meta = {}, params = {}) {
+  return { path, fullPath: path, meta, params }
 }
 
 describe('router authGuard — 보호 라우트 가드', () => {
@@ -50,7 +51,55 @@ describe('router authGuard — 보호 라우트 가드', () => {
     const placeRoute = router.getRoutes().find((item) => item.name === 'trip-place-search')
 
     expect(placeRoute?.path).toBe('/trips/:tripId/places')
-    expect(placeRoute?.meta.requiresAuth).toBe(true)
+    expect(placeRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'planning' })
+  })
+
+  it('계획/기록 워크스페이스 엔트리는 보호 라우트로 등록한다', () => {
+    const planRoute = router.getRoutes().find((item) => item.name === 'trip-plan-workspace')
+    const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record-workspace')
+
+    expect(planRoute?.path).toBe('/trips/:tripId/plan')
+    expect(planRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'planning' })
+    expect(recordRoute?.path).toBe('/trips/:tripId/log')
+    expect(recordRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'record' })
+  })
+
+  it('trip photos route belongs to record workspace', () => {
+    const photoRoute = router.getRoutes().find((item) => item.name === 'trip-photos')
+
+    expect(photoRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'record' })
+  })
+
+  it('planning trip cannot enter record workspace directly', () => {
+    useAuthStore().setTokens('a1', 'r1')
+    const tripStore = useTripStore()
+    tripStore.trips = [{ id: 10, status: 'planning' }]
+
+    expect(
+      authGuard(
+        route('/trips/10/log', { requiresAuth: true, workspace: 'record' }, { tripId: '10' }),
+      ),
+    ).toEqual({
+      name: 'trip-plan-workspace',
+      params: { tripId: '10' },
+      replace: true,
+    })
+  })
+
+  it('past trip cannot enter planning workspace directly', () => {
+    useAuthStore().setTokens('a1', 'r1')
+    const tripStore = useTripStore()
+    tripStore.trips = [{ id: 11, status: 'past' }]
+
+    expect(
+      authGuard(
+        route('/trips/11/places', { requiresAuth: true, workspace: 'planning' }, { tripId: '11' }),
+      ),
+    ).toEqual({
+      name: 'trip-record-workspace',
+      params: { tripId: '11' },
+      replace: true,
+    })
   })
 })
 

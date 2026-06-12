@@ -21,6 +21,7 @@ import {
   tripDurationDays,
   validateTripForm,
 } from '@/utils/tripForm'
+import { isPastTripStatus, tripStatusLabel, tripStatusSeverity } from '@/utils/tripStatus'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,9 +37,26 @@ const form = reactive(createTripFormFromTrip())
 const trip = computed(() => tripStore.selectedTrip)
 const statusMeta = computed(() => {
   const status = trip.value?.status ?? form.status
-  return normalizeStatus(status) === 'DONE'
-    ? { label: '다녀옴', severity: 'success' }
-    : { label: '계획 중', severity: 'info' }
+  return {
+    label: tripStatusLabel(status),
+    severity: tripStatusSeverity(status),
+  }
+})
+const workspaceAction = computed(() => {
+  const status = trip.value?.status ?? form.status
+  return isPastTripStatus(status)
+    ? {
+        label: '여행 기록 보기',
+        icon: 'pi pi-images',
+        routeName: 'trip-record-workspace',
+        severity: 'info',
+      }
+    : {
+        label: '일정 이어서 만들기',
+        icon: 'pi pi-map-marker',
+        routeName: 'trip-plan-workspace',
+        severity: 'success',
+      }
 })
 
 const startDateModel = computed({
@@ -137,18 +155,12 @@ function goList() {
   router.push({ name: 'trip-list' })
 }
 
-function goPlaceSearch() {
-  router.push({ name: 'trip-place-search', params: { tripId: tripId.value } })
+function goWorkspace() {
+  router.push({ name: workspaceAction.value.routeName, params: { tripId: tripId.value } })
 }
 
 function fillForm(sourceTrip) {
   Object.assign(form, createTripFormFromTrip(sourceTrip))
-}
-
-function normalizeStatus(status = '') {
-  const upper = status.toUpperCase()
-  if (['DONE', 'PAST', 'COMPLETED'].includes(upper)) return 'DONE'
-  return 'PLANNING'
 }
 
 function toDate(dateOnly) {
@@ -250,11 +262,11 @@ function toDate(dateOnly) {
 
           <div class="detail-next-actions">
             <Button
-              label="장소 담기 시작"
-              icon="pi pi-map-marker"
-              severity="success"
+              :label="workspaceAction.label"
+              :icon="workspaceAction.icon"
+              :severity="workspaceAction.severity"
               size="large"
-              @click="goPlaceSearch"
+              @click="goWorkspace"
             />
           </div>
         </template>

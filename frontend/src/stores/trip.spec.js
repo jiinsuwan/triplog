@@ -20,7 +20,7 @@ const sampleTrips = [
     endDate: '2026-06-22',
     region: '전주',
     theme: '미식',
-    status: 'PLANNING',
+    status: 'planning',
   },
 ]
 
@@ -34,6 +34,7 @@ describe('trip 스토어', () => {
     tripApi.fetchTrips.mockResolvedValue({
       items: sampleTrips,
       page: 0,
+      size: 20,
       total: 1,
     })
     const store = useTripStore()
@@ -43,6 +44,7 @@ describe('trip 스토어', () => {
     expect(result.items).toEqual(sampleTrips)
     expect(store.trips).toEqual(sampleTrips)
     expect(store.page).toBe(0)
+    expect(store.size).toBe(20)
     expect(store.total).toBe(1)
     expect(store.hasTrips).toBe(true)
     expect(store.loading).toBe(false)
@@ -74,7 +76,7 @@ describe('trip 스토어', () => {
       endDate: '2026-07-03',
       region: '제주',
       theme: '바다',
-      status: 'PLANNING',
+      status: 'planning',
     }
     tripApi.createTrip.mockResolvedValue(created)
     const store = useTripStore()
@@ -86,7 +88,7 @@ describe('trip 스토어', () => {
       endDate: '2026-07-03',
       region: '제주',
       theme: '바다',
-      status: 'PLANNING',
+      status: 'planning',
     })
 
     expect(result).toEqual(created)
@@ -109,7 +111,7 @@ describe('trip 스토어', () => {
         endDate: '2026-07-03',
         region: '전주',
         theme: '미식',
-        status: 'PLANNING',
+        status: 'planning',
       }),
     ).rejects.toBeTruthy()
 
@@ -150,7 +152,7 @@ describe('trip 스토어', () => {
       endDate: '2026-06-22',
       region: '전주',
       theme: '골목',
-      status: 'PLANNING',
+      status: 'planning',
     })
 
     expect(result).toEqual(updated)
@@ -205,7 +207,7 @@ describe('trip 스토어', () => {
         endDate: '2026-06-22',
         region: '전주',
         theme: '미식',
-        status: 'PLANNING',
+        status: 'planning',
       }),
     ).rejects.toBeTruthy()
 
