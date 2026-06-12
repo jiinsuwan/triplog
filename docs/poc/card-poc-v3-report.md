@@ -4,8 +4,8 @@
 
 - **레퍼런스(고정)**: 원본 사진을 풀블리드로 깔고, 그 위에 **얇은 흰 손글씨 객체 주석 6~10개 + 작은 곡선 점선 화살표 + 얇은 흰 스케치 외곽선(접시) + 작은 흰 장식 + 하단 가벼운 마무리 한 줄**. 갈색 배경/큰 제목/해시태그 패널은 **없다**.
 - **포맷**: 세로 **1080×1920** (requirements F07 P0 스펙), 사진 cover-fit 풀블리드.
-- **코드**: `render-overlay.mjs`(렌더) · `overlay-place.mjs`(배치) · `overlay-prep.mjs`(사진→1080×1920 좌표) · `freespace.mjs`(점유맵/밝기) · `overlay-data.mjs`(객체·문구) · `overlay-exp.mjs`(양산) · **`editor-overlay.html`**(드래그 편집기).
-- **재현**: `cd poc/card && node overlay-exp.mjs` → 시안 + 레퍼런스 비교. 편집기는 `python3 -m http.server 8000` 후 `editor-overlay.html`.
+- **코드**: `render-overlay.mjs`(렌더) · `overlay-place.mjs`(배치) · `overlay-prep.mjs`(사진→1080×1920 좌표) · `freespace.mjs`(점유맵/밝기) · `overlay-data.mjs`(객체·문구) · `overlay-exp.mjs`(양산) · **`editor-overlay.html`**(드래그 편집기). **현 위치 = `poc/card/legacy-v3/`** (PR #61 정리 — 외곽선 PoC 현행 정본은 [card-poc-v12-report](card-poc-v12-report.md)).
+- **재현**: `cd poc/card/legacy-v3 && node overlay-exp.mjs` → 시안 + 레퍼런스 비교. 편집기는 같은 위치에서 `python3 -m http.server 8000` 후 `editor-overlay.html`.
 - 이미지 경로는 이 문서 기준 상대(`../../poc/card/out/v3/...`).
 
 ---

@@ -8,17 +8,16 @@
 
 ---
 
-## 🟢 Project Status — Sprint 2 진행 중
+## 🟢 Project Status — Sprint 3 진행 중
 
-> 2026-06-10 기준. 스프린트 상세: [docs/sprints/sprint-2.md](docs/sprints/sprint-2.md) · 전체 계획: [docs/roadmap.md](docs/roadmap.md)
+> 2026-06-12 기준. 스프린트 상세: [docs/sprints/sprint-3.md](docs/sprints/sprint-3.md) · 전체 계획: [docs/roadmap.md](docs/roadmap.md)
 
 | 상태 | 내용 |
 |---|---|
-| ✅ 완료 | JWT 인증(Access/Refresh rotation) · 로그인/회원가입/프로필 화면 · 라우트 보호 |
-| ✅ 완료 | 여행 CRUD API + 목록/생성/상세 화면 |
-| ✅ 완료 | AI 카드 생성 PoC ([decisions/0004](docs/decisions/0004-card-poc-result.md)) · 사진 다중 업로드 API |
-| 🔨 진행 중 | 외부 API 공통 인프라 (#39) · 카카오맵 장소·지도 탐색 화면 (#28) |
-| ⏭ 예정 | 관광지 데이터 적재 (#33) · 관광지 상세 화면 (#34) · EXIF 추출 (#36) · 사진-여행 연결 (#37) · 사진 정적 서빙 (#38) · Trip 하드닝 (#17) |
+| ✅ 완료 (S0~S1) | JWT 인증(Access/Refresh) · 로그인/회원가입/프로필 · 여행 CRUD + 화면 · AI 카드 PoC ([decisions/0004](docs/decisions/0004-card-poc-result.md)) |
+| ✅ 완료 (S2) | 관광지 데이터 적재·카카오맵 탐색·상세 화면 · 사진 업로드 → EXIF → 여행 연결 → 인증 서빙 + 업로드 화면 · 외부 API 공통 인프라 · requiresAuth 자동 테스트 |
+| 🔨 진행 (S3) | 일정 에디터(stop·이동수단·소요시간) · AI 카드 생성(외곽선 사이드카, [decisions/0006](docs/decisions/0006-card-outline-module.md)) → **P0 완성** |
+| 📋 프로세스 | S2 회고: 상호 리뷰 단일화 + PR guardrail 채택 ([decisions/0007](docs/decisions/0007-pr-process.md)) |
 
 ---
 
@@ -78,7 +77,7 @@ cd frontend && npm install && npm run dev
 - **Codex 사용자**: `AGENTS.md`를 자동으로 읽으므로 추가 설정 없음.
 - **Claude 사용자**: 루트에 `CLAUDE.md`(git 미추적)를 만들고 `@AGENTS.md` 한 줄을 넣으면 `AGENTS.md`를 자동 로드한다.
 
-**최초 로컬 셋업(클론 직후 1회)**: `bash scripts/install-hooks.sh`로 git hook을 설치한다 — `main` 직접 push를 차단한다(plan 제약으로 branch protection을 못 쓰는 대체 수단). 이어서 `bash scripts/preflight.sh`로 Node/Java/.env/MySQL을 점검한다.
+**최초 로컬 셋업(클론 직후 1회)**: `bash scripts/install-hooks.sh`로 git hook을 설치한다 — `main` 직접 push를 차단한다(현재 main은 리뷰 필수 보호가 활성 — hook은 로컬 보조 수단). 이어서 `bash scripts/preflight.sh`로 Node/Java/.env/MySQL을 점검한다.
 
 ---
 

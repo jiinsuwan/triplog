@@ -230,6 +230,8 @@ ai/
 상세 가이드 / 모델 선정 근거: [poc/card-poc.md](poc/card-poc.md), 결정 로그 [decisions/0004](decisions/0004-card-poc-result.md).
 
 > **PoC 반영 (2026-06-05, decisions/0004)**: 카드 = "사진 위 overlay(canvas 합성·편집 가능)" 구조. **텍스트 LLM = 짧은 문구만**(전체 카드 JSON 생성 폐기) → provider 1순위 = GMS 텍스트 어댑터. **Vision = per-card API 미사용** — 객체 외곽/위치는 업로드 시 1회 SAM2 세그멘테이션 + 경량 CV로 처리하므로 `VisionAdapter`는 "로컬 세그 어댑터"로 충족 가능. 렌더는 Canvas2D 공용 코어(**Konva 미채택**).
+>
+> **외곽선 모듈 확정 (2026-06-12, [decisions/0006](decisions/0006-card-outline-module.md))**: 세그 전처리 = **Python 사이드카**(로컬 보조 프로세스 — Java 직접 실행 X, MSA 아님, 0004 D2 구체화). 모듈 계약 = `poc/card/OUTLINE_API.md`.
 
 ---
 
@@ -277,8 +279,8 @@ ai/
 
 ### 9-2. CI / 빌드
 
-- GitHub Actions: `frontend build` / `backend test` / `backend build` ([conventions §8-2](conventions.md#8-2-ci-최소-구성)).
-- 현재 `.github/workflows/ci.yml`은 skeleton (`if: false`). Sprint 0에서 활성화. **CI는 MySQL service container**를 띄워 mapper 테스트 실행(`triplog_test` 스키마).
+- GitHub Actions: `frontend build` / `backend test` / `backend build` ([conventions §8-3](conventions.md#8-3-ci-최소-구성)).
+- `.github/workflows/ci.yml`은 **Sprint 0에서 활성화 완료** (frontend build · backend test/build). **CI는 MySQL service container**를 띄워 mapper 테스트 실행(`triplog_test` 스키마).
 - 빌드 시 `.env`는 Repository Secret으로 주입.
 
 ---
@@ -306,3 +308,4 @@ ai/
 | v1.1 | 2026-05-29 | 에이전틱 렌즈 재점검 보완: 테스트 전략 신설(가치 기준·JUnit5/Mockito/MockMvc/Vitest, mapper는 로컬 MySQL `triplog_test` 스키마·@Transactional 롤백·H2/Testcontainers 미사용) / 에러코드 카탈로그 틀(형식·prefix·단일 카탈로그) / N3=SpringDoc 도입(어노테이션 agent 생성) / 트랙 경계 API=공유 영역 취급 |
 | v1.2 | 2026-05-29 | F-3 데이터·저장소 확정: Q3 관광지=표준데이터 JSON(DB 적재)+식당은 카카오맵 / Q5 사진=로컬 디스크 저장(S3·추상화 미사용) / DB 테스트 Testcontainers→로컬 MySQL 테스트 스키마로 완화 |
 | v1.3 | 2026-05-29 | Sprint 0 결과 반영: §3-1 컴포넌트 라이브러리 **PrimeVue(Aura) 확정** / §6-1 AI 기반 라이브러리 **Spring AI(BOM 1.0.0) 확정** — Sprint 0은 BOM만, provider는 Sprint 2~3 |
+| v1.4 | 2026-06-12 | **Sprint 2 회고 반영**: §6에 외곽선 모듈 = Python 사이드카 확정 주석 추가 ([decisions/0006](decisions/0006-card-outline-module.md)) |

@@ -13,9 +13,9 @@ TripLog는 "AI 기능이 있는 여행 서비스"가 아니라, **AI agent를 �
 
 ---
 
-> 🟢 **현재 단계 (2026-06-09)**: **Sprint 2 진행 중** — [`docs/sprints/sprint-2.md`](docs/sprints/sprint-2.md). 관광지 탐색 & 사진 업로드(데이터·API 중심). Sprint 1 완료(회고 = [sprint-1.md](docs/sprints/sprint-1.md), 협업 결정 = [decisions/0005](docs/decisions/0005-collab-flow-and-carryover.md)).
+> 🟢 **현재 단계 (2026-06-12)**: **Sprint 3 시작** — [`docs/sprints/sprint-3.md`](docs/sprints/sprint-3.md). 일정 & 카드 생성 → **P0 완성**. Sprint 2 완료(회고 = [sprint-2.md](docs/sprints/sprint-2.md)).
 >
-> **다음 할 일**: Sprint 2 이슈(#33~#40 · #28 · #17) 중 **자기 트랙**을 골라 진행 ([conventions §1-2](docs/conventions.md), self-merge 게이트 §1-3). **프론트 정본 = [frontend-structure.md](docs/frontend-structure.md) + [목업](docs/design/trip-planner-flow.html)** — FE는 PrimeVue Aura 매핑(§7) 기준으로 구현. (log 사진 화면 FE는 S2 백엔드 이후.)
+> **다음 할 일**: sprint-3.md 기준 **Issue 발행**(분담: log 담당자 = core+log / trip 담당자 = trip — 발행자가 본문 작성) 후 자기 트랙 진행 ([conventions §1-2](docs/conventions.md)). **프로세스 변경(S2 회고): self-merge 폐지 → 상호 리뷰(§1-3), PR 발행 = 사람 확인 후 + reviewer 지정 필수.** 프론트 정본 = [frontend-structure.md](docs/frontend-structure.md)(**와이어프레임 v3 채택**) + [목업](docs/design/trip-planner-flow.html).
 
 ### 🚦 세션 진입 절차 — 이 순서로 시작한다 (맥락 없이 문서만으로 따라갈 수 있어야 함)
 
@@ -78,6 +78,7 @@ AI가 만든 코드는 **육안 검토만으로 통제하지 않습니다**. 가
 ## 5. 절대 하지 말 것
 
 - ❌ Issue 없이 main에 직접 push
+- ❌ **작업 완료 후 PR 발행 단계 생략** — 코멘트·요약 보고로 갈음 금지. 사람 확인을 받아 PR을 발행하고 상대를 reviewer로 지정한다 ([conventions §1-2](docs/conventions.md))
 - ❌ 공유 영역(`core`) 변경을 단독 결정으로 진행
 - ❌ `docs/conventions.md`에 정의되지 않은 새로운 워크플로우 도입 (무거운 spec/handoff 구조 등)
 - ❌ AI 자동 일정 생성을 P0로 끌어올리기 (블루프린트 §6, decisions/0002)

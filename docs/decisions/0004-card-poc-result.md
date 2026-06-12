@@ -6,6 +6,8 @@
 - **관련 문서**: [requirements Q6](../requirements.md), [architecture §6](../architecture.md), [card-poc.md](../poc/card-poc.md), [sprint-1](../sprints/sprint-1.md) — 이슈 #8 / #9
 - **해소**: **Q6**(텍스트/Vision LLM 모델) — requirements의 마지막 미결 항목.
 
+> **경로 주석 (2026-06-12, PR #61 정리 반영)**: 본문이 참조하는 v3 시점 경로는 다음으로 이동/대체되었다 — `segment_all.py` → **v12 모듈 `poc/card/outline_module.py`** (실행 형태 = Python 사이드카, [decisions/0006](0006-card-outline-module.md)) / `freespace.mjs`·`render-overlay.mjs` 등 v3 렌더·에디터 코어 → **`poc/card/legacy-v3/`**. 외곽선 PoC의 현행 정본 = [card-poc-v12-report](../poc/card-poc-v12-report.md). 결정 내용 자체는 유효하다.
+
 ---
 
 ## 배경
