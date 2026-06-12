@@ -7,7 +7,7 @@ vi.mock('./instance', () => ({
 }))
 
 import instance from './instance'
-import { fetchPlaceCategories, fetchPlaceRegions, fetchPlaces } from './placeApi'
+import { fetchPlaceRegions, fetchPlaces } from './placeApi'
 
 describe('placeApi', () => {
   beforeEach(() => {
@@ -37,12 +37,9 @@ describe('placeApi', () => {
     })
   })
 
-  it('regions/categories 응답 data 를 반환한다', async () => {
-    instance.get
-      .mockResolvedValueOnce({ data: { data: [{ region1: '서울특별시', count: 2 }] } })
-      .mockResolvedValueOnce({ data: { data: ['명소'] } })
+  it('regions 응답 data 를 반환한다', async () => {
+    instance.get.mockResolvedValueOnce({ data: { data: [{ region1: '서울특별시', count: 2 }] } })
 
     await expect(fetchPlaceRegions()).resolves.toEqual([{ region1: '서울특별시', count: 2 }])
-    await expect(fetchPlaceCategories()).resolves.toEqual(['명소'])
   })
 })

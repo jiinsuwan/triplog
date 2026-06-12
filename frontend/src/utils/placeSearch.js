@@ -190,7 +190,7 @@ function findDynamicRegionConfig(value = '', regions = [], fallbackRegion = '') 
   const preferred =
     fallback?.region1 &&
     candidates.find((candidate) => candidate.region.region1 === fallback.region1)
-  const selected = preferred || (candidates.length === 1 ? candidates[0] : candidates[0])
+  const selected = preferred || candidates[0]
 
   return dynamicRegionConfig(selected.region, selected.aliases)
 }

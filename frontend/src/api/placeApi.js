@@ -19,11 +19,6 @@ export async function fetchPlaceRegions() {
   return data.data
 }
 
-export async function fetchPlaceCategories() {
-  const { data } = await instance.get('/places/categories')
-  return data.data
-}
-
 function compactParams(params) {
   return Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''),
