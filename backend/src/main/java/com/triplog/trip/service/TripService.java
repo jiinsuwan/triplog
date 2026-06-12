@@ -4,6 +4,7 @@ import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import com.triplog.photo.service.PhotoTripCleanup;
 import com.triplog.trip.domain.Trip;
+import com.triplog.trip.domain.TripStatus;
 import com.triplog.trip.dto.CreateTripRequest;
 import com.triplog.trip.dto.TripListResponse;
 import com.triplog.trip.dto.TripResponse;
@@ -54,7 +55,7 @@ public class TripService {
                 .map(TripResponse::from)
                 .toList();
         long total = tripMapper.countByUserId(userId);
-        return new TripListResponse(items, normalizedPage, total);
+        return new TripListResponse(items, normalizedPage, normalizedSize, total);
     }
 
     @Transactional(readOnly = true)
@@ -104,7 +105,7 @@ public class TripService {
         trip.setEndDate(endDate);
         trip.setRegion(region.trim());
         trip.setTheme(theme.trim());
-        trip.setStatus(status.trim());
+        trip.setStatus(canonicalStatus(status));
     }
 
     private void validateTripFields(String title, LocalDate startDate, LocalDate endDate,
@@ -115,9 +116,16 @@ public class TripService {
                 || !StringUtils.hasText(region)
                 || !StringUtils.hasText(theme)
                 || !StringUtils.hasText(status)
+                || !TripStatus.isSupported(status)
                 || endDate.isBefore(startDate)) {
             throw new BusinessException(ErrorCode.TRIP_INVALID_INPUT);
         }
+    }
+
+    private String canonicalStatus(String status) {
+        return TripStatus.from(status)
+                .map(TripStatus::value)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_INVALID_INPUT));
     }
 
     private void validateUserId(Long userId) {

@@ -115,7 +115,7 @@ class PhotoTripCleanupIntegrationTest {
     private long insertTrip() {
         jdbcTemplate.update("""
                         INSERT INTO trips (user_id, title, start_date, end_date, region, theme, status)
-                        VALUES (?, '제주 여행', '2026-06-01', '2026-06-03', '제주', '힐링', 'PLANNED')
+                        VALUES (?, '제주 여행', '2026-06-01', '2026-06-03', '제주', '힐링', 'planning')
                         """,
                 USER_ID);
         return jdbcTemplate.queryForObject(

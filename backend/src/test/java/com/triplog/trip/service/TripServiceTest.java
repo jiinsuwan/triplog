@@ -5,6 +5,7 @@ import com.triplog.common.ErrorCode;
 import com.triplog.photo.service.PhotoTripCleanup;
 import com.triplog.trip.domain.Trip;
 import com.triplog.trip.dto.CreateTripRequest;
+import com.triplog.trip.dto.UpdateTripRequest;
 import com.triplog.trip.mapper.TripMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,7 @@ class TripServiceTest {
     void create_rejects_blank_required_fields() {
         CreateTripRequest request = new CreateTripRequest(
                 " ", LocalDate.of(2026, 6, 10), LocalDate.of(2026, 6, 12),
-                "Seoul", "food", "PLANNED");
+                "Seoul", "food", "planning");
 
         assertThatThrownBy(() -> tripService.create(1L, request))
                 .isInstanceOfSatisfying(BusinessException.class, e ->
@@ -53,6 +54,19 @@ class TripServiceTest {
     void create_rejects_end_date_before_start_date() {
         CreateTripRequest request = new CreateTripRequest(
                 "Seoul trip", LocalDate.of(2026, 6, 12), LocalDate.of(2026, 6, 10),
+                "Seoul", "food", "planning");
+
+        assertThatThrownBy(() -> tripService.create(1L, request))
+                .isInstanceOfSatisfying(BusinessException.class, e ->
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TRIP_INVALID_INPUT));
+
+        verify(tripMapper, never()).insert(any());
+    }
+
+    @Test
+    void create_rejects_unsupported_status() {
+        CreateTripRequest request = new CreateTripRequest(
+                "Seoul trip", LocalDate.of(2026, 6, 10), LocalDate.of(2026, 6, 12),
                 "Seoul", "food", "PLANNED");
 
         assertThatThrownBy(() -> tripService.create(1L, request))
@@ -60,6 +74,19 @@ class TripServiceTest {
                         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TRIP_INVALID_INPUT));
 
         verify(tripMapper, never()).insert(any());
+    }
+
+    @Test
+    void update_rejects_unsupported_status() {
+        UpdateTripRequest request = new UpdateTripRequest(
+                "Seoul trip", LocalDate.of(2026, 6, 10), LocalDate.of(2026, 6, 12),
+                "Seoul", "food", "PLANNED");
+
+        assertThatThrownBy(() -> tripService.update(1L, 10L, request))
+                .isInstanceOfSatisfying(BusinessException.class, e ->
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.TRIP_INVALID_INPUT));
+
+        verify(tripMapper, never()).update(any());
     }
 
     @Test
@@ -92,7 +119,7 @@ class TripServiceTest {
         trip.setEndDate(LocalDate.of(2026, 6, 12));
         trip.setRegion("Seoul");
         trip.setTheme("food");
-        trip.setStatus("PLANNED");
+        trip.setStatus("planning");
         return trip;
     }
 }
