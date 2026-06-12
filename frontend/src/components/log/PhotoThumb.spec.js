@@ -77,4 +77,28 @@ describe('PhotoThumb', () => {
     const wrapper = mount(PhotoThumb, { props: { photoId: 1 } })
     expect(wrapper.find('.photo-thumb').attributes('aria-label')).toBe('사진')
   })
+
+  it('photoId 가 바뀌면 늦게 도착한 이전 응답이 최신 화면을 덮어쓰지 않는다', async () => {
+    let resolveOld
+    const oldArrival = new Promise((r) => { resolveOld = r })
+    // photoId=1 은 보류, photoId=2 는 즉시 도착.
+    fetchPhotoContent.mockImplementation((id) =>
+      id === 1 ? oldArrival : Promise.resolve(jpegBlob()),
+    )
+    // 생성 URL 을 구분 가능하게(기본 stub 은 상수라 1·2 를 식별 못 한다).
+    let seq = 0
+    URL.createObjectURL.mockImplementation(() => `blob:${++seq}`)
+
+    const wrapper = mount(PhotoThumb, { props: { photoId: 1 } })
+    await wrapper.setProps({ photoId: 2 })
+    await flushPromises()
+    await wrapper.find('img').trigger('load')
+    const currentSrc = wrapper.find('img').attributes('src')
+
+    // 보류됐던 photoId=1 응답이 뒤늦게 도착해도 현재(2) 이미지를 덮지 않는다.
+    resolveOld(jpegBlob())
+    await flushPromises()
+
+    expect(wrapper.find('img').attributes('src')).toBe(currentSrc)
+  })
 })

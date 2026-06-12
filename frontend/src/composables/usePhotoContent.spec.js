@@ -89,7 +89,7 @@ describe('usePhotoContent', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2)
   })
 
-  it('지연 도착: dispose 후 도착한 응답의 objectURL 도 즉시 revoke 한다(누수 경합 차단)', async () => {
+  it('지연 도착: dispose 후 도착한 응답은 즉시 revoke 하고, 해제된 URL 을 넘기지 않도록 reject 한다', async () => {
     const gate = deferred()
     const fetchPhotoContent = vi.fn(() => gate.promise)
     const c = run(() => usePhotoContent({ api: { fetchPhotoContent } }))
@@ -97,10 +97,21 @@ describe('usePhotoContent', () => {
     const pending = c.load(9) // in-flight 상태로 둔다
     c.dispose() // 응답 도착 전에 스코프 해제 — dispose 의 캐시 순회엔 아직 안 잡힌다
     gate.resolve(blob())
-    const url = await pending
 
-    // 도착 시점에 disposed 를 보고 즉시 해제돼야 누수가 없다.
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith(url)
+    // 1) 호출자에게 '이미 해제된' URL 을 resolve 하지 않는다(거부).
+    await expect(pending).rejects.toThrow()
+    // 2) 그래도 만든 objectURL 은 해제돼 누수가 없다.
+    const created = URL.createObjectURL.mock.results[0].value
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(created)
+  })
+
+  it('dispose 이후의 load 는 새 fetch 없이 즉시 reject 한다', async () => {
+    const fetchPhotoContent = vi.fn().mockResolvedValue(blob())
+    const c = run(() => usePhotoContent({ api: { fetchPhotoContent } }))
+    c.dispose()
+
+    await expect(c.load(1)).rejects.toThrow()
+    expect(fetchPhotoContent).not.toHaveBeenCalled()
   })
 
   it('실패 전파: fetch 가 거부되면 load 도 거부된다', async () => {
