@@ -23,6 +23,7 @@ const tripStore = useTripStore()
 const form = reactive(createDefaultTripForm())
 const errors = ref({})
 const submitError = ref('')
+const submitIntent = ref('places')
 
 const startDateModel = computed({
   get: () => toDate(form.startDate),
@@ -46,7 +47,9 @@ const previewNights = computed(() => {
   return `${tripDurationDays(form)}일 여행`
 })
 
-async function submit() {
+async function submit(destination = 'places') {
+  if (tripStore.creating) return
+  submitIntent.value = destination
   errors.value = validateTripForm(form)
   submitError.value = ''
   tripStore.clearError()
@@ -54,7 +57,11 @@ async function submit() {
   if (Object.keys(errors.value).length > 0) return
 
   try {
-    await tripStore.createTrip(toTripPayload(form))
+    const createdTrip = await tripStore.createTrip(toTripPayload(form))
+    if (destination === 'places' && createdTrip?.id) {
+      await router.push({ name: 'trip-place-search', params: { tripId: createdTrip.id } })
+      return
+    }
     await router.push({ name: 'trip-list' })
   } catch {
     submitError.value = tripStore.error || '여행을 생성하지 못했습니다.'
@@ -84,7 +91,7 @@ function toDate(dateOnly) {
         </div>
       </aside>
 
-      <form class="trip-form" @submit.prevent="submit">
+      <form class="trip-form" @submit.prevent="submit('places')">
         <div class="form-head">
           <span class="eyebrow">Trip CRUD</span>
           <h2>여행 기본 정보를 입력해주세요.</h2>
@@ -177,10 +184,21 @@ function toDate(dateOnly) {
             @click="cancel"
           />
           <Button
+            type="button"
+            label="목록에 저장"
+            icon="pi pi-list"
+            severity="secondary"
+            outlined
+            :disabled="tripStore.creating && submitIntent !== 'list'"
+            :loading="tripStore.creating && submitIntent === 'list'"
+            @click="submit('list')"
+          />
+          <Button
             type="submit"
-            label="생성하기"
+            label="확인하고 장소 담기"
             icon="pi pi-check"
-            :loading="tripStore.creating"
+            :disabled="tripStore.creating && submitIntent !== 'places'"
+            :loading="tripStore.creating && submitIntent === 'places'"
           />
         </div>
       </form>

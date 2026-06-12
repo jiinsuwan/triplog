@@ -1111,7 +1111,7 @@ function preventPopupMapEvent(event) {
 
 function popupPocketLabel(place) {
   const icon = isPocketed(place) ? 'pi-bookmark-fill' : 'pi-bookmark'
-  const label = isPocketed(place) ? '담기 취소' : '담기'
+  const label = pocketActionLabel(place)
   return `<i class="pi ${icon}" aria-hidden="true"></i><span>${label}</span>`
 }
 
@@ -1156,6 +1156,10 @@ function togglePocket(place) {
     return
   }
   pocketIds.value = [...pocketIds.value, place.uid]
+}
+
+function pocketActionLabel(place) {
+  return isPocketed(place) ? '담기 취소' : '담기'
 }
 
 function goToPage(pageNumber) {
@@ -1502,20 +1506,28 @@ function normalizeSearchText(value = '') {
         </div>
 
         <div class="place-list">
-          <button
+          <article
             v-for="place in paginatedPlaces"
             :key="place.uid"
-            type="button"
             class="place-row"
             :class="{ active: selectedPlace?.uid === place.uid }"
-            @click="selectPlace(place)"
           >
-            <span>
-              <strong>{{ place.name }}</strong>
-              <small>{{ place.address || place.category }}</small>
-            </span>
-            <i :class="isPocketed(place) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'" />
-          </button>
+            <button type="button" class="place-row__main" @click="selectPlace(place)">
+              <span>
+                <strong>{{ place.name }}</strong>
+                <small>{{ place.address || place.category }}</small>
+              </span>
+            </button>
+            <Button
+              class="place-row__pocket"
+              :icon="isPocketed(place) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
+              :severity="isPocketed(place) ? 'success' : 'secondary'"
+              text
+              rounded
+              :aria-label="`${place.name} ${pocketActionLabel(place)}`"
+              @click.stop="togglePocket(place)"
+            />
+          </article>
         </div>
 
         <nav v-if="totalPages > 1" class="pagination" aria-label="장소 목록 페이지">
@@ -1783,7 +1795,30 @@ function normalizeSearchText(value = '') {
   gap: 12px;
   text-align: left;
   color: #151d25;
+}
+
+.place-row__main {
+  min-width: 0;
+  min-height: 68px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.place-row__main:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 4px;
+}
+
+.place-row__pocket {
+  justify-self: end;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
 }
 
 .place-row.active {
