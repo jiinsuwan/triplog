@@ -97,7 +97,7 @@ async function preloadFonts() {
   await document.fonts.ready;
 }
 async function loadPolys(name) {
-  try { const d = await (await fetch(`out/segments_${name}.json`)).json();
+  try { const d = await (await fetch(`../out/segments_${name}.json`)).json();
     return d.items.map((it) => ({ cx: it.cx_norm, cy: it.cy_norm, poly: it.poly_norm }));
   } catch { return []; }
 }
@@ -107,9 +107,9 @@ function fitDisplay() {
   for (const c of [card, selCv]) { c.style.width = w + 'px'; c.style.height = h + 'px'; }
 }
 async function loadPhoto(name) {
-  S.name = name; S.img = await loadImg(`images/${name}.jpg`);
+  S.name = name; S.img = await loadImg(`../images/${name}.jpg`);
   document.getElementById('aspect').textContent = `${S.img.width}×${S.img.height} 원본 → 1080×1920 cover-fit (F07 세로 스펙)`;
-  let mask = null; try { mask = await loadImg(`out/foodmask_${name}.png`); } catch {}
+  let mask = null; try { mask = await loadImg(`../out/foodmask_${name}.png`); } catch {}
   S.field = computeOccupancy(mk, S.img, { gw: 54, aspect: H / W, maskImg: mask });
   const polys = await loadPolys(name);
   const { data } = toCanvasData(S.img, W, H, OVERLAY[name], polys);

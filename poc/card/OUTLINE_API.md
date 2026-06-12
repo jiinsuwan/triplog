@@ -1,8 +1,8 @@
-# 외곽선 모듈 JSON 계약 (PoC v12 — 로컬, 미커밋)
+# 외곽선 모듈 JSON 계약 (PoC v12)
 
 > 소비자 둘: **(1) 웹 에디터** (1차 초안 표시 + 탭/박스 보정), **(2) LLM 판단 계층** (후보 중 선택·묶음,
 > 코멘트/스티커 배치 — GMS 텍스트 LLM, 이미지 생성 아님). 구현: `outline_module.py` (코어),
-> `serve_outline.py` (FastAPI 사이드카). 배포 권고 근거는 v4 리포트 갱신분 참조.
+> `serve_outline.py` (FastAPI 사이드카). 배포 권고 근거는 [`DEPLOY_RESEARCH.md`](DEPLOY_RESEARCH.md).
 
 ## 좌표 규약
 

@@ -178,7 +178,6 @@ class Engine:
     def detect(self, img_s):
         Hs, Ws = img_s.shape[:2]
         sal_fg = self.saliency(img_s)
-        self._sal_fg_last = sal_fg          # candidates()의 이중 포커스 판정에 재사용
         sal_mass = sal_fg.sum() / (Hs * Ws)
 
         r = self.det.predict(img_s, conf=0.15, iou=0.5, verbose=False)[0]
@@ -410,9 +409,9 @@ class Engine:
                     'area_frac': round((mu > 127).sum() / (Hs * Ws), 4),
                     'loops': loops, 'mask': mu,
                 })
-        # 이중 포커스 제거(그릇+내용물 동시 검출): 페어 = 마스크 포함(겹침형) 또는
-        # 마스크-bbox 포함(접시 고리형 — 마스크는 안 겹쳐도 같은 그릇). 어느 쪽을 남길지는
-        # saliency 평균이 높은 쪽(=내용물/주제) — 전(o) vs 접시링(x), 나물대접(o) vs 빈그릇(x).
+        # 이중 포커스 제거(그릇+내용물 동시 검출). 페어 2형:
+        #   마스크 포함형(파편/내용물 ⊂ 전체) -> 전체(큰 쪽) 유지
+        #   bbox 포함형(접시 고리 vs 내용물, 마스크 분리) -> 채움 밀도 높은 쪽(진짜 객체) 유지
         removed = set()
         for i in range(len(items)):
             for j in range(i + 1, len(items)):

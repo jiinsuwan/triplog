@@ -14,7 +14,7 @@
 | `serve_outline.py` | FastAPI 사이드카 프로토타입 (업로드 1회 전처리 + 클릭 보정 API) |
 | `OUTLINE_API.md` | JSON 계약 — 에디터·LLM 판단 계층 관점 (텍스트 최초 배치 규칙 포함) |
 | `DEPLOY_RESEARCH.md` | 운용 형태 조사 (Java 비권장 / Python 사이드카 권고 / 브라우저 디코드 경로) |
-| `report-v12.html` | 최종 보고서 (결과 5쌍·톤다운 실측·스트로크·완성형) — `out/v12`·`images` 상대 참조 |
+| `report-v12.html` | 최종 보고서 (결과 5쌍·톤다운 실측·스트로크·완성형) — **로컬 전용**(개인 사진 포함, 미커밋). 정식 md 리포트는 스프린트 마무리 docs PR에서 반영 예정 |
 | `HISTORY.md` | v1~v12 연대기 + 기각 기록 (반복 방지) |
 | `legacy-v3/` | v3 렌더/에디터 코어 (`render-overlay.mjs` = D5 렌더 정본, 편집 데모) |
 | `measure_caption.py` | GMS 문구 생성 실측 (#20, 키 확보 시 1회) |
@@ -25,12 +25,16 @@
 
 ```bash
 cd poc/card
-# 환경 (최초 1회): python3 -m venv .venv && .venv/bin/pip install ultralytics opencv-python rembg onnxruntime fastapi uvicorn
+# 환경 (최초 1회): python3 -m venv .venv && .venv/bin/pip install ultralytics opencv-python rembg onnxruntime fastapi uvicorn python-multipart
 export SSL_CERT_FILE=$(.venv/bin/python -c "import certifi; print(certifi.where())")   # CLIP 다운로드 SSL 대비
 
 .venv/bin/python outline_module.py auto IMG_0621 ...          # 자동 초안 + 비교/앵커 산출
 .venv/bin/python outline_module.py tap IMG_0989 0.5 0.34      # 탭(정규화 좌표)
 .venv/bin/uvicorn serve_outline:app --port 8765               # 사이드카 (POST /v1/images, /v1/outline/*)
+
+# v3 렌더 데모 — 반드시 poc/card에서 실행 (데이터 경로가 poc/card 기준)
+node legacy-v3/overlay-exp.mjs
+python3 -m http.server 8000   # → localhost:8000/legacy-v3/editor-overlay.html
 ```
 
 ## 주의

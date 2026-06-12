@@ -9,7 +9,7 @@
 #
 # 실행: .venv/bin/uvicorn serve_outline:app --port 8765
 # 데모: curl -F file=@images/IMG_0621.jpg localhost:8765/v1/images
-import io, time, uuid
+import time, uuid
 import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile, HTTPException
@@ -18,11 +18,16 @@ from pydantic import BaseModel
 from outline_module import Engine, PROC_MAX
 
 app = FastAPI(title='triplog outline sidecar (PoC)')
-eng = Engine()                     # 모델 상주 (워커 1 전제, 큐잉은 프레임워크에 위임)
-store = {}                         # image_id -> {img_s, items}  (PoC: 메모리, 제품: 디스크/캐시)
+# 모델 상주. 주의: PoC는 요청 직렬화가 없음(단일 사용자 전제) — register는 CPU 바운드라
+# 처리 중 전체 응답이 막힌다. 제품은 워커 1 + 내부 큐 필요 (DEPLOY_RESEARCH.md 권고).
+eng = Engine()
+store = {}                         # image_id -> {img_s, items}  (PoC: 메모리 무제한, 제품: 디스크/캐시 + 퇴출)
+MAX_UPLOAD = 25 * 1024 * 1024
 
 
 def _decode(data: bytes):
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, 'file too large')
     img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(400, 'invalid image')
@@ -39,6 +44,7 @@ def _items_json(items, Hs, Ws):
             'bbox': it['bbox_norm'], 'center': it['center_norm'], 'area': it['area_frac'],
             'polygons': [[[round(x / Ws, 4), round(y / Hs, 4)] for x, y in poly]
                          for poly in it['loops']],
+            'anchors': it.get('anchors', []),
         })
     return out
 
@@ -49,6 +55,7 @@ async def register(file: UploadFile):
     img_s = _decode(await file.read())
     t0 = time.time()
     items, meta = eng.candidates(img_s)
+    items = eng.text_anchors(img_s, items)      # 계약(§1·§2-1): items에 anchors 포함
     image_id = uuid.uuid4().hex[:12]
     store[image_id] = {'img': img_s, 'items': items}
     Hs, Ws = img_s.shape[:2]
@@ -76,6 +83,7 @@ class GroupReq(BaseModel):
     image_id: str
     item_ids: list[int]
     margin: float = 0.012               # 객체-선 간격 (min(H,W) 비율) -> 에디터 여백 슬라이더
+    relax: str = 'hull'                 # 버블 모양: 'hull'(떨어진 묶음) | 'smooth'(한 덩어리 대형)
 
 
 def _get(image_id):
@@ -129,7 +137,8 @@ def group(req: GroupReq):
     masks = [it['mask'] for it in s['items'] if it['id'] in req.item_ids]
     if not masks:
         raise HTTPException(400, 'no matching item_ids')
-    return _poly_response(s['img'], eng.group(masks, req.margin), state=s, src='group')
+    return _poly_response(s['img'], eng.group(masks, req.margin, relax=req.relax),
+                          state=s, src='group')
 
 
 @app.get('/health')

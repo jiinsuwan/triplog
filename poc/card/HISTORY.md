@@ -1,6 +1,6 @@
 # 카드 PoC 연대기 메모 (v1 ~ v12, 2026-06-12 정리)
 
-> 과거 실험의 기록용 1페이지 메모. 스크립트·중간 산출물 원본은 `_cleanup_20260612/`로 이동 후 삭제 예정.
+> 과거 실험의 기록용 1페이지 메모. 실험 스크립트·중간 산출물 원본은 정리됨 — git history로 복구 가능.
 > 살아있는 정본: **결과 보고서 = `report-v12.html`** · **모듈 = `outline_module.py` + `serve_outline.py`** ·
 > **계약 = `OUTLINE_API.md`** · **배포 조사 = `DEPLOY_RESEARCH.md`** · v3 렌더/에디터 코어(커밋됨).
 
@@ -9,7 +9,7 @@
 | 버전 | 내용 | 결론 |
 |---|---|---|
 | v1/v2 | 잡지형·카드형 레이아웃 (LLM이 카드 JSON 생성) | ❌ 기각 — 레퍼런스의 정체는 "꾸며진 사진". 코드는 정리됨(git history로 복구 가능) |
-| v3 | **사진 위 overlay 확정** — 풀블리드 + 흰 손글씨/외곽선/장식, canvas 합성(편집 가능) | ✅ decisions/0004 (D1~D5). 렌더 코어 `render-overlay.mjs`, 에디터 `editor-overlay.html`, 빈공간 `freespace.mjs` (전부 커밋) |
+| v3 | **사진 위 overlay 확정** — 풀블리드 + 흰 손글씨/외곽선/장식, canvas 합성(편집 가능) | ✅ decisions/0004 (D1~D5). 렌더 코어 `render-overlay.mjs`, 에디터 `editor-overlay.html`, 빈공간 `freespace.mjs` (전부 `legacy-v3/`에 커밋) |
 | v4 | YOLO-World → SAM2 box → 정밀 윤곽(팽창 오프셋→contour→DP→Chaikin) | ✅ 파이프라인 골격으로 채택 |
 | v5 | U²-Net saliency vs FastSAM everything | saliency 채택 / FastSAM ❌ (가중치도 정리) |
 | v6 | 하이브리드: conf 게이트 + saliency 게이트 + 폴백 | ✅ 12/12 — detect()의 R1~R3로 흡수 |
