@@ -40,8 +40,24 @@ export async function unlinkPhotoFromTrip(photoId) {
   return data.data
 }
 
-// GET /photos?tripId= → 해당 여행에 연결된 사진 목록(#55 갤러리에서 재사용)
+// GET /photos?tripId= → 해당 여행에 연결된 사진 목록(S3 기록 화면에서 사용 예정)
 export async function fetchTripPhotos(tripId) {
   const { data } = await instance.get('/photos', { params: { tripId } })
   return data.data
+}
+
+// GET /photos/{id}/content → 사진 원본(바이너리). 다른 함수와 달리 공통 ApiResponse<T>
+// 래퍼가 아니라 raw Blob 을 반환한다 — 백엔드(PhotoController.content)가 Resource 를 바디로
+// 직접 내려주기 때문이다. 그래서 data.data 를 꺼내지 않고 응답 data(Blob) 를 그대로 돌려준다.
+// responseType:'blob' 필수(없으면 axios 가 텍스트로 파싱해 바이너리가 깨진다).
+//
+// 인증·토큰 만료 회복은 공용 instance 인터셉터가 처리한다. 401 응답의 본문은 Blob 이지만
+// 인터셉터는 status 만 보므로 refresh→재시도가 정상 동작한다. GET 은 본문이 없어 재시도가
+// 안전하다(업로드의 FormData 소비 문제와 달리 content 는 무관).
+export async function fetchPhotoContent(photoId, { signal } = {}) {
+  const { data } = await instance.get(`/photos/${photoId}/content`, {
+    responseType: 'blob',
+    signal,
+  })
+  return data
 }
