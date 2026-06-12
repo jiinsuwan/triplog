@@ -1,12 +1,14 @@
 package com.triplog.place.controller;
 
 import com.triplog.common.ApiResponse;
+import com.triplog.place.dto.PlaceDetailResponse;
 import com.triplog.place.dto.PlaceListResponse;
 import com.triplog.place.dto.PlaceRegionResponse;
 import com.triplog.place.service.PlaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,6 +35,12 @@ public class PlaceController {
                                                @RequestParam(required = false) Integer page,
                                                @RequestParam(required = false) Integer size) {
         return ApiResponse.success(placeService.list(region1, region2, category, keyword, page, size));
+    }
+
+    @Operation(summary = "Get place detail")
+    @GetMapping("/{id}")
+    public ApiResponse<PlaceDetailResponse> get(@PathVariable Long id) {
+        return ApiResponse.success(placeService.get(id));
     }
 
     @Operation(summary = "List place regions")
