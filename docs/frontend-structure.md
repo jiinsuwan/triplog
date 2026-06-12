@@ -1,6 +1,6 @@
 # Frontend 화면 구조 가이드 (제안 / draft)
 
-> **상태**: 🟢 **정본 베이스 채택** (Sprint 1 회고 후) — proposal 목업을 프론트 정본으로 삼고, 이 문서가 그 IA·컴포넌트 매핑이다. 공유 성격이라 [conventions](conventions.md)대로 **본 PR 리뷰로 최종 확정**. 정본 목업 = §5.
+> **상태**: 🟢 **정본** (S1 회고 베이스 채택 → **S2 회고에서 기록/카드 흐름 와이어프레임 채택으로 확장**) — 이 문서가 IA·컴포넌트 매핑의 기준이다. 정본 목업 = §5 (계획 = trip-planner-flow.html / 기록·카드 = log-flow-proposal.html).
 > **출처**: 프론트 구조 mock → **정본 [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 비주얼 보강 = v3(팀원) 흡수(§6). + 교차 리뷰.
 > **선행 정본**: [requirements](requirements.md) · [decisions/0004](decisions/0004-card-poc-result.md) · [architecture](architecture.md) · [router](../frontend/src/router/index.js).
 
@@ -29,7 +29,14 @@
 - ⚠️ **폐기**: "Vision LLM → 카드 전체 JSON 생성 → Canvas 합성" (옛 가설). UI 문구/구조에 이 방향을 남기지 말 것.
 - ✅ **해소**: `requirements.md` F07·§3 AI기능표의 옛 문구는 Sprint 1 회고 PR #32에서 0004 구조로 정정 완료.
 
-## 3. 제안 IA (미승인 — 합의 대상)
+## 3. IA (S2 회고에서 승인 — 기록 워크스페이스 확장)
+
+### 3-0. 최상위 IA = 계획/기록 2워크스페이스 + 상태 기반 진입 (S2 회고 채택)
+
+- 정본 와이어프레임 = [design/log-flow-proposal.html](design/log-flow-proposal.html) (PR #58 — 기록/카드 흐름).
+- **계획 워크스페이스**(trip): 여행 생성 → 탐색 → 일정. / **기록 워크스페이스**(log): 완성된 일정 위에 사진을 배치하는 **여행 기록(로그) 뷰** — 지도 + 경로 타임라인 + 미분류 트레이 + 상시 드롭존, 일정 인라인 수정. **"계획한 여행에만 로그"** — 진입은 여행 `status` 기반.
+- 기록 뷰 = F14 재정의([requirements v1.2](requirements.md)). 구현 = **S4**(trip 일정 F04 선행 — 일정 완료 시 앞당김 가능).
+- `status` 허용값·검증·라우팅 골격은 **S3 core Issue**로 확정한다 (§3-3의 값은 가안).
 
 ### 3-1. 여행 내부 네비 = 큰 단계만
 `개요 · 관광지 탐색 · 일정 │ 사진 · 카드 (+공유)` — `│`는 trip/log 트랙 구분.
@@ -43,18 +50,21 @@
 | AI 자동 일정 | **일정 화면의 ✨ 버튼** (별도 화면 아님) | P2 |
 | 위시리스트(저장) | **탐색의 ★저장 필터 / 장소별 ★** | P1 |
 | 카드 편집 | **카드 3단계(미리보기·편집) 안** | P1 |
-| 사진 라이브러리(지도/타임라인) | **사진 화면의 뷰 토글** | P1 |
+| 여행 기록(로그) 뷰 — F14 재정의 | **기록 워크스페이스 본문** (§3-0, 구 "사진 뷰 토글"을 대체) | P1 (S4) |
 
 ### 3-3. 데이터 모델 (제안)
 ```
 Trip { id, title, region, theme, startDate, dayCount, status, days[], pocket[], wish[] }
    status: 'planning' | 'upcoming' | 'past'        // C4의 '상태'
 Day  { lodging: placeId | null, stops: Stop[] }     // 숙소는 그 날의 베이스(체크인/아웃) — 시퀀스에 안 섞음
-Stop { placeId, type, time?: "HH:MM", memo? }       // 시간·유형·메모 1급 속성
+Stop { placeId, type, time?: "HH:MM", memo?, transport }  // 시간·유형·메모·이동수단
    type: 관광지 | 식당 | 카페 | 숙소                  // 아이콘·색·데이터출처와 매핑
+   transport: 자동차 | 도보 | 대중교통 | 기타          // 필수 (S2 회고) — 구간 소요시간 표시의 입력
 ```
 - **시간**: 각 stop에 선택적 시각. 순서(드래그)는 그대로 — 시간은 라벨.
 - **숙소**: `Day.lodging`으로 분리(연박·야간이동 표현). 관광지/식당/카페만 시퀀스.
+- **이동수단 = 필수 필드** (S2 회고). 구간 소요시간: 자동차 = 카카오내비 API / 도보·대중교통 = 추정·수동(카카오 API 미제공). 실이동경로 = P1.
+- **사진 ↔ stop = 선택적 연결** (S2 회고 방향 합의): 미배치 사진 = 트레이. EXIF 자동 배치·드래그 재배치 = S4 기록 뷰 Issue. 상세 스키마는 trip 일정 Issue에서 설계(core 리뷰).
 
 ### 3-4. 화면별 핵심 규칙
 - **홈**: status로 "계획 중·예정 / 다녀온 여행" 분리. 빈 상태 안내. 카드에 상태 배지.
@@ -77,7 +87,8 @@ Stop { placeId, type, time?: "HH:MM", memo? }       // 시간·유형·메모 1�
 
 ## 5. 정본 목업 (채택)
 
-- **정본 = [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 색·폰트·IA의 기준.
+- **정본 (계획) = [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 색·폰트·IA의 기준.
+- **정본 (기록·카드) = [docs/design/log-flow-proposal.html](design/log-flow-proposal.html)** (PR #58 — S2 회고 채택, §3-0).
 - **디자인 언어** (proposal·v3 이미 일치): Pretendard / 배경 `#f2f4f6` / 주색 파랑 `#3182f6` / 초록 `#16c47e` / 회색 `#191f28`·`#8b95a1`·`#e5e8eb` / 보조 보라`#8b5cf6`·코랄`#f04452`·노랑`#f59e0b`.
 - **PrimeVue 적용**: Aura preset를 `definePreset`로 **primary=파랑(`#3182f6`) + Pretendard + surface 그레이**에 맞춘다. (현재 빌드된 trip 화면의 임시 색은 이 톤으로 수렴 — 정리는 화면 작업 중/후.)
 
@@ -125,3 +136,4 @@ proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
 |---|---|---|
 | draft v0 | 2026-06-08 | 프론트 구조 mock + 교차 리뷰 기반 초안. 미승인. |
 | v1 | 2026-06-09 | 정본 채택(docs/design/trip-planner-flow.html) + v3 비주얼 흡수(§6) + PrimeVue 컴포넌트 매핑(§7). F07 정정 완료(PR #32) 반영. |
+| v2 | 2026-06-12 | **S2 회고 반영**: 기록/카드 흐름 와이어프레임(log-flow-proposal.html, PR #58) 정본 채택 — 계획/기록 2워크스페이스 + 상태 기반 진입(§3-0) / Stop에 transport 필수 필드 / 사진↔stop 선택적 연결 방향 / F14 = 기록 뷰 재정의(S4) |
