@@ -19,3 +19,8 @@ out/cutout_*.png
 # 대용량 자산 — 다운로드/생성 (커밋 제외)
 fonts/
 ref/
+weights/
+
+# v12 산출물 — 개인 사진 포함 (로컬 보관, 커밋 금지)
+out/v12/
+report-v12.html

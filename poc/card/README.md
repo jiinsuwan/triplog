@@ -1,53 +1,39 @@
-# 카드 PoC — 사진 위 다꾸 overlay (v3, 최종)
+# 카드 PoC — 외곽선 모듈 (v12, 정리됨)
 
-원본 사진을 풀블리드로 깔고 그 위에 **얇은 흰 손글씨 주석 + 곡선 점선 화살표 + 접시 외곽선 + 작은 장식**을
-canvas로 합성한다. GPT 이미지편집 결과와 달리 **요소가 객체(노트/외곽선/화살표)로 남아 편집 가능**한 게 핵심.
+사진 위 다꾸 overlay 카드의 **피사체 외곽선 CV 모듈** PoC. 자동 초안 + 사람 탭/박스 보정 + LLM 판단 계층이
+소비하는 벡터(폴리곤) 출력. 전체 연혁은 [`HISTORY.md`](HISTORY.md), 최종 결과는 [`report-v12.html`](report-v12.html).
 
-> 결과/판단 근거: [`docs/poc/card-poc-v3-report.md`](../../docs/poc/card-poc-v3-report.md)
-> 모델·구조 결정: [`docs/decisions/0004-card-poc-result.md`](../../docs/decisions/0004-card-poc-result.md)
+> 모델·구조 결정: [`docs/decisions/0004-card-poc-result.md`](../../docs/decisions/0004-card-poc-result.md) ·
+> v3(overlay 확정) 리포트: [`docs/poc/card-poc-v3-report.md`](../../docs/poc/card-poc-v3-report.md)
 
-## 파이프라인
-```
-사진 ─(SAM2 box-prompt: segment_all.py)→ 접시 마스크 segments_*.json
-사진 ─(경량 CV: freespace.mjs)→ 점유맵/밝기
-        │
-overlay-data.mjs (객체 앵커 + 짧은 문구)  ─┐
-overlay-prep.mjs (사진→캔버스 좌표 + 마스크 매칭) ─┤
-        ▼
-overlay-place.mjs (코드 배치: 빈공간 회피·화살표·외곽선·장식)
-        ▼
-render-overlay.mjs (흰 펜·radial 외곽선·점선 mix·국소 음영)
-        ▼
-overlay-exp.mjs (양산) / editor-overlay.html (드래그 편집)
-```
+## 구성
 
-## 파일
-| 파일 | 역할 |
+| 경로 | 역할 |
 |---|---|
-| `render-overlay.mjs` | overlay 렌더 코어 (DOM/Node 공용) |
-| `overlay-place.mjs` | 코드/규칙 기반 배치 엔진 |
-| `overlay-prep.mjs` | 사진→1080×1920(or 풀프레임) 좌표 변환 + 마스크 nearest 매칭 |
-| `overlay-data.mjs` | 사진별 객체 앵커 + 큐레이션 문구 |
-| `overlay-exp.mjs` | 시안 양산 + 레퍼런스 비교 |
-| `freespace.mjs` | 경량 CV 점유맵/밝기 |
-| `editor-overlay.html` | 브라우저 편집기 (주석 드래그 이동·추가·문구 편집·외곽선 토글·PNG) |
-| `segment_all.py` | SAM2 box-prompt 세그멘테이션 → 접시 외곽 폴리곤 |
-| `_archive/` | v1(잡지형)·v2(카드형)·실험(color-edge/ellipse) 보존 |
+| `outline_module.py` | 코어 모듈 — `candidates`(자동 초안+텍스트 앵커) / `outline_at`(탭) / `outline_multitap` / `outline_box` / `group`(hull·smooth 버블) |
+| `serve_outline.py` | FastAPI 사이드카 프로토타입 (업로드 1회 전처리 + 클릭 보정 API) |
+| `OUTLINE_API.md` | JSON 계약 — 에디터·LLM 판단 계층 관점 (텍스트 최초 배치 규칙 포함) |
+| `DEPLOY_RESEARCH.md` | 운용 형태 조사 (Java 비권장 / Python 사이드카 권고 / 브라우저 디코드 경로) |
+| `report-v12.html` | 최종 보고서 (결과 5쌍·톤다운 실측·스트로크·완성형) — `out/v12`·`images` 상대 참조 |
+| `HISTORY.md` | v1~v12 연대기 + 기각 기록 (반복 방지) |
+| `legacy-v3/` | v3 렌더/에디터 코어 (`render-overlay.mjs` = D5 렌더 정본, 편집 데모) |
+| `measure_caption.py` | GMS 문구 생성 실측 (#20, 키 확보 시 1회) |
+| `out/v12/` · `out/v3/` | v12 결과(보고서 참조분) · v3 결과(v3 리포트/0004가 참조) |
+| `images/` · `weights/` · `.venv/` | 테스트 사진(개인, gitignore) · 모델 가중치(gitignore) · 환경 |
 
 ## 실행
+
 ```bash
-# 시안 양산 (Node)
-node overlay-exp.mjs            # → out/v3/*_overlay.png, compare_vs_reference.png
+cd poc/card
+# 환경 (최초 1회): python3 -m venv .venv && .venv/bin/pip install ultralytics opencv-python rembg onnxruntime fastapi uvicorn
+export SSL_CERT_FILE=$(.venv/bin/python -c "import certifi; print(certifi.where())")   # CLIP 다운로드 SSL 대비
 
-# 편집기 (정적 서버 필요)
-python3 -m http.server 8000     # → localhost:8000/editor-overlay.html
-
-# 외곽선 재추출 (SAM2, 최초 1회 .venv 필요)
-python3 -m venv .venv && .venv/bin/pip install ultralytics "numpy<2"
-.venv/bin/python segment_all.py IMG_9717
+.venv/bin/python outline_module.py auto IMG_0621 ...          # 자동 초안 + 비교/앵커 산출
+.venv/bin/python outline_module.py tap IMG_0989 0.5 0.34      # 탭(정규화 좌표)
+.venv/bin/uvicorn serve_outline:app --port 8765               # 사이드카 (POST /v1/images, /v1/outline/*)
 ```
 
 ## 주의
-- `.venv`(1.2GB)·SAM 가중치(`*.pt`, 600MB+)는 gitignore. 로컬 재생성.
-- `segments_*.json`(접시 외곽)은 추적 → 외곽선 재현 보장. `foodmask`·`_legacy`는 미추적.
-- 외곽선은 **SAM 마스크 → radial(각도별 최외곽) → 접시 밖 오프셋 → 실선/점선 mix**. 색-엣지/타원피팅은 `_archive/code`에 실험 보존.
+
+- `images/`는 개인 사진 — 외부 공유 금지. `weights/`(가중치)·`.venv`는 로컬 재생성.
+- 미해결 한계·다음 단계는 `report-v12.html` §6, 계약 세부는 `OUTLINE_API.md`.
