@@ -71,6 +71,10 @@ export function normalizeDbPlace(place) {
     longitude: toNumber(place.longitude),
     phone: place.phone || '',
     summary: place.summary || place.facilities || '공공데이터 관광지',
+    description: place.description || '',
+    facilities: place.facilities || '',
+    homepage: place.homepage || '',
+    imageUrl: place.imageUrl || '',
     sourceLabel: 'DB 관광지',
   }
 }

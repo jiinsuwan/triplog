@@ -6,7 +6,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import SelectButton from 'primevue/selectbutton'
-import { fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
+import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
 import { loadKakaoMaps } from '@/utils/kakaoMap'
 import {
   CATEGORY_OPTIONS,
@@ -91,10 +91,13 @@ let map = null
 let placesService = null
 let overlays = []
 let placePopupOverlay = null
+let placePopupTimer = null
 let mapIdleHandler = null
 let mapZoomChangedHandler = null
 let mapClickHandler = null
 let shouldMarkBaselineOnIdle = false
+const dbPlaceDetailCache = new Map()
+const dbPlaceDetailRequests = new Map()
 
 const activeRegion = computed(() =>
   resolvePlaceRegion({
@@ -1005,13 +1008,70 @@ function rectsOverlap(a, b) {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
 }
 
-function selectPlace(place, { pan = true } = {}) {
+async function selectPlace(place, { pan = true } = {}) {
   selectedPlace.value = place
+  let position = null
   if (map && kakao && hasCoordinates(place)) {
-    const position = new kakao.maps.LatLng(place.latitude, place.longitude)
+    position = new kakao.maps.LatLng(place.latitude, place.longitude)
     if (pan) map.panTo(position)
+    schedulePlacePopup(place, position, { delayed: pan })
+  }
+  const detailPlace = await resolveDbPlaceDetail(place)
+  if (!detailPlace || selectedPlace.value?.uid !== place.uid) return
+
+  selectedPlace.value = detailPlace
+  if (map && kakao && hasCoordinates(detailPlace)) {
+    schedulePlacePopup(
+      detailPlace,
+      position || new kakao.maps.LatLng(detailPlace.latitude, detailPlace.longitude),
+      { delayed: pan },
+    )
+  }
+}
+
+async function resolveDbPlaceDetail(place) {
+  if (place.origin !== 'db' || place.sourceId == null) return null
+  if (dbPlaceDetailCache.has(place.uid)) return dbPlaceDetailCache.get(place.uid)
+
+  if (!dbPlaceDetailRequests.has(place.uid)) {
+    const request = fetchPlaceDetail(place.sourceId)
+      .then((detail) => {
+        const detailPlace = {
+          ...place,
+          ...normalizeDbPlace(detail),
+        }
+        dbPlaceDetailCache.set(place.uid, detailPlace)
+        return detailPlace
+      })
+      .finally(() => {
+        dbPlaceDetailRequests.delete(place.uid)
+      })
+    dbPlaceDetailRequests.set(place.uid, request)
+  }
+
+  try {
+    return await dbPlaceDetailRequests.get(place.uid)
+  } catch (error) {
+    if (selectedPlace.value?.uid === place.uid) {
+      placeError.value = error?.response?.data?.message || '장소 상세 정보를 불러오지 못했습니다.'
+    }
+    return null
+  }
+}
+
+function schedulePlacePopup(place, position, { delayed = false } = {}) {
+  clearPlacePopupTimer()
+  const show = () => {
+    placePopupTimer = null
+    if (selectedPlace.value?.uid !== place.uid) return
     showPlacePopup(place, position)
   }
+
+  if (delayed) {
+    placePopupTimer = window.setTimeout(show, 450)
+    return
+  }
+  show()
 }
 
 function showPlacePopup(place, position) {
@@ -1031,6 +1091,7 @@ function showPlacePopup(place, position) {
 }
 
 function clearPlacePopup({ clearSelection = true } = {}) {
+  clearPlacePopupTimer()
   if (placePopupOverlay) {
     placePopupOverlay.setMap(null)
     placePopupOverlay = null
@@ -1038,6 +1099,12 @@ function clearPlacePopup({ clearSelection = true } = {}) {
   if (clearSelection) {
     selectedPlace.value = null
   }
+}
+
+function clearPlacePopupTimer() {
+  if (!placePopupTimer) return
+  window.clearTimeout(placePopupTimer)
+  placePopupTimer = null
 }
 
 function createPlacePopupContent(place) {
@@ -1064,12 +1131,22 @@ function createPlacePopupContent(place) {
   title.textContent = place.name
 
   const meta = document.createElement('p')
-  meta.textContent = place.address || place.category || '장소 정보'
+  meta.className = 'trip-place-popup__meta'
+  meta.textContent = popupMeta(place)
 
   const summaryText = popupSummary(place)
   const summary = document.createElement('p')
   summary.className = 'trip-place-popup__summary'
   summary.textContent = summaryText
+
+  const imageUrl = safeExternalUrl(place.imageUrl)
+  const hero = imageUrl ? document.createElement('img') : null
+  if (hero) {
+    hero.className = 'trip-place-popup__image'
+    hero.src = imageUrl
+    hero.alt = ''
+    hero.loading = 'lazy'
+  }
 
   const actions = document.createElement('div')
   actions.className = 'trip-place-popup__actions'
@@ -1085,19 +1162,38 @@ function createPlacePopupContent(place) {
   })
   actions.append(pocketButton)
 
-  if (place.placeUrl) {
+  const homepageUrl = safeExternalUrl(place.homepage)
+  if (homepageUrl) {
+    const homepage = document.createElement('a')
+    homepage.className = 'trip-place-popup__button'
+    homepage.href = homepageUrl
+    homepage.target = '_blank'
+    homepage.rel = 'noreferrer'
+    homepage.textContent = '홈페이지'
+    actions.append(homepage)
+  }
+
+  const kakaoPlaceUrl = safeExternalUrl(place.placeUrl)
+  if (kakaoPlaceUrl) {
     const link = document.createElement('a')
     link.className = 'trip-place-popup__button'
-    link.href = place.placeUrl
+    link.href = kakaoPlaceUrl
     link.target = '_blank'
     link.rel = 'noreferrer'
     link.textContent = '카카오맵에서 보기'
     actions.append(link)
   }
 
+  if (hero) {
+    content.append(hero)
+  }
   content.append(title, meta)
   if (summaryText && summaryText !== meta.textContent) {
     content.append(summary)
+  }
+  const info = createPopupInfo(place)
+  if (info) {
+    content.append(info)
   }
   content.append(actions)
   popup.append(content, closeButton)
@@ -1115,11 +1211,55 @@ function popupPocketLabel(place) {
   return `<i class="pi ${icon}" aria-hidden="true"></i><span>${label}</span>`
 }
 
+function popupMeta(place) {
+  return [place.address, place.category].filter(Boolean).join(' · ') || '장소 정보'
+}
+
 function popupSummary(place) {
-  if (place.phone) return place.phone
-  if (!place.summary || /^https?:\/\//.test(place.summary)) return ''
-  if (place.summary === '카카오 실시간 검색 결과') return ''
-  return place.summary
+  return [place.description, place.summary, place.facilities].find(isPopupSummaryValue) || ''
+}
+
+function isPopupSummaryValue(value = '') {
+  const trimmed = String(value || '').trim()
+  return (
+    Boolean(trimmed) &&
+    !/^https?:\/\//.test(trimmed) &&
+    trimmed !== '카카오 실시간 검색 결과' &&
+    trimmed !== '공공데이터 관광지'
+  )
+}
+
+function createPopupInfo(place) {
+  const rows = [
+    { label: '전화', value: place.phone },
+    { label: '시설', value: formatFacilities(place.facilities) },
+  ].filter((row) => row.value && row.value !== popupSummary(place))
+
+  if (!rows.length) return null
+
+  const info = document.createElement('dl')
+  info.className = 'trip-place-popup__info'
+  rows.forEach((row) => {
+    const term = document.createElement('dt')
+    term.textContent = row.label
+    const value = document.createElement('dd')
+    value.textContent = row.value
+    info.append(term, value)
+  })
+  return info
+}
+
+function formatFacilities(value = '') {
+  return String(value || '')
+    .replace(/^public:\s*/i, '')
+    .replace(/;\s*/g, ' · ')
+    .replace(/\+/g, ', ')
+    .trim()
+}
+
+function safeExternalUrl(value = '') {
+  const trimmed = String(value || '').trim()
+  return /^https?:\/\//i.test(trimmed) ? trimmed : ''
 }
 
 function keepPlacePopupInView() {
@@ -2091,11 +2231,14 @@ function normalizeSearchText(value = '') {
 
 :global(.trip-place-popup) {
   width: min(360px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
   position: relative;
+  box-sizing: border-box;
   border: 1px solid #d9e0ea;
   border-radius: 14px;
   background: #fff;
   color: #151d25;
+  white-space: normal;
   box-shadow: 0 22px 54px rgba(15, 23, 42, 0.20);
 }
 
@@ -2113,29 +2256,87 @@ function normalizeSearchText(value = '') {
 }
 
 :global(.trip-place-popup__content) {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   position: relative;
   z-index: 1;
-  padding: 18px 54px 16px 18px;
+  padding: 18px 42px 16px 18px;
   display: grid;
   gap: 9px;
 }
 
 :global(.trip-place-popup h3) {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   font-size: 20px;
   line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+:global(.trip-place-popup h3),
+:global(.trip-place-popup p),
+:global(.trip-place-popup dt),
+:global(.trip-place-popup dd),
+:global(.trip-place-popup a),
+:global(.trip-place-popup button),
+:global(.trip-place-popup span) {
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 :global(.trip-place-popup p) {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   color: #536173;
   font-size: 14px;
   font-weight: 750;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 :global(.trip-place-popup__summary) {
   overflow-wrap: anywhere;
+}
+
+:global(.trip-place-popup__image) {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #edf2f7;
+}
+
+:global(.trip-place-popup__meta) {
+  padding-right: 8px;
+}
+
+:global(.trip-place-popup__info) {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 10px;
+  color: #536173;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+:global(.trip-place-popup__info dt) {
+  color: #0f7a55;
+}
+
+:global(.trip-place-popup__info dd) {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 :global(.trip-place-popup__close) {
@@ -2155,6 +2356,8 @@ function normalizeSearchText(value = '') {
 }
 
 :global(.trip-place-popup__actions) {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2163,6 +2366,8 @@ function normalizeSearchText(value = '') {
 }
 
 :global(.trip-place-popup__button) {
+  min-width: 0;
+  max-width: 100%;
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid #d9e0ea;
@@ -2176,6 +2381,10 @@ function normalizeSearchText(value = '') {
   font-weight: 900;
   text-decoration: none;
   cursor: pointer;
+}
+
+:global(.trip-place-popup__button span) {
+  min-width: 0;
 }
 
 :global(.trip-place-popup__button.is-primary) {

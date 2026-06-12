@@ -21,6 +21,8 @@ describe('placeSearch utils', () => {
         latitude: '35.814',
         longitude: '127.153',
         summary: '한옥마을 산책길',
+        description: '전주 한옥마을과 이어지는 산책 코스',
+        homepage: 'https://example.com/gyeonggijeon',
       }),
     ).toMatchObject({
       uid: 'db-7',
@@ -29,6 +31,8 @@ describe('placeSearch utils', () => {
       markerLabel: '경기전 돌담길',
       latitude: 35.814,
       longitude: 127.153,
+      description: '전주 한옥마을과 이어지는 산책 코스',
+      homepage: 'https://example.com/gyeonggijeon',
       sourceLabel: 'DB 관광지',
     })
   })
