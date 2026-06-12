@@ -81,6 +81,7 @@ AI가 만든 코드는 **육안 검토만으로 통제하지 않습니다**. 가
 - ❌ **작업 완료 후 PR 발행 단계 생략** — 코멘트·요약 보고로 갈음 금지. 사람 확인을 받아 PR을 발행하고 상대를 reviewer로 지정한다 ([conventions §1-2](docs/conventions.md))
 - ❌ 공유 영역(`core`) 변경을 단독 결정으로 진행
 - ❌ `docs/conventions.md`에 정의되지 않은 새로운 워크플로우 도입 (무거운 spec/handoff 구조 등)
+- ❌ **기존 관행·형식 확인 없이 임의 형식으로 Issue·PR·문서 생성** — 이전 사례가 기준. 규칙 공백을 발견하면 개인 메모가 아니라 **공유 문서 갱신을 최우선**으로 ([conventions §9-2](docs/conventions.md))
 - ❌ AI 자동 일정 생성을 P0로 끌어올리기 (블루프린트 §6, decisions/0002)
 - ❌ MSA 구조 제안
 - ❌ DB/API 상세 설계를 기능 확정 전에 과하게 선행

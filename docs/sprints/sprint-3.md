@@ -8,7 +8,7 @@
 
 ## 지난 스프린트 회고 (이월 포함)
 - **완료**: 관광지 탐색·상세 + 사진 파이프라인 + FE 화면 — 종료 조건 4/4 ([sprint-2.md](sprint-2.md) 회고).
-- **이월/입력**: #17 잔여(status 검증·size) → `S3-CORE-03`에 흡수(이슈 생성 시 #17 닫기) / #59 → `S3-CORE-04`로 구현(채택 코멘트 후 닫기) / #20(카드 실측) → 카드 동작 후 측정 / 카드 PoC v12 산출물([decisions/0006](../decisions/0006-card-outline-module.md) + [card-poc-v12-report §7](../poc/card-poc-v12-report.md)) = 카드 이슈 분해의 입력 / 주말 스파이크 산출물 발생 시 이슈 계약 후 포팅(poc 직접 머지 금지).
+- **이월/입력**: #17 잔여(status 검증·size) → `S3-CORE-03`(#67)에 흡수(#17은 #67 참조로 닫기) / #59 → `S3-CORE-01`(#65)로 구현(채택 코멘트 후 닫음) / #20(카드 실측) → 카드 동작 후 측정 / 카드 PoC v12 산출물([decisions/0006](../decisions/0006-card-outline-module.md) + [card-poc-v12-report §7](../poc/card-poc-v12-report.md)) = 카드 이슈 분해의 입력 / 주말 스파이크 산출물 발생 시 이슈 계약 후 포팅(poc 직접 머지 금지).
 
 ## 이번 스프린트 작업
 > 각 항목 = GitHub Issue. **발행 분담(S2 회고): log 담당자 = core + log / trip 담당자 = trip.** 발행자가 본문(Goal/Scope/AC/Test) 작성, core Issue에는 회고 결정 근거를 명시한다.
@@ -29,14 +29,14 @@
 - [ ] **[S3-LOG-07]** 자동 초안 폴백·수동 보정 — **P0 합격선 = 초안 + 수동 보정으로 PNG** (0004 D6). #20 실측은 이 동작 후 별도 진행
 
 ### core (공통)
-> 번호 = 로드맵 등재 ID(이력 연속) — 실행 순서 아님. 실행은 의존성·발행 순서를 따른다 (CORE-04 우선 권장).
-> **구현 분담(S2 회고 후 합의): CORE-02·04 = log 담당 / CORE-03·05 = trip 담당.** 어느 쪽이든 core = 상대 리뷰 필수(§1-3).
+> 번호 = 발행 이슈 기준 01부터 연속 (2026-06-12 재정렬 — 빈 슬롯 제거). 실행 권장 순서 = 01(guardrail) 우선.
+> **구현 분담(S2 회고 후 합의): CORE-01·02 = log 담당 / CORE-03·04 = trip 담당.** 어느 쪽이든 core = 상대 리뷰 필수(§1-3).
 
-- [ ] **[S3-CORE-02]** AI 호출 공통 인프라 — `LlmAdapter`, provider 1개 = GMS 우선, AiCallLog (S2에서 이동)
-- [ ] **[S3-CORE-03]** IA 라우팅 + status 체계 — 계획/기록 2워크스페이스·상태 기반 진입([frontend-structure §3-0](../frontend-structure.md)) + Trip `status` 허용값·검증 + 목록 응답 `size` — **#17 잔여 흡수, 리뷰 필수**
-- [ ] **[S3-CORE-04]** PR guardrail — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + **reviewer 미지정 경고 코멘트** — **#59 채택 구현**. 선행: required check 설정(ruleset) 가능 여부 확인 — 불가 시 "CI 표시 + 컨벤션"으로 운용 강도 하향. 공유 경로 목록 확정(`api/config.js`·`user/` 포함 여부)도 이 이슈에서
-- [ ] **[S3-CORE-05]** 비밀번호 찾기 — 이메일 인프라 없는 방식 우선 확인. 성격 = **심사기준 보강(P0 아님)**, P0 지장 시 S4 이월
-- (재검토) S3-CORE-01 서빙 권한 보강 — S2에서 인증 엔드포인트 서빙(#38)으로 선반영. 잔여 범위 확인 후 이슈화 여부 결정
+- [ ] **[S3-CORE-01]** PR guardrail (#65) — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + **reviewer 미지정 경고 코멘트** — **#59 채택 구현**. 선행 해소됨: required check 설정 가능 확인 완료(#65 코멘트 참조). 공유 경로 목록 확정(`api/config.js`·`user/` 포함 여부)도 이 이슈에서
+- [ ] **[S3-CORE-02]** AI 호출 공통 인프라 (#66) — `LlmAdapter`, provider 1개 = GMS 우선, AiCallLog (S2에서 이동)
+- [ ] **[S3-CORE-03]** IA 라우팅 + status 체계 (#67) — 계획/기록 2워크스페이스·상태 기반 진입([frontend-structure §3-0](../frontend-structure.md)) + Trip `status` 허용값·검증 + 목록 응답 `size` — **#17 잔여 흡수, 리뷰 필수**
+- [ ] **[S3-CORE-04]** 비밀번호 찾기 (#68) — 이메일 인프라 없는 방식 우선 확인. 성격 = **심사기준 보강(P0 아님)**, P0 지장 시 S4 이월
+- (번호 미부여 · 재검토) 사진/카드 서빙 권한 보강 — S2에서 인증 엔드포인트 서빙(#38)으로 선반영. 잔여 범위 확인 후 필요 시 이슈화·번호 부여
 
 ## 종료 조건
 - [ ] **여행 → 사진 → AI 카드 생성 → PNG 다운로드 end-to-end 동작** (P0)
