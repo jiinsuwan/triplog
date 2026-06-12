@@ -77,7 +77,7 @@ cd frontend && npm install && npm run dev
 - **Codex 사용자**: `AGENTS.md`를 자동으로 읽으므로 추가 설정 없음.
 - **Claude 사용자**: 루트에 `CLAUDE.md`(git 미추적)를 만들고 `@AGENTS.md` 한 줄을 넣으면 `AGENTS.md`를 자동 로드한다.
 
-**최초 로컬 셋업(클론 직후 1회)**: `bash scripts/install-hooks.sh`로 git hook을 설치한다 — `main` 직접 push를 차단한다(plan 제약으로 branch protection을 못 쓰는 대체 수단). 이어서 `bash scripts/preflight.sh`로 Node/Java/.env/MySQL을 점검한다.
+**최초 로컬 셋업(클론 직후 1회)**: `bash scripts/install-hooks.sh`로 git hook을 설치한다 — `main` 직접 push를 차단한다(현재 main은 리뷰 필수 보호가 활성 — hook은 로컬 보조 수단). 이어서 `bash scripts/preflight.sh`로 Node/Java/.env/MySQL을 점검한다.
 
 ---
 
