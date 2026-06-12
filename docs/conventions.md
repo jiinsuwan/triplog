@@ -27,7 +27,7 @@ Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Action
   3. `sprint-{N}.md` 작성 — 트랙별 Issue 후보(제목 + Goal/AC 요약) + 종료 조건
   4. 그 문서 기준으로 **GitHub Issue 생성 → 각자 트랙 작업 시작**
 - **종료**: `sprint-{N}.md` 하단에 회고(완료/이월/배운 점) 추가 → 다음 스프린트 입력으로. 회고 때 **①각 트랙이 내린 결정 요약을 서로 검토 ②`proposal` Issue(공통 규칙 변경 건의)를 채택/기각**도 함께 본다.
-- **종료 시 진입점 갱신**: `AGENTS.md` 상단 "현재 단계" 박스를 **지금 상태·다음 할 일**로 업데이트한다. 새 세션/다음 작업자가 옛 안내를 따르지 않도록 — 이 박스가 항상 "지금 어디서, 무엇부터"를 가리켜야 한다.
+- **종료 시 진입점 갱신**: `AGENTS.md` 상단 "현재 단계" 박스를 **지금 상태·다음 할 일**로 업데이트한다. 새 세션/다음 작업자가 옛 안내를 따르지 않도록 — 이 박스가 항상 "지금 어디서, 무엇부터"를 가리켜야 한다. 해당 스프린트의 **GitHub Milestone도 close**한다.
 - `sprint-{N}.md`는 **1~2장으로 제한**. 설계·핸드오프 문서로 비대해지지 않습니다(§10). 형식은 `docs/sprints/_template.md` 참고.
 
 **스프린트 문서 ↔ Issue 관계 (헷갈리지 않게)**
@@ -110,6 +110,16 @@ Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Action
 - Issue는 **단순 메모가 아니라 AI agent에게 전달할 작업 계약서**입니다.
 - AI agent에게 작업을 넘길 때 Issue 본문을 그대로 컨텍스트로 사용합니다.
 - 공유 영역 변경이 있으면 Issue와 PR에 반드시 명시합니다.
+
+**발행 체크리스트 (Issue 생성 시 전부 적용):**
+
+1. 제목 형식 (§3-1)
+2. 본문 템플릿 (§3-2)
+3. 라벨 — `track:*` + `priority:*` (§7)
+4. assignee — 구현 담당 지정
+5. **Milestone — `Sprint {N}` 등록** (현행 스프린트 작업이면 필수. GitHub Milestone 기능을 쓰되 명칭은 Sprint — §1)
+
+백로그 이슈(현행 스프린트 아님)는 Milestone 없이 제목 접두 **`[백로그]`** 로 구분합니다. (S3 발행에서 마일스톤 누락 재발 → 명문화, 2026-06-12)
 
 ---
 
