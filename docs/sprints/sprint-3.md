@@ -29,6 +29,9 @@
 - [ ] **[S3-LOG-07]** 자동 초안 폴백·수동 보정 — **P0 합격선 = 초안 + 수동 보정으로 PNG** (0004 D6). #20 실측은 이 동작 후 별도 진행
 
 ### core (공통)
+> 번호 = 로드맵 등재 ID(이력 연속) — 실행 순서 아님. 실행은 의존성·발행 순서를 따른다 (CORE-04 우선 권장).
+> **구현 분담(S2 회고 후 합의): CORE-02·04 = log 담당 / CORE-03·05 = trip 담당.** 어느 쪽이든 core = 상대 리뷰 필수(§1-3).
+
 - [ ] **[S3-CORE-02]** AI 호출 공통 인프라 — `LlmAdapter`, provider 1개 = GMS 우선, AiCallLog (S2에서 이동)
 - [ ] **[S3-CORE-03]** IA 라우팅 + status 체계 — 계획/기록 2워크스페이스·상태 기반 진입([frontend-structure §3-0](../frontend-structure.md)) + Trip `status` 허용값·검증 + 목록 응답 `size` — **#17 잔여 흡수, 리뷰 필수**
 - [ ] **[S3-CORE-04]** PR guardrail — 본문 검사 CI(feat·fix = required) + 공유 경로 감지(자동 코멘트 + `track:core` 라벨) + **reviewer 미지정 경고 코멘트** — **#59 채택 구현**. 선행: required check 설정(ruleset) 가능 여부 확인 — 불가 시 "CI 표시 + 컨벤션"으로 운용 강도 하향. 공유 경로 목록 확정(`api/config.js`·`user/` 포함 여부)도 이 이슈에서
