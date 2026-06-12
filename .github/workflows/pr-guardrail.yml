@@ -3,17 +3,29 @@ name: PR Guardrail
 # decisions/0007 D3(= #59 채택) 구현 — PR 형식 · 공유 경로 · reviewer 지정을
 # 사람 기억이 아닌 CI가 보조한다 (#65 / S3-CORE-01).
 #
-# 핵심 제약(이슈 #65 사전 조사): 검사 job은 "모든 PR에서 항상 실행"한다.
-# feat·fix / docs·chore / Draft 분기는 job을 조건부 skip하지 않고 job 내부에서
-# pass / fail / 경고로 처리한다. (job 자체를 skip하면 required check가 미보고되어
-# 해당 PR 머지가 영구 차단됨.)
+# 보안 모델: pull_request 트리거 + checkout 없음 + PR 코드 미실행(메타데이터만 조회).
+# 핵심 제약(이슈 #65 사전 조사): 검사 job은 조건부 skip 없이 항상 평가한다 —
+# feat·fix / docs·chore / Draft 분기는 job 내부에서 pass / fail / 경고로 처리.
+# (job 자체를 skip하면 required check가 미보고되어 머지가 영구 차단됨.)
 #
-# - body-check : required 후보. feat·fix = 누락 시 fail / docs·chore = 경고만 / Draft = 스킵.
-# - advisory   : 비차단. 공유 경로 감지(track:core 라벨 + 코멘트) + reviewer 미지정 경고.
+# - body-check : required 후보. 필수 5개 섹션 존재 + "내용 미작성(템플릿 그대로/빈 값)" 검사.
+#                완화(경고만) = docs·chore branch AND 공유(STRONG) 경로 미접촉.
+# - advisory   : 비차단. STRONG 공유 경로 = track:core 라벨 + 리뷰필수 코멘트 /
+#                SOFT(router) = 라벨 없이 확인 안내 / reviewer 미지정 경고(최신 리뷰 상태 기준).
 
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize, ready_for_review, converted_to_draft]
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+      - review_requested
+      - review_request_removed
+  pull_request_review:
+    types: [submitted, dismissed]
 
 permissions:
   contents: read
@@ -22,71 +34,95 @@ jobs:
   body-check:
     name: PR Body Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Check required PR body sections
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
             const body = pr.body || '';
-            const type = (pr.head.ref || '').split('/')[0];        // 브랜치 네이밍 {type}/s{n}-... (conventions §4-2)
-            const lenient = (type === 'docs' || type === 'chore'); // 완화 대상 = 경고만
 
             // Draft = 검사 스킵 (job 자체는 실행되어 required check가 보고됨)
-            if (pr.draft) {
-              core.info('Draft PR — 본문 검사 스킵 (ready_for_review 시 재검사)');
-              return;
-            }
+            if (pr.draft) { core.info('Draft PR — 본문 검사 스킵 (ready_for_review 시 재검사)'); return; }
 
-            // 필수 헤더 (conventions §6-2, 헤더 문구 고정). 접두 매칭으로 괄호 suffix 허용.
-            const required = [
-              '## Related Issue',
-              '## Summary',
-              '## Agent 작업',
-              '## 테스트 증거',
-              '## 공유 영역 영향',
-            ];
+            // 공유(STRONG) 경로 접촉 시 branch prefix 무관 strict.
+            // ※ advisory 의 STRONG 목록과 동기화 유지(둘 다 바꿀 것).
+            const isStrongShared = (f) =>
+              [ '.github/',
+                'backend/pom.xml', 'backend/mvnw', 'backend/.mvn/',
+                'backend/src/main/resources/application',
+                'backend/src/main/resources/db/',
+                'backend/src/main/resources/mapper/auth/',
+                'backend/src/main/resources/mapper/user/',
+                'backend/src/main/java/com/triplog/config/',
+                'backend/src/main/java/com/triplog/auth/',
+                'backend/src/main/java/com/triplog/common/',
+                'backend/src/main/java/com/triplog/user/',
+                'frontend/package.json', 'frontend/package-lock.json', 'frontend/vite.config.js',
+                'frontend/src/api/instance.js', 'frontend/src/api/config.js', 'frontend/src/api/authApi.js',
+                'frontend/src/components/common/', 'frontend/src/stores/auth.js',
+                'frontend/src/App.vue', 'frontend/src/main.js',
+              ].some(p => f.startsWith(p))
+              || f.endsWith('.env.example')
+              || (f.startsWith('backend/src/main/resources/') && f.endsWith('.sql'));
+
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr.number, per_page: 100 });
+            const sharedTouch = files.some(f => isStrongShared(f.filename));
+
+            const type = (pr.head.ref || '').split('/')[0];               // 브랜치 {type}/... (conventions §4-2)
+            const lenient = (type === 'docs' || type === 'chore') && !sharedTouch;
+
+            // 필수 섹션 + "내용 미작성" 검사.
+            // DEFAULTS = .github/pull_request_template.md 의 각 섹션 기본 내용 미러
+            // (헤더 문구처럼 고정 결합 — 템플릿 변경 시 이 표도 동반 갱신, conventions §6-2).
+            const DEFAULTS = {
+              '## Related Issue': '- closes #',
+              '## Summary': '-',
+              '## Agent 작업': '- **Agent 입력**: 어떤 Issue / 프롬프트를 agent에게 줬는지\n- **Agent가 바꾼 것**: 주요 변경 요약 (파일 · 동작)\n- **사람이 검토한 것**: 직접 확인 · 수정한 부분',
+              '## 테스트 증거': '- [ ] 로컬 테스트 통과 (명령 / 결과 첨부)\n- [ ] GitHub Actions 통과\n- [ ] 화면 / API 확인 (스크린샷 · 응답 등)',
+              '## 공유 영역 영향': '- [ ] **공유 영역(core)** 변경 있음 → 상대 트랙 리뷰 필수\n(DB schema / 인증 / 공통 응답 / 공통 UI / router 가드·layout / build / CI / env)\n- 영향 내용:',
+            };
+            const norm = (s) => (s || '')
+              .replace(/<!--[\s\S]*?-->/g, '')          // 주석 제거
+              .split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+
+            // 헤더(접두 매칭) 다음 줄부터 다음 '## ' 전까지를 섹션 내용으로
+            const section = (header) => {
+              const i = body.indexOf(header);
+              if (i === -1) return null;
+              const after = body.slice(i + header.length);
+              const nl = after.indexOf('\n');
+              const rest = nl === -1 ? '' : after.slice(nl + 1);          // 헤더 줄 suffix 버림
+              const next = rest.indexOf('\n## ');
+              return next === -1 ? rest : rest.slice(0, next);
+            };
+
             const problems = [];
-
-            for (const h of required) {
-              if (!body.includes(h)) problems.push(`필수 섹션 누락: \`${h}\``);
+            for (const [header, def] of Object.entries(DEFAULTS)) {
+              const sec = section(header);
+              if (sec === null) { problems.push(`필수 섹션 누락: \`${header}\``); continue; }
+              const c = norm(sec);
+              if (c === '' || c === norm(def)) {
+                problems.push(`섹션 내용 미작성(템플릿 그대로 / 빈 값): \`${header}\``);
+              }
             }
 
-            // Related Issue = 이슈 번호(#N) 명시 필요 (템플릿 기본값 "closes #"는 미작성으로 판정)
-            const rel = body.match(/## Related Issue[\s\S]*?(?=\n## |$)/);
-            if (rel && !/#\d+/.test(rel[0])) {
-              problems.push('Related Issue에 이슈 번호(#N)가 없습니다 (예: `closes #65`)');
-            }
-
-            // Summary 내용 비어있음 검사 (헤더 다음 본문이 빈 불릿 / 공백 / 주석뿐이면 미작성)
-            const sum = body.match(/## Summary[^\n]*\n([\s\S]*?)(?=\n## |$)/);
-            if (sum) {
-              const content = sum[1]
-                .replace(/<!--[\s\S]*?-->/g, '')
-                .split('\n')
-                .map(l => l.replace(/^[-*\s]+/, '').trim())
-                .filter(Boolean);
-              if (content.length === 0) problems.push('Summary 내용이 비어 있습니다');
-            }
-
-            if (problems.length === 0) {
-              core.info('PR 본문 검사 통과');
-              return;
-            }
-
+            if (problems.length === 0) { core.info('PR 본문 검사 통과'); return; }
             const msg = '본문 검사 문제:\n- ' + problems.join('\n- ');
-            if (lenient) {
-              core.warning(`[경고 · docs/chore 완화] ${msg}`); // 경고만 → pass
-            } else {
-              core.setFailed(msg);                            // feat·fix = required fail
-            }
+            if (lenient) core.warning(`[경고 · docs/chore 완화] ${msg}`);   // 완화 = 경고만(pass)
+            else core.setFailed(msg);                                       // strict = required fail
 
   advisory:
     name: PR Advisory
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
       issues: write
     steps:
       - name: Shared-path & reviewer advisory
@@ -98,82 +134,89 @@ jobs:
             const { owner, repo } = context.repo;
             const number = pr.number;
 
-            // --- §6-3 공유 경로 → 실제 경로 매핑 (접두 / 접미 / .sql 패턴) ---
-            const sharedPrefixes = [
-              '.github/',                                          // CI / 워크플로우
-              'backend/pom.xml',                                  // build
-              'backend/src/main/resources/application',           // env 구조 (application*.yml)
-              'backend/src/main/java/com/triplog/config/',        // SecurityConfig 등 공통 설정
-              'backend/src/main/java/com/triplog/auth/',          // 인증
-              'backend/src/main/java/com/triplog/common/',        // 공통 응답 / 예외
-              'backend/src/main/java/com/triplog/user/',          // user (인증 인접 — 포함)
-              'frontend/package.json',                            // build
-              'frontend/package-lock.json',                       // build
-              'frontend/vite.config.js',                          // build
-              'frontend/src/router/',                             // router 가드 / layout
-              'frontend/src/api/instance.js',                     // 공통 API 클라이언트
-              'frontend/src/api/config.js',                       // 공통 API 베이스 설정 (포함)
-              'frontend/src/components/common/',                  // 공통 UI
-              'frontend/src/stores/auth.js',                      // 인증 상태 (포함)
-              'frontend/src/App.vue',                             // layout 루트
-              'frontend/src/main.js',                             // 부트스트랩
+            // STRONG = 항상 상대 리뷰 필수(track:core). ※ body-check 의 isStrongShared 와 동기화 유지.
+            const STRONG = [
+              '.github/',
+              'backend/pom.xml', 'backend/mvnw', 'backend/.mvn/',
+              'backend/src/main/resources/application',
+              'backend/src/main/resources/db/',
+              'backend/src/main/resources/mapper/auth/',
+              'backend/src/main/resources/mapper/user/',
+              'backend/src/main/java/com/triplog/config/',
+              'backend/src/main/java/com/triplog/auth/',
+              'backend/src/main/java/com/triplog/common/',
+              'backend/src/main/java/com/triplog/user/',
+              'frontend/package.json', 'frontend/package-lock.json', 'frontend/vite.config.js',
+              'frontend/src/api/instance.js', 'frontend/src/api/config.js', 'frontend/src/api/authApi.js',
+              'frontend/src/components/common/', 'frontend/src/stores/auth.js',
+              'frontend/src/App.vue', 'frontend/src/main.js',
             ];
-            const isShared = (f) =>
-              sharedPrefixes.some(p => f.startsWith(p)) ||
-              f.endsWith('.env.example') ||                        // env 구조
-              (f.startsWith('backend/src/main/resources/') && f.endsWith('.sql')); // DB schema
+            const isStrong = (f) =>
+              STRONG.some(p => f.startsWith(p))
+              || f.endsWith('.env.example')
+              || (f.startsWith('backend/src/main/resources/') && f.endsWith('.sql'));
+            // SOFT = 변경 사실만 안내(가드/layout이면 리뷰 필수). 단순 라우트 추가까지 강제하지 않음(§6-3·§6-4).
+            const isSoft = (f) => f.startsWith('frontend/src/router/');
 
-            const files = await github.paginate(github.rest.pulls.listFiles,
-              { owner, repo, pull_number: number, per_page: 100 });
-            const touched = files.map(f => f.filename).filter(isShared);
+            const files = (await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: number, per_page: 100 })).map(f => f.filename);
+            const strong = files.filter(isStrong);
+            const soft = files.filter(f => !isStrong(f) && isSoft(f));
 
-            // 마커로 코멘트 1개만 유지 (upsert / 해소 시 삭제)
             async function findComment(marker) {
-              const comments = await github.paginate(github.rest.issues.listComments,
+              const cs = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: number, per_page: 100 });
-              return comments.find(c => c.body && c.body.includes(marker));
+              return cs.find(c => c.body && c.body.includes(marker));
             }
             async function upsert(marker, content) {
               const full = `${marker}\n${content}`;
-              const existing = await findComment(marker);
-              if (existing) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: full });
-              } else {
-                await github.rest.issues.createComment({ owner, repo, issue_number: number, body: full });
-              }
+              const ex = await findComment(marker);
+              if (ex) await github.rest.issues.updateComment({ owner, repo, comment_id: ex.id, body: full });
+              else await github.rest.issues.createComment({ owner, repo, issue_number: number, body: full });
             }
             async function removeIfExists(marker) {
-              const existing = await findComment(marker);
-              if (existing) await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
+              const ex = await findComment(marker);
+              if (ex) await github.rest.issues.deleteComment({ owner, repo, comment_id: ex.id });
             }
 
-            // 1) 공유 경로 감지 → track:core 라벨 + 안내 코멘트 (fail 아님)
-            const SHARE_MARKER = '<!-- pr-guardrail:shared-path -->';
-            if (touched.length > 0) {
-              try {
-                await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: ['track:core'] });
-              } catch (e) { core.warning(`track:core 라벨 추가 실패: ${e.message}`); }
-              const list = touched.map(f => `- \`${f}\``).join('\n');
-              await upsert(SHARE_MARKER,
+            // 1) STRONG 공유 경로 → track:core 라벨 + 리뷰 필수 코멘트
+            const M_STRONG = '<!-- pr-guardrail:shared-path -->';
+            if (strong.length) {
+              try { await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: ['track:core'] }); }
+              catch (e) { core.warning(`track:core 라벨 추가 실패: ${e.message}`); }
+              await upsert(M_STRONG,
                 '**공유 영역(core) 변경 감지** — 아래 파일은 `conventions §6-3` 공유 경로입니다. ' +
-                '**상대 리뷰 필수**이며, PR 본문 "공유 영역 영향"에 변경 내용을 명시하세요.\n\n' + list);
-            } else {
-              await removeIfExists(SHARE_MARKER);
-            }
+                '**상대 리뷰 필수**이며, PR 본문 "공유 영역 영향"에 변경 내용을 명시하세요.\n\n' +
+                strong.map(f => `- \`${f}\``).join('\n'));
+            } else { await removeIfExists(M_STRONG); }
 
-            // 2) reviewer 미지정 경고 (fail 아님)
-            const REV_MARKER = '<!-- pr-guardrail:reviewer -->';
+            // 2) SOFT(router) → 라벨 없이 확인 안내만
+            const M_SOFT = '<!-- pr-guardrail:router -->';
+            if (soft.length) {
+              await upsert(M_SOFT,
+                '**router 변경 감지** — 단순 라우트 추가가 아니라 **가드 로직 · layout 구조** 변경이면 ' +
+                '`conventions §6-3` 상대 리뷰 필수입니다. (라우트 추가는 `§6-4` 보호 컨벤션 준수 전제.)\n\n' +
+                soft.map(f => `- \`${f}\``).join('\n'));
+            } else { await removeIfExists(M_SOFT); }
+
+            // 3) reviewer 미지정 경고 — 유효 "최신" 리뷰 상태 기준
+            //    (요청된 reviewer 있음 OR 작성자 외 최신 리뷰가 APPROVED/CHANGES_REQUESTED 면 경고 제거.
+            //     COMMENTED·PENDING 은 판정 미변경으로 무시, DISMISSED 는 해소로 처리.)
+            const M_REV = '<!-- pr-guardrail:reviewer -->';
             const requested = (pr.requested_reviewers || []).length + (pr.requested_teams || []).length;
-            let reviewInProgress = false;
+            let active = false;
             if (requested === 0) {
               const reviews = await github.paginate(github.rest.pulls.listReviews,
                 { owner, repo, pull_number: number, per_page: 100 });
-              reviewInProgress = reviews.some(r => r.user && r.user.login !== pr.user.login); // 작성자 외 리뷰 존재
+              const latest = {};
+              for (const r of reviews) {
+                if (!r.user || r.user.login === pr.user.login) continue;
+                if (['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) latest[r.user.login] = r.state;
+              }
+              active = Object.values(latest).some(s => s === 'APPROVED' || s === 'CHANGES_REQUESTED');
             }
-            if (requested === 0 && !reviewInProgress && !pr.draft) {
-              await upsert(REV_MARKER,
-                '**Reviewer 미지정** — 상호 리뷰(conventions §1-3)를 위해 상대를 reviewer로 지정하세요. ' +
+            if (requested === 0 && !active && !pr.draft) {
+              await upsert(M_REV,
+                '**Reviewer 미지정** — 상호 리뷰(`conventions §1-3`)를 위해 상대를 reviewer로 지정하세요. ' +
                 '머지는 상대 Approve 후 가능합니다.');
-            } else {
-              await removeIfExists(REV_MARKER);
-            }
+            } else { await removeIfExists(M_REV); }
