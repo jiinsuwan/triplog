@@ -19,6 +19,16 @@ const routes = [
   { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue') },
   { path: '/signup', name: 'signup', component: () => import('@/views/auth/SignupView.vue') },
   {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/views/auth/ForgotPasswordView.vue'),
+  },
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/views/auth/ResetPasswordView.vue'),
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfileView.vue'),
@@ -75,7 +85,7 @@ const router = createRouter({
 })
 
 // 이미 로그인한 사용자가 다시 볼 필요 없는 공개 인증 화면.
-const GUEST_ONLY_PATHS = ['/login', '/signup']
+const GUEST_ONLY_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password']
 
 // 인증 가드. 단위 테스트를 위해 분리해 export 한다(반환값 = vue-router 네비게이션 결과).
 export function authGuard(to) {
