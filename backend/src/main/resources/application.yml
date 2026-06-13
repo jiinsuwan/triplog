@@ -34,6 +34,11 @@ app:
   upload-dir: ${UPLOAD_DIR:./uploads}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  password-reset:
+    ttl: ${PASSWORD_RESET_TTL:20m}
+    min-response-delay: ${PASSWORD_RESET_MIN_RESPONSE_DELAY:250ms}
+    expose-demo-url: ${PASSWORD_RESET_EXPOSE_DEMO_URL:false}
+    demo-base-url: ${PASSWORD_RESET_DEMO_BASE_URL:http://localhost:5173/reset-password}
 
 # External API client defaults (S2-CORE-01).
 external-api:
@@ -61,3 +66,6 @@ spring:
     password: ${DB_PASSWORD:}
 jwt:
   secret: ${JWT_SECRET:test-only-secret-please-override-in-real-env-0123456789abcdef}
+app:
+  password-reset:
+    min-response-delay: 0ms

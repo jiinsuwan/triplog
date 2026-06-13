@@ -14,6 +14,8 @@ import org.springframework.http.HttpStatus;
  */
 public enum ErrorCode {
 
+    PASSWORD_RESET_FAILED("AUTH_007", HttpStatus.BAD_REQUEST, "비밀번호 재설정을 완료할 수 없습니다."),
+
     // --- COMMON ---
     INVALID_INPUT("COMMON_001", HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     DATA_INTEGRITY_VIOLATION("COMMON_002", HttpStatus.CONFLICT, "데이터 제약 조건을 위반했습니다."),
