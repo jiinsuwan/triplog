@@ -3,6 +3,11 @@
 spring:
   application:
     name: triplog
+  # 공용 RestClient 타임아웃 (Spring AI OpenAI 호출 포함) — GMS 무응답 시 무한 대기 방지.
+  http:
+    client:
+      connect-timeout: 5s
+      read-timeout: 60s
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/triplog?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
     username: ${DB_USER:triplog}
@@ -16,6 +21,29 @@ spring:
     multipart:
       max-file-size: 20MB
       max-request-size: 100MB
+  # Spring AI — SSAFY GMS(OpenAI 호환) 텍스트 LLM (S3-CORE-02 #66). 키는 .env(SSAFY_GMS_KEY)로 주입.
+  ai:
+    # LLM 재시도 끔(max-attempts=1) — 5xx/timeout 시 동일 프롬프트 반복 호출로 GMS 크레딧이 중복
+    # 소모되는 것을 막는다. 짧은 카드 문구라 재시도 이득이 작다. (값은 PR에서 상대와 합의 — 일시 5xx
+    # 복원력을 두려면 2.)
+    retry:
+      max-attempts: 1
+    model:
+      # 우리는 텍스트 chat 만 쓴다. 안 쓰는 OpenAI 모델 자동설정(audio/embedding/image/moderation)은
+      # 비활성화한다 — 키 없을 때 이들이 api-key 검증으로 컨텍스트를 깨뜨리는 것을 막는다.
+      chat: openai
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    openai:
+      base-url: https://gms.ssafy.io/gmsapi/api.openai.com
+      api-key: ${SSAFY_GMS_KEY:}
+      chat:
+        options:
+          model: gpt-4o-mini
 
 # MyBatis: snake_case ↔ camelCase 자동 매핑 (architecture §2-1, N2)
 mybatis:
@@ -59,5 +87,9 @@ spring:
     url: ${DB_URL:jdbc:mysql://localhost:3306/triplog_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
     username: ${DB_USER:triplog}
     password: ${DB_PASSWORD:}
+  # 테스트·CI 는 GMS 키 없이 돈다 → OpenAI chat 자동설정 비활성화(실호출 차단 + 컨텍스트 보호).
+  ai:
+    model:
+      chat: none
 jwt:
   secret: ${JWT_SECRET:test-only-secret-please-override-in-real-env-0123456789abcdef}

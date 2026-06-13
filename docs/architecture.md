@@ -143,7 +143,7 @@ frontend/src/
 
 **원칙**:
 - HTTP 상태 코드는 의미 그대로 사용 (200 / 400 / 401 / 403 / 404 / 409 / 500).
-- 비즈니스 코드(`code`)는 도메인별 prefix로 구분 (예: `AUTH_001`, `TRIP_002`, `CARD_AI_001`).
+- 비즈니스 코드(`code`)는 도메인별 prefix로 구분 (예: `AUTH_001`, `TRIP_002`, `AI_001`).
 - 성공 응답의 `data`는 단일 객체 또는 `{ items, page, total }` 페이지 응답.
 - **`code`는 문자열(string) 방식 확정 (A5, 2026-05-29)** — `SUCCESS` / 도메인 prefix 에러코드(`AUTH_001`, `TRIP_002` 등). 숫자 코드 미사용.
 
@@ -188,7 +188,7 @@ frontend/src/
 |---|---|---|
 | Card | id, tripId, type(**STORY 세로=기본** / FEED 정사각=P1), layoutJson, exportedPngUrl, source(AI/MANUAL), createdAt | log |
 | CardElement (P1) | id, cardId, type, x, y, w, h, rotation, contentJson, style | log |
-| AiCallLog | id, kind, prompt, responseJson, model, costMs, createdAt | log |
+| AiCallLog | id, kind, model, prompt, responseJson, promptTokens, completionTokens, totalTokens, costMs, success, errorMessage, createdAt | log |
 
 > **원천 기획서에는 13개 엔티티가 있었으나, 경량화 결정에 따라 P0/P1에 필요한 것만 단계적으로 도입합니다.**
 
