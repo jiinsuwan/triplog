@@ -5,6 +5,8 @@ import TripCreateView from '@/views/trip/TripCreateView.vue'
 import TripDetailView from '@/views/trip/TripDetailView.vue'
 import TripListView from '@/views/trip/TripListView.vue'
 import PhotoView from '@/views/log/PhotoView.vue'
+import { useTripStore } from '@/stores/trip'
+import { isPastTripStatus } from '@/utils/tripStatus'
 
 // 라우터 (architecture §3, 공유 영역).
 //
@@ -38,7 +40,19 @@ const routes = [
     path: '/trips/:tripId/places',
     name: 'trip-place-search',
     component: () => import('@/views/trip/TripPlaceSearchView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, workspace: 'planning' },
+  },
+  {
+    path: '/trips/:tripId/plan',
+    name: 'trip-plan-workspace',
+    redirect: (to) => ({ name: 'trip-place-search', params: to.params }),
+    meta: { requiresAuth: true, workspace: 'planning' },
+  },
+  {
+    path: '/trips/:tripId/log',
+    name: 'trip-record-workspace',
+    redirect: (to) => ({ name: 'trip-photos', params: to.params }),
+    meta: { requiresAuth: true, workspace: 'record' },
   },
   {
     path: '/trips/:tripId',
@@ -51,7 +65,7 @@ const routes = [
     path: '/trips/:tripId/photos',
     name: 'trip-photos',
     component: PhotoView,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, workspace: 'record' },
   },
 ]
 
@@ -75,9 +89,50 @@ export function authGuard(to) {
   if (GUEST_ONLY_PATHS.includes(to.path) && auth.isAuthenticated) {
     return { path: '/' }
   }
-  return true
+
+  return workspaceGuard(to)
 }
 
 router.beforeEach((to) => authGuard(to))
 
 export default router
+
+function workspaceGuard(to) {
+  const workspace = to.meta.workspace
+  const tripId = to.params?.tripId
+  if (!workspace || !tripId) {
+    return true
+  }
+
+  const tripStore = useTripStore()
+  const cachedTrip = findCachedTrip(tripStore, tripId)
+  if (cachedTrip) {
+    return workspaceRedirect(to, workspace, cachedTrip.status)
+  }
+
+  return tripStore
+    .fetchTripDetail(tripId)
+    .then((trip) => workspaceRedirect(to, workspace, trip.status))
+    .catch(() => true)
+}
+
+function findCachedTrip(tripStore, tripId) {
+  const numericTripId = Number(tripId)
+  if (tripStore.selectedTrip?.id === numericTripId) {
+    return tripStore.selectedTrip
+  }
+  return tripStore.trips.find((trip) => trip.id === numericTripId)
+}
+
+function workspaceRedirect(to, workspace, status) {
+  const targetWorkspace = isPastTripStatus(status) ? 'record' : 'planning'
+  if (workspace === targetWorkspace) {
+    return true
+  }
+
+  return {
+    name: targetWorkspace === 'record' ? 'trip-record-workspace' : 'trip-plan-workspace',
+    params: to.params,
+    replace: true,
+  }
+}

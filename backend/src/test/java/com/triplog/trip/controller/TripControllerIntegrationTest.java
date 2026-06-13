@@ -61,11 +61,12 @@ class TripControllerIntegrationTest {
                 LocalDate.of(2026, 7, 3),
                 "Seoul",
                 "food",
-                "PLANNED"), USER_ID)
+                "planning"), USER_ID)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.userId").value(USER_ID))
                 .andExpect(jsonPath("$.data.title").value("Seoul food trip"))
+                .andExpect(jsonPath("$.data.status").value("planning"))
                 .andReturnBody();
 
         long tripId = createBody.at("/data/id").asLong();
@@ -74,6 +75,7 @@ class TripControllerIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(20))
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.items[0].id").value(tripId));
 
@@ -92,10 +94,11 @@ class TripControllerIntegrationTest {
                                 LocalDate.of(2026, 8, 6),
                                 "Busan",
                                 "sea",
-                                "CONFIRMED"))))
+                                "upcoming"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.title").value("Busan sea trip"))
-                .andExpect(jsonPath("$.data.region").value("Busan"));
+                .andExpect(jsonPath("$.data.region").value("Busan"))
+                .andExpect(jsonPath("$.data.status").value("upcoming"));
 
         mockMvc.perform(delete("/trips/{id}", tripId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
@@ -116,7 +119,7 @@ class TripControllerIntegrationTest {
                 LocalDate.of(2026, 7, 3),
                 "Seoul",
                 "food",
-                "PLANNED"), USER_ID).andReturnBody();
+                "planning"), USER_ID).andReturnBody();
 
         postTrip(new CreateTripRequest(
                 "Other trip",
@@ -124,7 +127,7 @@ class TripControllerIntegrationTest {
                 LocalDate.of(2026, 9, 3),
                 "Jeju",
                 "nature",
-                "PLANNED"), OTHER_USER_ID);
+                "planning"), OTHER_USER_ID);
 
         mockMvc.perform(get("/trips")
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID)))
@@ -142,7 +145,7 @@ class TripControllerIntegrationTest {
                 LocalDate.of(2026, 7, 3),
                 "Seoul",
                 "food",
-                "PLANNED"), USER_ID).andReturnBody().at("/data/id").asLong();
+                "planning"), USER_ID).andReturnBody().at("/data/id").asLong();
 
         mockMvc.perform(get("/trips/{id}", tripId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(OTHER_USER_ID)))
@@ -158,7 +161,7 @@ class TripControllerIntegrationTest {
                                 LocalDate.of(2026, 7, 3),
                                 "Seoul",
                                 "food",
-                                "PLANNED"))))
+                                "planning"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("TRIP_002"));
 
@@ -180,11 +183,57 @@ class TripControllerIntegrationTest {
                                   "endDate": "2026-07-03",
                                   "region": "Seoul",
                                   "theme": "food",
-                                  "status": "PLANNED"
+                                  "status": "planning"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_001"));
+    }
+
+    @Test
+    void create_rejects_unsupported_status() throws Exception {
+        mockMvc.perform(post("/trips")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Unsupported status trip",
+                                  "startDate": "2026-07-01",
+                                  "endDate": "2026-07-03",
+                                  "region": "Seoul",
+                                  "theme": "food",
+                                  "status": "PLANNED"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRIP_003"));
+    }
+
+    @Test
+    void update_rejects_unsupported_status() throws Exception {
+        long tripId = postTrip(new CreateTripRequest(
+                "Owner trip",
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 3),
+                "Seoul",
+                "food",
+                "planning"), USER_ID).andReturnBody().at("/data/id").asLong();
+
+        mockMvc.perform(put("/trips/{id}", tripId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Unsupported status trip",
+                                  "startDate": "2026-07-01",
+                                  "endDate": "2026-07-03",
+                                  "region": "Seoul",
+                                  "theme": "food",
+                                  "status": "PLANNED"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("TRIP_003"));
     }
 
     private ResultActionsWithBody postTrip(CreateTripRequest request, long userId) throws Exception {

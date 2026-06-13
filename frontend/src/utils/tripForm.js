@@ -1,3 +1,12 @@
+import {
+  DEFAULT_TRIP_STATUS,
+  STATUS_OPTIONS,
+  isTripStatusSupported,
+  normalizeTripStatus,
+} from './tripStatus'
+
+export { DEFAULT_TRIP_STATUS, STATUS_OPTIONS }
+
 export const REGION_OPTIONS = [
   { label: '전주', value: '전주' },
   { label: '제주', value: '제주' },
@@ -10,13 +19,6 @@ export const THEME_OPTIONS = [
   { label: '바다', value: '바다' },
   { label: '골목', value: '골목' },
   { label: '휴식', value: '휴식' },
-]
-
-export const DEFAULT_TRIP_STATUS = 'PLANNING'
-
-export const STATUS_OPTIONS = [
-  { label: '계획 중', value: 'PLANNING' },
-  { label: '다녀옴', value: 'DONE' },
 ]
 
 export function createDefaultTripForm(today = new Date()) {
@@ -38,7 +40,7 @@ export function createTripFormFromTrip(trip) {
     endDate: trip?.endDate ?? '',
     region: trip?.region ?? REGION_OPTIONS[0].value,
     theme: trip?.theme ?? THEME_OPTIONS[0].value,
-    status: trip?.status ?? DEFAULT_TRIP_STATUS,
+    status: normalizeTripStatus(trip?.status ?? DEFAULT_TRIP_STATUS),
   }
 }
 
@@ -73,6 +75,8 @@ export function validateTripForm(form) {
 
   if (!form.status) {
     errors.status = '상태를 선택해주세요.'
+  } else if (!isTripStatusSupported(form.status)) {
+    errors.status = '상태를 다시 선택해주세요.'
   }
 
   return errors
@@ -85,7 +89,7 @@ export function toTripPayload(form) {
     endDate: form.endDate,
     region: form.region,
     theme: form.theme,
-    status: form.status || DEFAULT_TRIP_STATUS,
+    status: form.status?.trim() || DEFAULT_TRIP_STATUS,
   }
 }
 

@@ -7,15 +7,16 @@ import ProgressSpinner from 'primevue/progressspinner'
 import Tag from 'primevue/tag'
 import { useTripStore } from '@/stores/trip'
 import { formatTripDateRange, tripDurationDays } from '@/utils/tripForm'
+import { isPastTripStatus, tripStatusLabel, tripStatusSeverity } from '@/utils/tripStatus'
 
 const router = useRouter()
 const tripStore = useTripStore()
 
 const planningTrips = computed(() =>
-  tripStore.trips.filter((trip) => normalizeStatus(trip.status) !== 'DONE'),
+  tripStore.trips.filter((trip) => !isPastTripStatus(trip.status)),
 )
 const pastTrips = computed(() =>
-  tripStore.trips.filter((trip) => normalizeStatus(trip.status) === 'DONE'),
+  tripStore.trips.filter((trip) => isPastTripStatus(trip.status)),
 )
 
 onMounted(() => {
@@ -31,17 +32,11 @@ function goDetail(trip) {
 }
 
 function statusLabel(status) {
-  return normalizeStatus(status) === 'DONE' ? '다녀옴' : '계획 중'
+  return tripStatusLabel(status)
 }
 
 function statusSeverity(status) {
-  return normalizeStatus(status) === 'DONE' ? 'success' : 'info'
-}
-
-function normalizeStatus(status = '') {
-  const upper = status.toUpperCase()
-  if (['DONE', 'PAST', 'COMPLETED'].includes(upper)) return 'DONE'
-  return 'PLANNING'
+  return tripStatusSeverity(status)
 }
 
 function accentFor(region = '') {

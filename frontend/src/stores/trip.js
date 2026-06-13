@@ -6,6 +6,7 @@ export const useTripStore = defineStore('trip', () => {
   const trips = ref([])
   const selectedTrip = ref(null)
   const page = ref(0)
+  const size = ref(20)
   const total = ref(0)
   const loading = ref(false)
   const detailLoading = ref(false)
@@ -24,6 +25,7 @@ export const useTripStore = defineStore('trip', () => {
       const result = await tripApi.fetchTrips(options)
       trips.value = result.items ?? []
       page.value = result.page ?? options.page ?? 0
+      size.value = result.size ?? options.size ?? 20
       total.value = result.total ?? trips.value.length
       return result
     } catch (fetchError) {
@@ -121,6 +123,7 @@ export const useTripStore = defineStore('trip', () => {
     trips,
     selectedTrip,
     page,
+    size,
     total,
     loading,
     detailLoading,
