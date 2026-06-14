@@ -15,15 +15,14 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
-// 회원가입 직후 넘어온 경우 안내(가입 → 로그인 유도 플로우).
 const justRegistered = route.query.registered === '1'
+const justReset = route.query.reset === '1'
 
 async function onSubmit() {
   error.value = ''
   loading.value = true
   try {
     await auth.login(email.value, password.value)
-    // 보호 라우트에서 튕겨온 경우 그 경로로, 아니면 여행 목록으로.
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/trips'
     router.push(redirect)
   } catch (e) {
@@ -39,6 +38,9 @@ async function onSubmit() {
     <h1>로그인</h1>
     <Message v-if="justRegistered" severity="success" :closable="false">
       회원가입이 완료되었습니다. 로그인해 주세요.
+    </Message>
+    <Message v-if="justReset" severity="success" :closable="false">
+      비밀번호가 재설정되었습니다. 새 비밀번호로 로그인해 주세요.
     </Message>
     <form @submit.prevent="onSubmit">
       <label>
@@ -56,6 +58,7 @@ async function onSubmit() {
           required
         />
       </label>
+      <RouterLink class="forgot-link" to="/forgot-password">비밀번호를 잊으셨나요?</RouterLink>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Button type="submit" label="로그인" :loading="loading" />
     </form>
@@ -77,5 +80,14 @@ async function onSubmit() {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+.forgot-link {
+  align-self: flex-end;
+  color: #2563eb;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.forgot-link:hover {
+  text-decoration: underline;
 }
 </style>

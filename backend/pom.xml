@@ -75,6 +75,12 @@
 			<version>3.0.5</version>
 		</dependency>
 
+		<!-- Spring AI OpenAI starter (S3-CORE-02 #66) — SSAFY GMS(OpenAI 호환) 텍스트 LLM. 버전 = BOM. -->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>
