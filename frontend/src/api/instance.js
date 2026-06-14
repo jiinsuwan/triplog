@@ -11,7 +11,13 @@ const instance = axios.create({
 
 // refresh 로 회복할 수 없는 인증 엔드포인트. 이들의 401 은 액세스 토큰 만료가 아니라
 // 인증 실패(잘못된 자격증명·만료/재사용된 refresh)이므로 재시도하지 않는다.
-const AUTH_ENDPOINTS = ['/auth/login', '/auth/signup', '/auth/refresh']
+const AUTH_ENDPOINTS = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/refresh',
+  '/auth/password-reset/request',
+  '/auth/password-reset/confirm',
+]
 
 function isAuthEndpoint(url = '') {
   return AUTH_ENDPOINTS.some((path) => url.includes(path))

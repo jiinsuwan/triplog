@@ -42,4 +42,10 @@
             profile_img = #{profileImg}
         WHERE id = #{id}
     </update>
+
+    <update id="updatePassword">
+        UPDATE users
+        SET password = #{password}
+        WHERE id = #{id}
+    </update>
 </mapper>

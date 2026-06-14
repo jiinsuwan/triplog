@@ -41,6 +41,18 @@ describe('router authGuard — 보호 라우트 가드', () => {
     expect(authGuard(route('/login'))).toBe(true)
   })
 
+  it('password reset routes are public for unauthenticated users', () => {
+    expect(authGuard(route('/forgot-password'))).toBe(true)
+    expect(authGuard(route('/reset-password'))).toBe(true)
+  })
+
+  it('authenticated users are redirected away from password reset screens', () => {
+    useAuthStore().setTokens('a1', 'r1')
+
+    expect(authGuard(route('/forgot-password'))).toEqual({ path: '/' })
+    expect(authGuard(route('/reset-password'))).toEqual({ path: '/' })
+  })
+
   it('여행 상세 라우트는 보호 라우트로 등록한다', () => {
     const detailRoute = router.getRoutes().find((item) => item.name === 'trip-detail')
 
@@ -106,7 +118,7 @@ describe('router authGuard — 보호 라우트 가드', () => {
 describe('router 라우트 등록 — 보호 누락 방지 (S2-CORE-02)', () => {
   // 인증 없이 접근 가능한 공개 라우트. 이 목록에 없는 모든 라우트는 requiresAuth 를 가져야 한다.
   // 새 트랙(trip/log)이 화면을 추가하며 requiresAuth 를 깜빡하면 이 테스트가 잡는다(육안 검토 대신 CI).
-  const PUBLIC_PATHS = ['/', '/login', '/signup']
+  const PUBLIC_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password']
 
   it('공개 목록 외 모든 라우트는 requiresAuth 를 가진다', () => {
     const unprotected = router

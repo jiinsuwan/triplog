@@ -14,6 +14,14 @@ export function signup(email, password, nickname) {
   return instance.post('/auth/signup', { email, password, nickname }).then((res) => res.data.data)
 }
 
+export function requestPasswordReset(email) {
+  return instance.post('/auth/password-reset/request', { email }).then((res) => res.data.data)
+}
+
+export function confirmPasswordReset(token, newPassword) {
+  return instance.post('/auth/password-reset/confirm', { token, newPassword }).then((res) => res.data)
+}
+
 // POST /auth/logout (Authorization + refreshToken) → 서버측 refresh 토큰 무효화
 export function logout(refreshToken) {
   return instance.post('/auth/logout', { refreshToken }).then((res) => res.data)
