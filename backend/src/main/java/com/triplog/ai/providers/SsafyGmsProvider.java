@@ -77,6 +77,10 @@ public class SsafyGmsProvider implements LlmAdapter {
             throw new BusinessException(ErrorCode.AI_CALL_FAILED, "GMS 응답에 생성 결과가 없습니다.");
         }
         String text = result.getOutput().getText();
+        if (!StringUtils.hasText(text)) {
+            // 빈 문구를 성공으로 기록하면 카드에 빈 박스가 렌더된다. 실패로 격리해 호출측이 fallback 하게 한다.
+            throw new BusinessException(ErrorCode.AI_CALL_FAILED, "GMS 응답 텍스트가 비어 있습니다.");
+        }
         String respModel = blankToNull(response.getMetadata().getModel());
         Usage usage = response.getMetadata().getUsage();
         return new LlmResponse(

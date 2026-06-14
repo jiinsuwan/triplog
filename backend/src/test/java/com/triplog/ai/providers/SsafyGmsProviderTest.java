@@ -82,6 +82,17 @@ class SsafyGmsProviderTest {
     }
 
     @Test
+    void blank_text_is_isolated_as_ai_001() {
+        ChatModel chatModel = mock(ChatModel.class);
+        when(chatModel.call(any(Prompt.class))).thenReturn(chatResponse("   ", "gpt-4o-mini", 1, 1, 2));
+
+        assertThatThrownBy(() -> providerWith(chatModel).generateText(new LlmRequest("card-text", "p", null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.AI_CALL_FAILED);
+    }
+
+    @Test
     void missing_key_fails_fast_without_calling_model() {
         @SuppressWarnings("unchecked")
         ObjectProvider<ChatModel> op = mock(ObjectProvider.class);
