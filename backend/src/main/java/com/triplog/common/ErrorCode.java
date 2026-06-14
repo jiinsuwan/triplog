@@ -51,7 +51,8 @@ public enum ErrorCode {
     PHOTO_STORAGE_FAILED("PHOTO_500", HttpStatus.INTERNAL_SERVER_ERROR, "사진 저장에 실패했습니다."),
 
     // --- AI ---
-    AI_CALL_FAILED("AI_001", HttpStatus.BAD_GATEWAY, "AI 호출에 실패했습니다.");
+    AI_CALL_FAILED("AI_001", HttpStatus.BAD_GATEWAY, "AI 호출에 실패했습니다."),
+    AI_INVALID_RESPONSE("AI_002", HttpStatus.BAD_GATEWAY, "AI 응답 형식이 올바르지 않습니다.");
 
     private final String code;
     private final HttpStatus status;
