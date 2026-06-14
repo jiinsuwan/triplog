@@ -254,7 +254,7 @@ Issue 제목과 동일하게.
 
 **판정 사용 기준**:
 
-- **Approve** — `[P1]`이 없고, 직접 검증 또는 CI 상태를 충분히 확인했을 때.
+- **Approve** — `[P1]`이 없고, diff·AC·Test Criteria를 검토하고 관련 검증 증거를 확인했을 때. 로컬 실행을 CI로 갈음하면 왜 충분한지 한 줄 적는다(CI 상태만 보고 approve하지 않는다).
 - **Request changes** — `[P1]`이 있을 때.
 - **Comment** — 판단 유보·질문·검증 부족·방향 협의.
 
@@ -326,9 +326,9 @@ backend build
 ### 8-4. 로컬 통합테스트
 
 - mapper/API 통합테스트(`@SpringBootTest` · `@ActiveProfiles("test")`)는 로컬 MySQL 테스트 스키마 `triplog_test`에서 돈다. H2·Testcontainers는 쓰지 않는다(architecture).
-- Flyway가 스키마를 만들고, 각 테스트가 fixture + 트랜잭션 롤백으로 데이터를 격리한다. **테스트 데이터 공유는 불필요** — 빈 `triplog_test` + 올바른 DB 계정만 있으면 누구나 동일하게 재현된다.
+- **빈 `triplog_test` database를 먼저 만들고**(수동 생성), Flyway가 그 안에 테이블/seed migration을 적용한다. 테스트는 트랜잭션 롤백·고유 fixture·명시 cleanup으로 격리한다(일부는 `NOT_SUPPORTED`·`@AfterEach` 수동 정리). **테스트 데이터 공유는 불필요** — 빈 `triplog_test` + DB 계정만 있으면 동일하게 재현된다.
 - **Spring Boot는 `.env`를 자동으로 읽지 않는다**(dotenv 의존성 없음). IDE 실행 구성 또는 CLI에서 환경변수를 직접 주입한다.
-- ⚠️ `.env`의 `DB_URL`이 개발 DB(`triplog`)를 가리키는 상태로 그대로 테스트를 돌리면 test가 개발 DB를 물 수 있다. 테스트 실행 시 `DB_URL`을 `triplog_test`로 덮어쓰거나, `DB_USER`/`DB_PASSWORD`만 주입하고 `DB_URL`은 test profile 기본값(`triplog_test`)에 맡긴다.
+- ⚠️ 환경변수 `DB_URL`은 test profile 기본값보다 **우선**한다. 셸/IDE에 `DB_URL=...triplog...`(개발 DB)가 이미 잡혀 있으면 `./mvnw test`가 개발 DB를 문다. 테스트 실행 시 `DB_URL`을 `triplog_test`로 **명시**하거나 기존 값을 제거(Bash `unset DB_URL` / PowerShell `Remove-Item Env:DB_URL`)한다. 구체 명령은 `backend/README.md`.
 - 구체 실행 절차(스키마 생성 SQL · Bash/PowerShell/IDE 예시)는 `backend/README.md`.
 
 ---

@@ -54,24 +54,21 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 
 ### 3-1. 로컬 통합테스트 환경
 
-통합테스트는 `@ActiveProfiles("test")`로 `triplog_test` 스키마를 쓴다. Flyway가 스키마를 만들고 각 테스트가 fixture로 데이터를 격리하므로, **빈 `triplog_test` + DB 계정만 있으면 재현**된다(데이터 공유 불필요).
+통합테스트는 `@ActiveProfiles("test")`로 `triplog_test`를 쓴다. **빈 `triplog_test` database를 먼저 만들면**(위 §1 SQL), Flyway가 그 안에 테이블/seed migration을 적용하고, 각 테스트는 트랜잭션 롤백·고유 fixture·명시 cleanup으로 격리한다(일부는 `NOT_SUPPORTED`·`@AfterEach` 수동 정리). 데이터 공유는 불필요 — 빈 `triplog_test` + DB 계정만 있으면 재현된다.
 
 **DB 계정**: 기본은 `triplog` 유저. 로컬에 없으면 본인 계정(`root`·`ssafy` 등)을 쓰고 `DB_USER`/`DB_PASSWORD`를 맞춘다.
 
 **환경변수 주입** — Spring Boot는 `.env`를 자동으로 읽지 않는다(dotenv 의존성 없음):
 
 - **IDE**: EnvFile 플러그인 또는 Run Configuration의 Environment Variables
-- **CLI (Bash)**:
+- **CLI (Bash)** — `DB_URL`을 test DB로 **명시**해 주입한다(환경변수가 test profile 기본값보다 우선하므로):
   ```bash
   cd backend
-  # 방법 A(권장): DB_USER/DB_PASSWORD만 주입 — DB_URL은 test profile 기본값(triplog_test) 사용
-  DB_USER=root DB_PASSWORD=ssafy ./mvnw test
-
-  # 방법 B: .env를 로드하되 DB_URL을 테스트 DB로 덮어쓰기
-  set -a; source ../.env; set +a
-  export DB_URL='jdbc:mysql://localhost:3306/triplog_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8'
-  ./mvnw test
+  DB_URL='jdbc:mysql://localhost:3306/triplog_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8' \
+    DB_USER=root DB_PASSWORD=ssafy ./mvnw test
+  # 또는 셸에 잡힌 개발용 DB_URL을 먼저 제거: unset DB_URL
   ```
+  > `.env`를 `source`하는 방식은 `DB_URL` 값의 `&` 때문에 따옴표 처리가 까다로워 권장하지 않는다. 위처럼 명시적으로 주입한다.
 - **CLI (PowerShell)**:
   ```powershell
   cd backend
@@ -80,7 +77,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
   .\mvnw.cmd test
   ```
 
-> ⚠️ `.env`의 `DB_URL`이 개발 DB(`triplog`)를 가리키면, 그대로 `source` 후 테스트할 때 test가 개발 DB를 물 수 있다. 방법 A(권장)를 쓰거나, 방법 B처럼 `DB_URL`을 `triplog_test`로 반드시 덮어쓴다.
+> ⚠️ 환경변수 `DB_URL`은 test profile 기본값보다 **우선**한다. 셸/IDE에 개발용 `DB_URL`이 이미 있으면 명시 주입을 빠뜨릴 때 test가 개발 DB를 문다. 위처럼 `DB_URL`을 `triplog_test`로 명시하거나 기존 값을 제거(`unset DB_URL`)한다.
 
 ## 4. 패키지 구조
 
