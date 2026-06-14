@@ -48,7 +48,10 @@ public enum ErrorCode {
     PHOTO_TOO_LARGE("PHOTO_003", HttpStatus.PAYLOAD_TOO_LARGE, "사진 용량이 제한을 초과했습니다."),
     PHOTO_NOT_FOUND("PHOTO_004", HttpStatus.NOT_FOUND, "사진을 찾을 수 없습니다."),
     PHOTO_ACCESS_DENIED("PHOTO_005", HttpStatus.FORBIDDEN, "사진 접근 권한이 없습니다."),
-    PHOTO_STORAGE_FAILED("PHOTO_500", HttpStatus.INTERNAL_SERVER_ERROR, "사진 저장에 실패했습니다.");
+    PHOTO_STORAGE_FAILED("PHOTO_500", HttpStatus.INTERNAL_SERVER_ERROR, "사진 저장에 실패했습니다."),
+
+    // --- AI ---
+    AI_CALL_FAILED("AI_001", HttpStatus.BAD_GATEWAY, "AI 호출에 실패했습니다.");
 
     private final String code;
     private final HttpStatus status;
