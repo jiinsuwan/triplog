@@ -29,9 +29,11 @@ spring:
     retry:
       max-attempts: 1
     model:
-      # 우리는 텍스트 chat 만 쓴다. 안 쓰는 OpenAI 모델 자동설정(audio/embedding/image/moderation)은
-      # 비활성화한다 — 키 없을 때 이들이 api-key 검증으로 컨텍스트를 깨뜨리는 것을 막는다.
-      chat: openai
+      # 텍스트 chat 만 쓴다. 안 쓰는 모델 자동설정(audio/embedding/image/moderation)은 항상 비활성화.
+      # chat 도 기본 none(fail-closed) — 키 없는 환경(클론 직후·타 트랙)에서 OpenAI auto-config 가
+      # 부팅 시 api-key 검증으로 컨텍스트를 깨뜨리는 것을 막는다. GMS 키가 있는 환경에서만
+      # SPRING_AI_MODEL_CHAT=openai 로 opt-in 한다(.env.example). 호출 경로 격리는 SsafyGmsProvider.
+      chat: ${SPRING_AI_MODEL_CHAT:none}
       embedding: none
       image: none
       moderation: none

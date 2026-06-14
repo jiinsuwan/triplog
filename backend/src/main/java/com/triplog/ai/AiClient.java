@@ -6,6 +6,8 @@ import com.triplog.ai.dto.LlmResponse;
 import com.triplog.ai.log.AiCallLogger;
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AiClient {
 
+    private static final Logger log = LoggerFactory.getLogger(AiClient.class);
     private static final int ERROR_MESSAGE_MAX = 500;
 
     private final LlmAdapter llmAdapter;
@@ -35,14 +38,29 @@ public class AiClient {
         long startedAt = System.currentTimeMillis();
         try {
             LlmResponse response = llmAdapter.generateText(request);
-            aiCallLogger.record(toSuccessLog(request, response, elapsedMs(startedAt)));
+            safeRecord(toSuccessLog(request, response, elapsedMs(startedAt)));
             return response;
         } catch (BusinessException e) {
-            aiCallLogger.record(toFailureLog(request, elapsedMs(startedAt), e.getMessage()));
+            safeRecord(toFailureLog(request, elapsedMs(startedAt), e.getMessage()));
             throw e;
         } catch (RuntimeException e) {
-            aiCallLogger.record(toFailureLog(request, elapsedMs(startedAt), e.getMessage()));
+            safeRecord(toFailureLog(request, elapsedMs(startedAt), e.getMessage()));
             throw new BusinessException(ErrorCode.AI_CALL_FAILED, ErrorCode.AI_CALL_FAILED.getMessage(), e);
+        }
+    }
+
+    /**
+     * AiCallLog 적재를 본 흐름에서 격리한다(이슈 #66 AC3). record 는 내부에서 insert 예외를 삼키지만,
+     * {@code @Transactional(REQUIRES_NEW)} 프록시의 트랜잭션 begin/commit 실패는 record 본문 try/catch
+     * 밖(프록시 경계)에서 터져 호출측으로 전파될 수 있다. 여기서 한 번 더 감싸 로그 적재 실패가
+     * LLM 호출 성공을 AI_CALL_FAILED 로 뒤집거나, 실패 경로에서 원래 원인을 마스킹하지 않게 한다.
+     */
+    private void safeRecord(AiCallLog entry) {
+        try {
+            aiCallLogger.record(entry);
+        } catch (RuntimeException e) {
+            log.warn("AiCallLog 적재 실패 (호출 흐름은 계속): kind={}, success={}",
+                    entry.getKind(), entry.isSuccess(), e);
         }
     }
 

@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -86,5 +88,31 @@ class AiClientTest {
         ArgumentCaptor<AiCallLog> captor = ArgumentCaptor.forClass(AiCallLog.class);
         verify(aiCallLogger).record(captor.capture());
         assertThat(captor.getValue().isSuccess()).isFalse();
+    }
+
+    @Test
+    void log_record_failure_does_not_break_successful_call() {
+        // REQUIRES_NEW 프록시 commit 실패를 모사: record() 가 호출측으로 예외를 던지는 상황.
+        LlmRequest request = new LlmRequest("card-text", "p", null);
+        LlmResponse response = new LlmResponse("문구", "gpt-4o-mini", 1, 1, 2);
+        when(llmAdapter.generateText(request)).thenReturn(response);
+        doThrow(new RuntimeException("tx commit failed")).when(aiCallLogger).record(any());
+
+        LlmResponse result = aiClient.generateText(request);
+
+        assertThat(result).isEqualTo(response);
+    }
+
+    @Test
+    void log_record_failure_preserves_original_failure() {
+        // 실패 경로에서도 로그 적재 실패가 원래 AI_CALL_FAILED 를 tx 예외로 마스킹하지 않아야 한다.
+        LlmRequest request = new LlmRequest("card-text", "p", null);
+        when(llmAdapter.generateText(request)).thenThrow(new BusinessException(ErrorCode.AI_CALL_FAILED));
+        doThrow(new RuntimeException("tx commit failed")).when(aiCallLogger).record(any());
+
+        assertThatThrownBy(() -> aiClient.generateText(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.AI_CALL_FAILED);
     }
 }
