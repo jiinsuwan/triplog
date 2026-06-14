@@ -15,6 +15,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -26,6 +27,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Objects;
 
 @Service
 public class PasswordResetService {
@@ -39,6 +41,7 @@ public class PasswordResetService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordResetProperties properties;
     private final Environment environment;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -48,6 +51,7 @@ public class PasswordResetService {
                                 PasswordEncoder passwordEncoder,
                                 PasswordResetProperties properties,
                                 Environment environment,
+                                TransactionTemplate transactionTemplate,
                                 Clock clock) {
         this.userMapper = userMapper;
         this.passwordResetTokenMapper = passwordResetTokenMapper;
@@ -55,36 +59,40 @@ public class PasswordResetService {
         this.passwordEncoder = passwordEncoder;
         this.properties = properties;
         this.environment = environment;
+        this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
 
-    @Transactional
     public PasswordResetRequestResponse request(PasswordResetRequest request) {
         long startedAt = System.nanoTime();
         try {
-            User user = userMapper.findByEmail(request.email());
-            if (user == null) {
-                runDummyWork();
-                return PasswordResetRequestResponse.withoutDemoUrl();
-            }
-
-            LocalDateTime now = now();
-            passwordResetTokenMapper.revokeUnusedByUserId(user.getId(), now);
-
-            String rawToken = generateRawToken();
-            PasswordResetToken token = new PasswordResetToken();
-            token.setUserId(user.getId());
-            token.setTokenHash(hashToken(rawToken));
-            token.setExpiresAt(now.plus(properties.getTtl()));
-            passwordResetTokenMapper.insert(token);
-
-            if (shouldExposeDemoUrl()) {
-                return new PasswordResetRequestResponse(buildDemoResetUrl(rawToken));
-            }
-            return PasswordResetRequestResponse.withoutDemoUrl();
+            return Objects.requireNonNull(transactionTemplate.execute(status -> requestInTransaction(request)));
         } finally {
             waitForMinimumDelay(startedAt);
         }
+    }
+
+    private PasswordResetRequestResponse requestInTransaction(PasswordResetRequest request) {
+        User user = userMapper.findByEmail(request.email());
+        if (user == null) {
+            runDummyWork();
+            return PasswordResetRequestResponse.withoutDemoUrl();
+        }
+
+        LocalDateTime now = now();
+        passwordResetTokenMapper.revokeUnusedByUserId(user.getId(), now);
+
+        String rawToken = generateRawToken();
+        PasswordResetToken token = new PasswordResetToken();
+        token.setUserId(user.getId());
+        token.setTokenHash(hashToken(rawToken));
+        token.setExpiresAt(now.plus(properties.getTtl()));
+        passwordResetTokenMapper.insert(token);
+
+        if (shouldExposeDemoUrl()) {
+            return new PasswordResetRequestResponse(buildDemoResetUrl(rawToken));
+        }
+        return PasswordResetRequestResponse.withoutDemoUrl();
     }
 
     @Transactional

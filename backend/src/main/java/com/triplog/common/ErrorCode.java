@@ -14,8 +14,6 @@ import org.springframework.http.HttpStatus;
  */
 public enum ErrorCode {
 
-    PASSWORD_RESET_FAILED("AUTH_007", HttpStatus.BAD_REQUEST, "비밀번호 재설정을 완료할 수 없습니다."),
-
     // --- COMMON ---
     INVALID_INPUT("COMMON_001", HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
     DATA_INTEGRITY_VIOLATION("COMMON_002", HttpStatus.CONFLICT, "데이터 제약 조건을 위반했습니다."),
@@ -30,6 +28,7 @@ public enum ErrorCode {
     ACCESS_DENIED("AUTH_004", HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     INVALID_CREDENTIALS("AUTH_005", HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     REFRESH_TOKEN_REUSED("AUTH_006", HttpStatus.UNAUTHORIZED, "이미 사용된 리프레시 토큰입니다."),
+    PASSWORD_RESET_FAILED("AUTH_007", HttpStatus.BAD_REQUEST, "비밀번호 재설정을 완료할 수 없습니다."),
 
     // --- USER ---
     EMAIL_ALREADY_EXISTS("USER_001", HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),

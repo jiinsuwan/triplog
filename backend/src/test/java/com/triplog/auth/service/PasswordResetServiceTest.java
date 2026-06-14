@@ -19,6 +19,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -55,6 +58,7 @@ class PasswordResetServiceTest {
 
     private PasswordResetProperties properties;
     private Environment environment;
+    private TransactionTemplate transactionTemplate;
     private PasswordResetService service;
 
     @BeforeEach
@@ -62,8 +66,14 @@ class PasswordResetServiceTest {
         properties = new PasswordResetProperties();
         properties.setMinResponseDelay(Duration.ZERO);
         environment = new MockEnvironment();
+        transactionTemplate = new TransactionTemplate() {
+            @Override
+            public <T> T execute(TransactionCallback<T> action) {
+                return action.doInTransaction(new SimpleTransactionStatus());
+            }
+        };
         service = new PasswordResetService(userMapper, passwordResetTokenMapper, refreshTokenMapper,
-                passwordEncoder, properties, environment, FIXED_CLOCK);
+                passwordEncoder, properties, environment, transactionTemplate, FIXED_CLOCK);
     }
 
     @Test
