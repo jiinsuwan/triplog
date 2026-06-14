@@ -129,4 +129,16 @@ describe('axios instance — 401 refresh 인터셉터', () => {
     // 인터셉터가 동적 import 로 라우터를 가져와 이동 → 비동기이므로 waitFor 로 확인.
     await vi.waitFor(() => expect(pushMock).toHaveBeenCalledWith('/login'))
   })
+
+  it('password reset endpoints do not trigger refresh on 401', async () => {
+    const adapter = makeAdapter(() => 401)
+    instance.defaults.adapter = adapter
+
+    await expect(
+      instance.post('/auth/password-reset/confirm', { token: 'bad', newPassword: 'password123' }),
+    ).rejects.toMatchObject({ response: { status: 401 } })
+
+    expect(postSpy).not.toHaveBeenCalled()
+    expect(adapter).toHaveBeenCalledTimes(1)
+  })
 })
