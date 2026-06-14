@@ -3,7 +3,10 @@ package com.triplog.ai.card;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import com.triplog.ai.card.dto.CardCaptionObject;
 import com.triplog.ai.card.dto.CardCaptionResponse;
 import com.triplog.common.BusinessException;
@@ -33,6 +36,11 @@ public class CardCaptionValidator {
     // ObjectMapper는 설정 후 thread-safe라 단일 인스턴스를 공유한다.
     private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            // 좌표 금지(unknown 거부)에 더해 타입 강제 변환도 잠근다 — 문자열 숫자("0")·소수(1.5)가
+            // Integer itemId/anchor 로 흡수되면 LLM 응답 타입 계약이 문서보다 느슨해진다(파싱에서 거부).
+            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+            .withCoercionConfig(LogicalType.Integer, cfg ->
+                    cfg.setCoercion(CoercionInputShape.String, CoercionAction.Fail))
             .build();
 
     /**
@@ -45,6 +53,11 @@ public class CardCaptionValidator {
             if (parsed == null) {
                 // JSON 리터럴 null 등 — 파싱은 됐으나 본문이 없음
                 throw new BusinessException(ErrorCode.AI_INVALID_RESPONSE, "AI 응답이 비어 있습니다.");
+            }
+            if (parsed.objects() != null && parsed.objects().contains(null)) {
+                // objects 에 null 요소(예: [null]) — 이후 구조/참조 검증이 obj.itemId() 에서 NPE 로
+                // 새지 않도록 파싱 단계에서 거부한다(검증 불가한 malformed 응답).
+                throw new BusinessException(ErrorCode.AI_INVALID_RESPONSE, "AI 응답 objects 에 null 요소가 있습니다.");
             }
             return parsed;
         } catch (JsonProcessingException e) {
@@ -91,7 +104,7 @@ public class CardCaptionValidator {
 
                 if (isNoteInvalid(obj.note())) {
                     issues.add(issue(CardCaptionRule.NOTE_REQUIRED, path + ".note"));
-                } else if (obj.note().size() > MAX_NOTE_LINES) {
+                } else if (effectiveLineCount(obj.note()) > MAX_NOTE_LINES) {
                     issues.add(issue(CardCaptionRule.NOTE_TOO_MANY_LINES, path + ".note"));
                 }
 
@@ -137,6 +150,18 @@ public class CardCaptionValidator {
     private boolean isNoteInvalid(List<String> note) {
         return note == null || note.isEmpty()
                 || note.stream().anyMatch(line -> line == null || line.isBlank());
+    }
+
+    /**
+     * note 각 요소 내부 개행까지 펼친 실제 줄 수. 한 요소에 여러 줄을 욱여넣어 줄 수 권고를
+     * 우회하는 것(예: {@code ["a\nb\nc"]} 는 size 1 이지만 실제 3줄)을 줄 수 판정에 반영한다.
+     */
+    private int effectiveLineCount(List<String> note) {
+        int count = 0;
+        for (String line : note) {
+            count += line.split("\\R").length;
+        }
+        return count;
     }
 
     private String objectPath(int index) {

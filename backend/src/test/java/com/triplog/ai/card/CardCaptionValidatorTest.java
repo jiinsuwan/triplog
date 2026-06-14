@@ -54,6 +54,44 @@ class CardCaptionValidatorTest {
     }
 
     @Test
+    void rejects_string_number_item_id() {
+        // 문자열 숫자("0")가 Integer itemId 로 흡수되면 타입 계약이 느슨해진다 → 파싱에서 거부.
+        String json = """
+                { "objects": [ { "itemId": "0", "note": ["x"] } ],
+                  "closing": { "text": "끝" } }
+                """;
+
+        assertThatThrownBy(() -> validator.parse(json))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AI_INVALID_RESPONSE);
+    }
+
+    @Test
+    void rejects_float_anchor() {
+        // 소수 anchor(1.5)가 1 로 절삭되어 흡수되는 것을 막는다.
+        String json = """
+                { "objects": [ { "itemId": 0, "anchor": 1.5, "note": ["x"] } ],
+                  "closing": { "text": "끝" } }
+                """;
+
+        assertThatThrownBy(() -> validator.parse(json))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AI_INVALID_RESPONSE);
+    }
+
+    @Test
+    void rejects_null_object_element() {
+        // objects 배열의 null 요소 → 구조/참조 검증의 NPE 대신 파싱 단계에서 거부.
+        String json = """
+                { "objects": [ null ], "closing": { "text": "끝" } }
+                """;
+
+        assertThatThrownBy(() -> validator.parse(json))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AI_INVALID_RESPONSE);
+    }
+
+    @Test
     void rejects_malformed_json() {
         assertThatThrownBy(() -> validator.parse("{ not json"))
                 .isInstanceOf(BusinessException.class)
@@ -160,6 +198,17 @@ class CardCaptionValidatorTest {
         ValidationResult result = validator.validateStructure(res);
 
         assertThat(result.valid()).isTrue();
+        assertThat(result.warnings()).extracting(ValidationResult.Issue::rule)
+                .contains(CardCaptionRule.NOTE_TOO_MANY_LINES);
+    }
+
+    @Test
+    void warns_note_with_embedded_newlines() {
+        // ["한\n두\n세"]는 size 1이지만 실제 3줄 — 개행으로 줄 수 권고를 우회하는 것을 줄 수 경고로 잡는다.
+        CardCaptionResponse res = withFirst(new CardCaptionObject(0, 0, List.of("한\n두\n세")));
+
+        ValidationResult result = validator.validateStructure(res);
+
         assertThat(result.warnings()).extracting(ValidationResult.Issue::rule)
                 .contains(CardCaptionRule.NOTE_TOO_MANY_LINES);
     }
