@@ -226,6 +226,38 @@ Issue 제목과 동일하게.
 
 로그인이 필요한 라우트는 `meta: { requiresAuth: true }`를 **명시**한다. **기본 = 보호, 공개 라우트만 명시 목록**(`/`·`/login`·`/signup`)으로 둔다. 새 라우트가 깜빡 빠지지 않도록 **자동 테스트로 강제**한다(`frontend/src/router/index.spec.js` — 공개 목록 외 전 라우트에 `requiresAuth` 존재 검사). 가드 로직·layout 구조 변경은 §6-3 리뷰 필수. (근거: detail·places 라우트에서 누락 재발 — decisions/0005.)
 
+### 6-5. 리뷰 코멘트 형식
+
+상호 리뷰(§1-3) 코멘트는 아래 구조로 작성한다. 리뷰어가 무엇을 실제로 검증했는지, 무엇이 머지를 막는지 한눈에 보이게 한다.
+
+**제목**:
+
+```text
+[S{N}-{TRACK}-{NN}] 리뷰 — Approve | Request changes | Comment
+```
+
+**본문 섹션**:
+
+- **검증** — 실제로 실행·확인한 것만 적는다(명령·CI 상태·화면/API/DB 확인). 못 한 검증은 "미실행" 또는 "CI로 갈음"처럼 명시한다.
+- **Issue 충족** — Acceptance Criteria / Test Criteria를 항목별로 대조한다.
+- **머지 전 필수** — 머지를 막는 blocker(`[P1]`)만. 없으면 "없음".
+- **관찰점** — 후속 Issue·선택 개선·리스크 메모 등 머지를 막지 않는 항목(`[P2]`).
+- **nit** — 동작 영향이 거의 없는 문구·주석·가독성 제안.
+
+작은 PR은 순서만 유지하고 빈 섹션은 "없음"으로 줄일 수 있다.
+
+**severity 태그**:
+
+- `[P1]` 머지 전 필수 — 보안·데이터 손상·API 계약 위반·AC 미충족·CI/테스트 실패.
+- `[P2]` 머지는 가능하나 후속으로 처리할 결함/리스크.
+- `[nit]` 동작 영향이 거의 없는 가독성·주석·문구·작은 정리.
+
+**판정 사용 기준**:
+
+- **Approve** — `[P1]`이 없고, diff·AC·Test Criteria를 검토하고 관련 검증 증거를 확인했을 때. 로컬 실행을 CI로 갈음하면 왜 충분한지 한 줄 적는다(CI 상태만 보고 approve하지 않는다).
+- **Request changes** — `[P1]`이 있을 때.
+- **Comment** — 판단 유보·질문·검증 부족·방향 협의.
+
 ---
 
 ## 7. Labels
@@ -290,6 +322,14 @@ backend build
 ```
 
 여유 생기면 `frontend lint`, `frontend unit test`, `backend integration test`를 추가합니다.
+
+### 8-4. 로컬 통합테스트
+
+- mapper/API 통합테스트(`@SpringBootTest` · `@ActiveProfiles("test")`)는 로컬 MySQL 테스트 스키마 `triplog_test`에서 돈다. H2·Testcontainers는 쓰지 않는다(architecture).
+- **빈 `triplog_test` database를 먼저 만들고**(수동 생성), Flyway가 그 안에 테이블/seed migration을 적용한다. 테스트는 트랜잭션 롤백·고유 fixture·명시 cleanup으로 격리한다(일부는 `NOT_SUPPORTED`·`@AfterEach` 수동 정리). **테스트 데이터 공유는 불필요** — 빈 `triplog_test` + DB 계정만 있으면 동일하게 재현된다.
+- **Spring Boot는 `.env`를 자동으로 읽지 않는다**(dotenv 의존성 없음). IDE 실행 구성 또는 CLI에서 환경변수를 직접 주입한다.
+- ⚠️ 환경변수 `DB_URL`은 test profile 기본값보다 **우선**한다. 셸/IDE에 `DB_URL=...triplog...`(개발 DB)가 이미 잡혀 있으면 `./mvnw test`가 개발 DB를 문다. 테스트 실행 시 `DB_URL`을 `triplog_test`로 **명시**하거나 기존 값을 제거(Bash `unset DB_URL` / PowerShell `Remove-Item Env:DB_URL`)한다. 구체 명령은 `backend/README.md`.
+- 구체 실행 절차(스키마 생성 SQL · Bash/PowerShell/IDE 예시)는 `backend/README.md`.
 
 ---
 
