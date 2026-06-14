@@ -41,7 +41,7 @@ env를 export 한 뒤(또는 IDE 실행 구성에 등록):
 ```bash
 export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 
-./mvnw test                 # 단위/웹 테스트 (DB 불필요)
+./mvnw test                 # 단위 + 통합테스트 (통합테스트는 MySQL triplog_test 필요)
 ./mvnw spring-boot:run      # 앱 실행 → http://localhost:8080
 ./mvnw clean package        # 빌드
 ```
@@ -49,6 +49,38 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 - 헬스 체크: `GET /api/health` → `{"code":"SUCCESS","data":{"status":"UP"}}`
 - API 명세(Swagger UI): `http://localhost:8080/swagger-ui.html`
 - 앱 기동 시 Flyway가 `db/migration/V*.sql`을 자동 적용한다.
+
+> `./mvnw test`에는 `@SpringBootTest`/Mapper 통합테스트가 포함되어 **MySQL `triplog_test`가 필요**하다. 단위테스트만 돌리려면 `-Dtest=...`로 한정한다.
+
+### 3-1. 로컬 통합테스트 환경
+
+통합테스트는 `@ActiveProfiles("test")`로 `triplog_test` 스키마를 쓴다. Flyway가 스키마를 만들고 각 테스트가 fixture로 데이터를 격리하므로, **빈 `triplog_test` + DB 계정만 있으면 재현**된다(데이터 공유 불필요).
+
+**DB 계정**: 기본은 `triplog` 유저. 로컬에 없으면 본인 계정(`root`·`ssafy` 등)을 쓰고 `DB_USER`/`DB_PASSWORD`를 맞춘다.
+
+**환경변수 주입** — Spring Boot는 `.env`를 자동으로 읽지 않는다(dotenv 의존성 없음):
+
+- **IDE**: EnvFile 플러그인 또는 Run Configuration의 Environment Variables
+- **CLI (Bash)**:
+  ```bash
+  cd backend
+  # 방법 A(권장): DB_USER/DB_PASSWORD만 주입 — DB_URL은 test profile 기본값(triplog_test) 사용
+  DB_USER=root DB_PASSWORD=ssafy ./mvnw test
+
+  # 방법 B: .env를 로드하되 DB_URL을 테스트 DB로 덮어쓰기
+  set -a; source ../.env; set +a
+  export DB_URL='jdbc:mysql://localhost:3306/triplog_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8'
+  ./mvnw test
+  ```
+- **CLI (PowerShell)**:
+  ```powershell
+  cd backend
+  $env:DB_URL = 'jdbc:mysql://localhost:3306/triplog_test?serverTimezone=Asia/Seoul&characterEncoding=UTF-8'
+  $env:DB_USER = 'root'; $env:DB_PASSWORD = 'ssafy'
+  .\mvnw.cmd test
+  ```
+
+> ⚠️ `.env`의 `DB_URL`이 개발 DB(`triplog`)를 가리키면, 그대로 `source` 후 테스트할 때 test가 개발 DB를 물 수 있다. 방법 A(권장)를 쓰거나, 방법 B처럼 `DB_URL`을 `triplog_test`로 반드시 덮어쓴다.
 
 ## 4. 패키지 구조
 
