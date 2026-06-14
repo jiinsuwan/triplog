@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.triplog.itinerary.mapper.ItineraryStopMapper">
+
+    <resultMap id="ItineraryStopResultMap" type="com.triplog.itinerary.domain.ItineraryStop">
+        <id property="id" column="id"/>
+        <result property="tripId" column="trip_id"/>
+        <result property="dayNumber" column="day_number"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="placeSource" column="place_source"/>
+        <result property="placeProvider" column="place_provider"/>
+        <result property="dbPlaceId" column="db_place_id"/>
+        <result property="sourcePlaceId" column="source_place_id"/>
+        <result property="placeType" column="place_type"/>
+        <result property="placeName" column="place_name"/>
+        <result property="category" column="category"/>
+        <result property="categoryGroup" column="category_group"/>
+        <result property="region1" column="region1"/>
+        <result property="region2" column="region2"/>
+        <result property="address" column="address"/>
+        <result property="roadAddress" column="road_address"/>
+        <result property="latitude" column="latitude"/>
+        <result property="longitude" column="longitude"/>
+        <result property="phone" column="phone"/>
+        <result property="placeUrl" column="place_url"/>
+        <result property="selectedTime" column="selected_time"/>
+        <result property="memo" column="memo"/>
+        <result property="transport" column="transport"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="ItineraryStopColumns">
+        id, trip_id, day_number, sort_order, place_source, place_provider, db_place_id,
+        source_place_id, place_type, place_name, category, category_group, region1, region2,
+        address, road_address, latitude, longitude, phone, place_url, selected_time, memo,
+        transport, created_at, updated_at
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO itinerary_stops (
+            trip_id, day_number, sort_order, place_source, place_provider, db_place_id,
+            source_place_id, place_type, place_name, category, category_group, region1, region2,
+            address, road_address, latitude, longitude, phone, place_url, selected_time, memo, transport
+        )
+        VALUES (
+            #{tripId}, #{dayNumber}, #{sortOrder}, #{placeSource}, #{placeProvider}, #{dbPlaceId},
+            #{sourcePlaceId}, #{placeType}, #{placeName}, #{category}, #{categoryGroup}, #{region1}, #{region2},
+            #{address}, #{roadAddress}, #{latitude}, #{longitude}, #{phone}, #{placeUrl},
+            #{selectedTime}, #{memo}, #{transport}
+        )
+    </insert>
+
+    <select id="findByTripId" resultMap="ItineraryStopResultMap">
+        SELECT <include refid="ItineraryStopColumns"/>
+        FROM itinerary_stops
+        WHERE trip_id = #{tripId}
+        ORDER BY day_number ASC, sort_order ASC, id ASC
+    </select>
+
+    <select id="findByTripIdAndDay" resultMap="ItineraryStopResultMap">
+        SELECT <include refid="ItineraryStopColumns"/>
+        FROM itinerary_stops
+        WHERE trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <select id="findByIdAndTripAndDay" resultMap="ItineraryStopResultMap">
+        SELECT <include refid="ItineraryStopColumns"/>
+        FROM itinerary_stops
+        WHERE id = #{id}
+          AND trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </select>
+
+    <select id="findMaxSortOrder" resultType="int">
+        SELECT COALESCE(MAX(sort_order), 0)
+        FROM itinerary_stops
+        WHERE trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </select>
+
+    <update id="updateDetails">
+        UPDATE itinerary_stops
+        SET selected_time = #{selectedTime},
+            memo = #{memo},
+            transport = #{transport}
+        WHERE id = #{id}
+          AND trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM itinerary_stops
+        WHERE id = #{id}
+          AND trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </delete>
+
+    <update id="decrementSortOrdersAfter">
+        UPDATE itinerary_stops
+        SET sort_order = sort_order - 1
+        WHERE trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+          AND sort_order &gt; #{sortOrder}
+    </update>
+
+    <update id="bumpSortOrders">
+        UPDATE itinerary_stops
+        SET sort_order = sort_order + #{offset}
+        WHERE trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </update>
+
+    <update id="updateSortOrder">
+        UPDATE itinerary_stops
+        SET sort_order = #{sortOrder}
+        WHERE id = #{id}
+          AND trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </update>
+</mapper>

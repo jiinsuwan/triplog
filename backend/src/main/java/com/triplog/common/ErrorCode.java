@@ -38,6 +38,11 @@ public enum ErrorCode {
     TRIP_ACCESS_DENIED("TRIP_002", HttpStatus.FORBIDDEN, "Trip access denied."),
     TRIP_INVALID_INPUT("TRIP_003", HttpStatus.BAD_REQUEST, "Invalid trip input."),
 
+    // --- ITIN ---
+    ITIN_STOP_NOT_FOUND("ITIN_001", HttpStatus.NOT_FOUND, "Itinerary stop not found."),
+    ITIN_INVALID_INPUT("ITIN_002", HttpStatus.BAD_REQUEST, "Invalid itinerary input."),
+    ITIN_INVALID_REORDER("ITIN_003", HttpStatus.BAD_REQUEST, "Invalid itinerary stop order."),
+
     // --- PLACE ---
     PLACE_NOT_FOUND("PLACE_001", HttpStatus.NOT_FOUND, "Place not found."),
 
