@@ -60,6 +60,7 @@ class CardCaptionPromptBuilderTest {
                 .contains("우하단")
                 .contains("grid")         // label 없는 항목 처리 지시 (§5)
                 .contains("한국어")        // 출력 언어 강제
+                .contains("코멘트 대상에서 제외")  // anchors 빈 항목 skip 지시
                 .contains("좌표");         // 0004 D4 좌표 금지
     }
 
@@ -79,13 +80,13 @@ class CardCaptionPromptBuilderTest {
     void embeds_item_metadata() {
         String prompt = builder.build(referenceItems());
 
-        // 직렬화된 items가 프롬프트에 그대로 실린다 (실측 키 center_norm/area_frac/anchors)
+        // 직렬화된 items가 프롬프트에 그대로 실린다 (API 계약 키 center/area/anchors)
         assertThat(prompt)
                 .contains("\"id\":0")
                 .contains("꽈배기 튀김 접시")
                 .contains("\"src\":\"grid\"")
-                .contains("\"center_norm\":")
-                .contains("\"area_frac\":")
+                .contains("\"center\":")
+                .contains("\"area\":")
                 .contains("\"anchors\":");
         // label 없는 항목은 null로 직렬화 (위치·면적으로만 판단하라는 신호)
         assertThat(prompt).contains("\"label\":null");

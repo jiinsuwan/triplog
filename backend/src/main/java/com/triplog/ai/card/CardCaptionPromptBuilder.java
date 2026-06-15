@@ -47,17 +47,18 @@ public class CardCaptionPromptBuilder {
     private static final String INSTRUCTION_HEADER = """
             당신은 여행 사진 카드의 문구를 배치하는 도우미입니다.
             아래 items는 사진에서 자동 검출된 객체 목록입니다. 이미지는 주어지지 않으며, 메타데이터만으로 판단합니다.
-            각 item의 center_norm/area_frac는 0~1 정규화 좌표·면적이고, anchors는 점수순 후보 좌표 [x, y, score]입니다.""";
+            각 item의 center/area는 0~1 정규화 좌표·면적이고, anchors는 점수순 후보 좌표 [x, y, score]입니다.""";
 
     // §2-1.1~2-1.4 규칙. 개수(3~6)·줄수(2)는 §2-1 권고(사용자 이후 자유 조정 전제)라 가이드로 제시한다.
     private static final String RULES = """
             [작업 규칙]
-            1. 코멘트를 달 객체를 3~6개 고릅니다. 전부가 아니라 주인공·특이점 위주로 area_frac·center_norm·label·src를 보고 고릅니다. src가 grid 또는 sal인 항목은 label이 없으니(null) 위치(center_norm)·면적(area_frac)으로만 판단합니다.
-            2. 각 객체의 anchor는 anchors[0](1순위)을 기본으로 씁니다. 이미 다른 문구를 같은 영역에 배치했다면 anchors[1] 이후 인덱스로 피해 분산합니다. 화면 가장자리 0.06 이내와 네 코너는 피합니다(날짜·장소는 좌상단, 마무리는 우하단 자리로 예약되어 있습니다).
-            3. note(문구)는 객체당 2줄 이내의 짧은 문구입니다. 배열의 한 원소가 한 줄입니다.
-            4. closing은 우하단에 들어갈 마무리 한 줄입니다(선택).
-            5. 모든 문구(note·closing)는 한국어로 작성합니다. label이 영어여도 한국어로 씁니다.
-            6. 좌표·외곽선·장식은 만들지 않습니다. 객체는 itemId와 anchor(인덱스)로만 참조합니다. 아래 출력 형식에 없는 필드는 절대 넣지 않습니다.""";
+            1. 코멘트를 달 객체를 3~6개 고릅니다. 전부가 아니라 주인공·특이점 위주로 area·center·label·src를 보고 고릅니다. src가 grid 또는 sal인 항목은 label이 없으니(null) 위치(center)·면적(area)으로만 판단합니다.
+            2. anchors가 빈 항목은 문구를 놓을 자리가 없으니 코멘트 대상에서 제외합니다.
+            3. 각 객체의 anchor는 anchors[0](1순위)을 기본으로 씁니다. 이미 다른 문구를 같은 영역에 배치했다면 anchors[1] 이후 인덱스로 피해 분산합니다. 화면 가장자리 0.06 이내와 네 코너는 피합니다(날짜·장소는 좌상단, 마무리는 우하단 자리로 예약되어 있습니다).
+            4. note(문구)는 객체당 2줄 이내의 짧은 문구입니다. 배열의 한 원소가 한 줄입니다.
+            5. closing은 우하단에 들어갈 마무리 한 줄입니다(선택).
+            6. 모든 문구(note·closing)는 한국어로 작성합니다. label이 영어여도 한국어로 씁니다.
+            7. 좌표·외곽선·장식은 만들지 않습니다. 객체는 itemId와 anchor(인덱스)로만 참조합니다. 아래 출력 형식에 없는 필드는 절대 넣지 않습니다.""";
 
     private static final String OUTPUT_FORMAT = """
             [출력 형식] 아래 JSON 객체 하나만 출력합니다. 설명·코드블록·마크다운 없이 JSON만 출력합니다.

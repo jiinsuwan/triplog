@@ -27,6 +27,12 @@ public record ValidationContext(
         Map<Integer, Integer> anchorCounts
 ) {
 
+    /** 방어적 불변 복사 — 외부에서 넘긴 컬렉션이 이후 변경돼도 검증 컨텍스트가 흔들리지 않게 한다. */
+    public ValidationContext {
+        validItemIds = validItemIds == null ? Set.of() : Set.copyOf(validItemIds);
+        anchorCounts = anchorCounts == null ? Map.of() : Map.copyOf(anchorCounts);
+    }
+
     /**
      * 사이드카 items에서 참조 검증 컨텍스트를 만든다 (S3-LOG-03).
      *
