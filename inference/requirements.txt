@@ -1,0 +1,23 @@
+# 추론 서버 의존성
+# 스파이크 측정 환경: Python 3.10, ultralytics 8.4.65, torch 2.12.0 (SPIKE_RESULT.md 기준).
+# 정확한 버전 고정이 필요하면 설치 후 `pip freeze > requirements.lock` 권장.
+
+# 웹 서버
+fastapi
+uvicorn[standard]
+python-multipart          # UploadFile(multipart) 파싱
+
+# 이미지 처리
+opencv-python
+numpy
+pillow
+pillow-heif               # HEIC/HEIF(아이폰 기본 포맷) 디코드 — cv2 가 못 푸는 경로 폴백
+
+# 모델 — 윤곽선 검출/세그멘테이션
+ultralytics==8.4.65       # YOLO-World + SAM2 (버전 민감 — 고정)
+torch                     # ultralytics 의존 (스파이크 측정 = 2.12.0)
+rembg                     # saliency (u2net)
+
+# 테스트
+pytest
+httpx                     # FastAPI TestClient

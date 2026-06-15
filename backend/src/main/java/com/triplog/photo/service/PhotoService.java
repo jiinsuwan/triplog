@@ -1,13 +1,20 @@
 package com.triplog.photo.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
+import com.triplog.photo.domain.OutlineStatus;
 import com.triplog.photo.domain.Photo;
+import com.triplog.photo.domain.PhotoOutline;
 import com.triplog.photo.dto.PhotoContent;
 import com.triplog.photo.dto.PhotoResponse;
 import com.triplog.photo.exif.ExifData;
 import com.triplog.photo.exif.ExifExtractor;
 import com.triplog.photo.mapper.PhotoMapper;
+import com.triplog.photo.mapper.PhotoOutlineMapper;
+import com.triplog.photo.outline.PhotoOutlineResponse;
 import com.triplog.photo.storage.PhotoStorage;
 import com.triplog.trip.domain.Trip;
 import com.triplog.trip.mapper.TripMapper;
@@ -43,16 +50,21 @@ public class PhotoService {
     private static final String FALLBACK_NAME = "unnamed";
 
     private final PhotoMapper photoMapper;
+    private final PhotoOutlineMapper photoOutlineMapper;
     private final PhotoStorage photoStorage;
     private final ExifExtractor exifExtractor;
     private final TripMapper tripMapper;
+    private final ObjectMapper objectMapper;
 
-    public PhotoService(PhotoMapper photoMapper, PhotoStorage photoStorage, ExifExtractor exifExtractor,
-                        TripMapper tripMapper) {
+    public PhotoService(PhotoMapper photoMapper, PhotoOutlineMapper photoOutlineMapper,
+                        PhotoStorage photoStorage, ExifExtractor exifExtractor,
+                        TripMapper tripMapper, ObjectMapper objectMapper) {
         this.photoMapper = photoMapper;
+        this.photoOutlineMapper = photoOutlineMapper;
         this.photoStorage = photoStorage;
         this.exifExtractor = exifExtractor;
         this.tripMapper = tripMapper;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -89,6 +101,8 @@ public class PhotoService {
             photo.setLatitude(exif.latitude());
             photo.setLongitude(exif.longitude());
             photoMapper.insert(photo);
+            // 윤곽선 전처리 대기 행 생성(PENDING). 추론 서버 호출은 업로드와 분리된 백그라운드 워커가 한다.
+            photoOutlineMapper.insertPending(photo.getId());
 
             responses.add(PhotoResponse.from(photoMapper.findById(photo.getId())));
         }
@@ -128,6 +142,30 @@ public class PhotoService {
         // 여기서 EXIF 스트립이 필요하다(현재는 소유자만 접근하므로 미적용).
         Resource resource = photoStorage.load(photo.getStoredFilename());
         return new PhotoContent(resource, photo.getContentType(), photo.getStoredFilename());
+    }
+
+    /** 사진의 윤곽선 전처리 상태/결과 조회(소유자만). 추론 전이면 PENDING, items 는 READY 일 때만. */
+    @Transactional(readOnly = true)
+    public PhotoOutlineResponse getOutline(Long userId, Long photoId) {
+        requireOwnedPhoto(userId, photoId);
+        PhotoOutline outline = photoOutlineMapper.findByPhotoId(photoId);
+        if (outline == null) {
+            // 이 기능 도입(V12) 전 업로드된 사진 등 — 아직 전처리 대상 행이 없음.
+            return new PhotoOutlineResponse(photoId, OutlineStatus.PENDING, null);
+        }
+        return new PhotoOutlineResponse(photoId, outline.getStatus(), parseItems(outline.getItems()));
+    }
+
+    // items JSON 원문 → JsonNode(응답에 그대로 JSON 으로 실리도록). 깨졌으면 null.
+    private JsonNode parseItems(String items) {
+        if (items == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(items);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     // 사진 소유권 확인. 없으면 NOT_FOUND, 남의 사진이면 ACCESS_DENIED.

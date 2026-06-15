@@ -1,9 +1,15 @@
 package com.triplog.photo.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.triplog.common.BusinessException;
+import com.triplog.photo.domain.OutlineStatus;
 import com.triplog.photo.domain.Photo;
+import com.triplog.photo.domain.PhotoOutline;
 import com.triplog.photo.exif.ExifData;
 import com.triplog.photo.exif.ExifExtractor;
 import com.triplog.photo.mapper.PhotoMapper;
+import com.triplog.photo.mapper.PhotoOutlineMapper;
+import com.triplog.photo.outline.PhotoOutlineResponse;
 import com.triplog.photo.storage.PhotoStorage;
 import com.triplog.trip.mapper.TripMapper;
 import org.junit.jupiter.api.Test;
@@ -11,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,6 +25,8 @@ import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -37,11 +46,15 @@ class PhotoServiceTest {
     @Mock
     private PhotoMapper photoMapper;
     @Mock
+    private PhotoOutlineMapper photoOutlineMapper;
+    @Mock
     private PhotoStorage photoStorage;
     @Mock
     private ExifExtractor exifExtractor;
     @Mock
     private TripMapper tripMapper;
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
     @InjectMocks
     private PhotoService photoService;
 
@@ -63,5 +76,64 @@ class PhotoServiceTest {
         InOrder order = inOrder(exifExtractor, photoStorage);
         order.verify(exifExtractor).extract(any());
         order.verify(photoStorage).store(any(), any());
+    }
+
+    // ---- getOutline (윤곽선 조회 API) ----
+
+    private Photo ownedPhoto(long id, long userId) {
+        Photo photo = new Photo();
+        photo.setId(id);
+        photo.setUserId(userId);
+        return photo;
+    }
+
+    @Test
+    void get_outline_returns_pending_when_no_row() {
+        when(photoMapper.findById(5L)).thenReturn(ownedPhoto(5L, 1L));
+        when(photoOutlineMapper.findByPhotoId(5L)).thenReturn(null);
+
+        PhotoOutlineResponse r = photoService.getOutline(1L, 5L);
+
+        assertThat(r.status()).isEqualTo(OutlineStatus.PENDING);
+        assertThat(r.items()).isNull();
+    }
+
+    @Test
+    void get_outline_returns_items_when_ready() {
+        when(photoMapper.findById(5L)).thenReturn(ownedPhoto(5L, 1L));
+        PhotoOutline outline = new PhotoOutline();
+        outline.setPhotoId(5L);
+        outline.setStatus(OutlineStatus.READY);
+        outline.setItems("[{\"id\":0,\"label\":\"cup\"}]");
+        when(photoOutlineMapper.findByPhotoId(5L)).thenReturn(outline);
+
+        PhotoOutlineResponse r = photoService.getOutline(1L, 5L);
+
+        assertThat(r.status()).isEqualTo(OutlineStatus.READY);
+        assertThat(r.items()).isNotNull();
+        assertThat(r.items().get(0).get("label").asText()).isEqualTo("cup");
+    }
+
+    @Test
+    void get_outline_returns_null_items_when_json_broken() {
+        when(photoMapper.findById(5L)).thenReturn(ownedPhoto(5L, 1L));
+        PhotoOutline outline = new PhotoOutline();
+        outline.setPhotoId(5L);
+        outline.setStatus(OutlineStatus.READY);
+        outline.setItems("{broken json");
+        when(photoOutlineMapper.findByPhotoId(5L)).thenReturn(outline);
+
+        PhotoOutlineResponse r = photoService.getOutline(1L, 5L);
+
+        assertThat(r.status()).isEqualTo(OutlineStatus.READY);
+        assertThat(r.items()).isNull();
+    }
+
+    @Test
+    void get_outline_rejects_other_users_photo() {
+        when(photoMapper.findById(5L)).thenReturn(ownedPhoto(5L, 999L));   // 다른 사용자 소유
+
+        assertThatThrownBy(() -> photoService.getOutline(1L, 5L))
+                .isInstanceOf(BusinessException.class);
     }
 }
