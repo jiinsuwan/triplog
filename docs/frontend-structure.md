@@ -125,7 +125,7 @@ proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
 | 사진 뷰 토글(그리드/지도/타임라인) | `SelectButton` + `DataView`/`Galleria` |
 | 카드 단계 | `Steps` |
 | 카드 사진 고르기(≤10) | 커스텀 그리드 + `Checkbox` |
-| **카드 overlay 캔버스(편집)** | **Canvas2D 커스텀**(render-overlay.mjs, 0004) |
+| **카드 overlay 캔버스(편집)** | **Canvas2D 커스텀** — 렌더 모듈 `frontend/src/card/render/`(coverFit·buildScene·renderCore, S3-LOG-04). 0004 기반 |
 | 챗봇 FAB→사이드 | `Button`(FAB) + `Drawer` + 커스텀 말풍선 |
 | 알림 | `Toast` |
 
