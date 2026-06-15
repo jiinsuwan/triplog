@@ -10,7 +10,8 @@
 # 실행: .venv/bin/uvicorn serve_outline:app --port 8765
 # 데모: curl -F file=@images/IMG_0621.jpg localhost:8765/v1/images  -> {job_id}
 #       curl localhost:8765/v1/jobs/{job_id}                        -> 상태/결과
-import os, asyncio, time, uuid
+import os, asyncio, threading, time, uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
@@ -30,8 +31,42 @@ if os.getenv('INFERENCE_DEV_CORS') == '1':
 #   - register(무거움, 수 초)는 작업 큐: POST /v1/images -> 즉시 job_id -> GET /v1/jobs/{id}
 #   - 보정(탭/박스, 인코딩 캐시로 수십~수백 ms)은 같은 executor를 await -> 응답은 동기적
 eng = Engine()
-store = {}                         # image_id -> {img_s, items}  (PoC: 메모리 무제한, 제품: 디스크/캐시 + 퇴출)
-jobs = {}                          # job_id -> {status: queued|running|done|error, result, error}
+
+
+class LruDict(OrderedDict):
+    """크기 상한 LRU 맵. 상한 초과 시 가장 오래 안 쓴 항목부터 퇴출한다.
+    워커 스레드(register 결과 기록)와 이벤트 루프(조회)가 함께 건드리므로 락으로 보호한다.
+    - PoC 때 store/jobs 가 무제한이라 반복 업로드·장시간 가동에서 메모리 누적(OOM/DoS) 위험이 있었다(#70 리뷰 P1).
+    - 퇴출된 image_id 로 tap/group(에디터, S3-LOG-06)을 호출하면 404('register first')가 난다.
+      현재 에디터 미연결이고 상한(기본 64장)이 활성 세션엔 넉넉해 안전하다. 오래된 이미지면 재등록을 유도한다.
+    - LOG-06에서 tap/group(`_get`)을 연결하면 `_get`의 'not in 확인→[] 접근' 사이 퇴출 레이스(KeyError)가
+      도달 가능해진다(지금은 호출처 없어 도달 불가). 그때 EAFP(try/except KeyError→404) + Lock→RLock 로 닫는다.
+      참고: `__contains__`를 비재진입 Lock으로 감싸면 `__setitem__`의 `key in self`에서 self-deadlock이니 금지."""
+
+    def __init__(self, cap):
+        super().__init__()
+        self._cap = cap
+        self._lock = threading.Lock()
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            if key in self:
+                super().__delitem__(key)
+            super().__setitem__(key, value)
+            while len(self) > self._cap:
+                super().__delitem__(next(iter(self)))    # 가장 오래된 항목 퇴출
+
+    def __getitem__(self, key):
+        with self._lock:
+            value = super().__getitem__(key)
+            self.move_to_end(key)                        # 최근 사용으로 표시
+            return value
+
+
+STORE_MAX = max(1, int(os.getenv('INFERENCE_STORE_MAX', '64')))   # 캐시 이미지 수(디코드=수 MB라 메모리 지배). 최소 1 — 0·음수면 퇴출 루프가 빈 dict에 next(iter)→StopIteration
+JOBS_MAX = max(1, int(os.getenv('INFERENCE_JOBS_MAX', '256')))    # 보관 작업 레코드 수(작음). 최소 1
+store = LruDict(STORE_MAX)          # image_id -> {img, items}  (상한 LRU — 위 클래스 주석)
+jobs = LruDict(JOBS_MAX)            # job_id -> {status: queued|running|done|error, result, error}  (상한 LRU)
 executor = ThreadPoolExecutor(max_workers=1)   # 워커 수 = 모델 복제 수 (DEPLOY_RESEARCH.md)
 MAX_UPLOAD = int(os.getenv('INFERENCE_MAX_UPLOAD_MB', '25')) * 1024 * 1024
 

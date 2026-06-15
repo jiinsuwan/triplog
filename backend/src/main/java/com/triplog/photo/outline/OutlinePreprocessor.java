@@ -7,7 +7,6 @@ import com.triplog.photo.storage.PhotoStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -42,7 +41,13 @@ public class OutlinePreprocessor {
         this.props = props;
     }
 
-    /** 주기적으로 PENDING 사진을 가져와 하나씩 전처리한다(워커=1 직렬 처리에 맞춰 batchSize 기본 1). */
+    /**
+     * 주기적으로 PENDING 사진을 가져와 하나씩 전처리한다(워커=1 직렬 처리에 맞춰 batchSize 기본 1).
+     * 동시성: {@code @Scheduled(fixedDelay)} 는 단일 스케줄러 스레드에서 직전 실행이 끝난 뒤에만
+     * 다음 실행을 시작하므로 자기 자신과 겹치지 않는다. 따라서 단일 인스턴스에선 같은 photo 중복
+     * 처리나 READY→FAILED 덮어쓰기가 없어 별도 claim/lock 이 필요 없다(#70 리뷰 P2).
+     * 다중 인스턴스로 확장하면 PENDING→PROCESSING 낙관적 claim 이 필요하다 — 현재 범위 밖.
+     */
     @Scheduled(fixedDelayString = "${inference.poll-delay:3000}")
     public void processPending() {
         List<Long> pending = outlineMapper.findPendingPhotoIds(props.getBatchSize());
@@ -69,9 +74,8 @@ public class OutlinePreprocessor {
     }
 
     private byte[] readBytes(String storedFilename) {
-        try {
-            Resource resource = photoStorage.load(storedFilename);
-            return resource.getInputStream().readAllBytes();
+        try (var in = photoStorage.load(storedFilename).getInputStream()) {   // try-with-resources 로 스트림 누수 방지
+            return in.readAllBytes();
         } catch (Exception e) {
             throw new InferenceException("사진 읽기 실패: " + storedFilename, e);
         }

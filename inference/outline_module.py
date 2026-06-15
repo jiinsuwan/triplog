@@ -660,5 +660,3 @@ class Engine:
                                                 eps_ratio=0.004, chaikin_iters=3),
                     'mask': union}
         return {'loops': self.mask_to_loops(union, None, off_px=off), 'mask': union}
-
-

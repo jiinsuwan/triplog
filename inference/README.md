@@ -33,6 +33,8 @@ rembg `u2net`(saliency)는 첫 실행 시 자동 다운로드.
 설정(환경변수):
 - `INFERENCE_MAX_UPLOAD_MB` — 업로드 최대 크기 MB(기본 25)
 - `INFERENCE_DEV_CORS=1` — 로컬에서 브라우저로 직접 테스트할 때만 CORS 허용(기본 꺼짐)
+- `INFERENCE_STORE_MAX` — 메모리에 캐시할 이미지 수 상한(기본 64, 초과 시 가장 오래된 것부터 LRU 퇴출)
+- `INFERENCE_JOBS_MAX` — 보관할 작업 레코드 수 상한(기본 256, LRU 퇴출)
 
 확인:
 
@@ -42,3 +44,6 @@ rembg `u2net`(saliency)는 첫 실행 시 자동 다운로드.
 
     .venv/bin/pytest              # mock 단위(가중치 불필요)
     .venv/bin/pytest -m model     # 실모델 스모크(가중치 필요)
+
+> 이 테스트는 **수동 실행**한다 — GitHub Actions(CI)는 백엔드(Java)만 빌드·테스트하고
+> 이 추론 서버(Python)는 설치·실행하지 않는다. 추론 서버 변경 시 위 mock 단위를 로컬에서 돌려 계약을 확인한다.

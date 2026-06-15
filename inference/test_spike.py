@@ -91,6 +91,19 @@ def test_unknown_ids_and_bad_upload(client):
     assert st['status'] == 'error' and 'invalid image' in st['error']
 
 
+def test_lrudict_bounds_and_evicts_oldest():
+    # store/jobs 무제한 누적(#70 리뷰 P1) 방지용 상한 LRU 검증 — 모델 불필요.
+    import serve_outline as so
+    d = so.LruDict(3)
+    for i in range(5):
+        d[f'k{i}'] = i
+    assert len(d) == 3                          # 상한 유지
+    assert list(d) == ['k2', 'k3', 'k4']        # 오래된 k0·k1 퇴출
+    _ = d['k2']                                 # 접근 = 최근 사용 표시
+    d['k5'] = 5
+    assert 'k2' in d and 'k3' not in d          # 다음 오래된 k3 퇴출, 방금 쓴 k2 생존
+
+
 # ---------------- 실모델 스모크 (1본, 마커 분리) ----------------
 
 @pytest.mark.model
