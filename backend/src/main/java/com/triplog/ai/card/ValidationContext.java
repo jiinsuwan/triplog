@@ -1,5 +1,10 @@
 package com.triplog.ai.card;
 
+import com.triplog.ai.card.dto.CardCaptionItem;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -21,4 +26,28 @@ public record ValidationContext(
         Set<Integer> validItemIds,
         Map<Integer, Integer> anchorCounts
 ) {
+
+    /**
+     * 사이드카 items에서 참조 검증 컨텍스트를 만든다 (S3-LOG-03).
+     *
+     * <p>불변식을 한 곳에서 강제한다 — <b>모든 item에 대해 {@code anchorCounts} 키를 채운다</b>.
+     * {@code anchors}가 null/빈 item({@code grid}/{@code sal} 구제 항목 등)도 0으로 명시해야
+     * {@code validItemIds ⊆ anchorCounts.keySet()}이 성립하고, anchor 0조차 거짓
+     * ANCHOR_OUT_OF_RANGE로 거부되는 일이 없다. {@code id}가 null인 item은 참조 대상이 아니므로
+     * 건너뛴다.
+     */
+    public static ValidationContext from(List<CardCaptionItem> items) {
+        Set<Integer> validItemIds = new HashSet<>();
+        Map<Integer, Integer> anchorCounts = new HashMap<>();
+        if (items != null) {
+            for (CardCaptionItem item : items) {
+                if (item == null || item.id() == null) {
+                    continue;
+                }
+                validItemIds.add(item.id());
+                anchorCounts.put(item.id(), item.anchors() == null ? 0 : item.anchors().size());
+            }
+        }
+        return new ValidationContext(validItemIds, anchorCounts);
+    }
 }
