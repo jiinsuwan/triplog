@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.triplog.photo.mapper.PhotoOutlineMapper">
+
+    <resultMap id="photoOutline" type="com.triplog.photo.domain.PhotoOutline">
+        <id property="photoId" column="photo_id"/>
+        <result property="status" column="status"/>
+        <result property="items" column="items"/>
+        <result property="error" column="error"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insertPending">
+        INSERT INTO photo_outline (photo_id, status)
+        VALUES (#{photoId}, 'PENDING')
+    </insert>
+
+    <select id="findByPhotoId" resultMap="photoOutline">
+        SELECT photo_id, status, items, error, created_at, updated_at
+        FROM photo_outline
+        WHERE photo_id = #{photoId}
+    </select>
+
+    <select id="findPendingPhotoIds" resultType="long">
+        SELECT photo_id
+        FROM photo_outline
+        WHERE status = 'PENDING'
+        ORDER BY created_at, photo_id
+        LIMIT #{limit}
+    </select>
+
+    <update id="markReady">
+        UPDATE photo_outline
+        SET status = 'READY', items = #{items}, error = NULL
+        WHERE photo_id = #{photoId}
+    </update>
+
+    <update id="markFailed">
+        UPDATE photo_outline
+        SET status = 'FAILED', error = #{error}
+        WHERE photo_id = #{photoId}
+    </update>
+</mapper>

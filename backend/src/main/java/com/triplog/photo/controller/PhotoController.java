@@ -4,6 +4,7 @@ import com.triplog.common.ApiResponse;
 import com.triplog.photo.dto.LinkPhotoTripRequest;
 import com.triplog.photo.dto.PhotoContent;
 import com.triplog.photo.dto.PhotoResponse;
+import com.triplog.photo.outline.PhotoOutlineResponse;
 import com.triplog.photo.service.PhotoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -86,5 +87,13 @@ public class PhotoController {
                 // 브라우저 캐시에서 재검증 없이 노출돼 인증을 우회할 수 있다.
                 .cacheControl(CacheControl.noStore())
                 .body(photo.resource());
+    }
+
+    @Operation(summary = "Get a photo's outline preprocess status/result (owner only)")
+    @GetMapping("/{photoId}/outline")
+    public ApiResponse<PhotoOutlineResponse> outline(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId) {
+        return ApiResponse.success("Photo outline.", photoService.getOutline(userId, photoId));
     }
 }
