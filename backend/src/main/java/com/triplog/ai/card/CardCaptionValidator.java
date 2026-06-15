@@ -36,6 +36,8 @@ public class CardCaptionValidator {
     // ObjectMapper는 설정 후 thread-safe라 단일 인스턴스를 공유한다.
     private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            // JSON 뒤에 prose/추가 토큰이 붙은 응답(예: {...} 설명문)을 거부 — 본문만 깔끔히 받는다.
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             // 좌표 금지(unknown 거부)에 더해 타입 강제 변환도 잠근다 — 문자열 숫자("0")·소수(1.5)가
             // Integer itemId/anchor 로 흡수되면 LLM 응답 타입 계약이 문서보다 느슨해진다(파싱에서 거부).
             .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)

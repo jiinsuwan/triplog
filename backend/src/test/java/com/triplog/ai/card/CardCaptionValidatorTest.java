@@ -54,6 +54,19 @@ class CardCaptionValidatorTest {
     }
 
     @Test
+    void rejects_trailing_prose_after_json() {
+        // JSON 본문 뒤에 설명문이 붙은 응답(LLM이 JSON만 출력하라는 지시를 어긴 경우)을 거부한다.
+        String json = """
+                { "objects": [ { "itemId": 0, "note": ["x"] } ], "closing": { "text": "끝" } }
+                위처럼 출력했습니다.
+                """;
+
+        assertThatThrownBy(() -> validator.parse(json))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.AI_INVALID_RESPONSE);
+    }
+
+    @Test
     void rejects_string_number_item_id() {
         // 문자열 숫자("0")가 Integer itemId 로 흡수되면 타입 계약이 느슨해진다 → 파싱에서 거부.
         String json = """
