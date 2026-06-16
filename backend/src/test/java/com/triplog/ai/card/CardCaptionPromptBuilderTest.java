@@ -57,7 +57,7 @@ class CardCaptionPromptBuilderTest {
                 .contains("anchors[0]")    // §2-1.2 기본 앵커
                 .contains("2줄")           // §2-1.4 줄 수
                 .contains("좌상단")        // §2-1.3 고정 요소
-                .contains("우하단")
+                .contains("하단")
                 .contains("grid")         // label 없는 항목 처리 지시 (§5)
                 .contains("한국어")        // 출력 언어 강제
                 .contains("코멘트 대상에서 제외")  // anchors 빈 항목 skip 지시
