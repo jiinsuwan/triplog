@@ -17,6 +17,7 @@ function makeMockCtx() {
     createRadialGradient: () => { rec('createRadialGradient'); return gradient; },
     createLinearGradient: () => { rec('createLinearGradient'); return gradient; },
     getImageData: () => { rec('getImageData'); return { data: new Uint8ClampedArray(16) }; },
+    drawImage: (...args) => { rec('drawImage'); calls.drawImageArgs = args; }, // 좌표 인자 캡처(NaN 가드)
   };
   const handler = {
     get(target, prop) {
@@ -53,9 +54,10 @@ describe('renderCore — 핵심 드로잉 호출 기록', () => {
   it('레퍼런스 scene 에서 사진·문구·외곽선·톤다운을 실제로 그린다', () => {
     const ctx = makeMockCtx();
     const scene = buildScene({ items: sampleItems, captions: sampleCaptions, canvas: { W: 1080, H: 1920 }, photo: samplePhoto });
-    renderCard(ctx, scene, { photo: {} });
+    renderCard(ctx, scene, { photo: { width: 960, height: 1280 } }); // 크기 있는 image stub(좌표 NaN 방지)
     const c = ctx.__calls;
     expect(c.drawImage || 0).toBeGreaterThanOrEqual(1); // 사진
+    expect(c.drawImageArgs.slice(1).every(Number.isFinite)).toBe(true); // 사진 좌표(x,y,w,h) 유한 — NaN 가드
     expect(c.fillText || 0).toBeGreaterThanOrEqual(1); // 문구(노트/마무리)
     expect(c.stroke || 0).toBeGreaterThanOrEqual(1); // 외곽선/화살표
     expect(c.fillRect || 0).toBeGreaterThanOrEqual(1); // 톤다운/가독 음영

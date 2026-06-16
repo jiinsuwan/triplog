@@ -26,6 +26,9 @@ function unit(v) {
 
 /**
  * scene 을 ctx 에 그린다.
+ *
+ * 전제: ctx 는 fresh 상태(기본 transform/alpha/filter/clip)다. 호출자가 변형 상태를 남겼다면
+ *   clearRect·좌표가 어긋나므로 save/restore(필요 시 resetTransform)로 격리해야 한다(#74 제품 연결 시 helper).
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} scene  buildScene 결과 { canvas:{W,H}, tone, layers }
  * @param {{photo?:CanvasImageSource, grain?:CanvasImageSource}} assets

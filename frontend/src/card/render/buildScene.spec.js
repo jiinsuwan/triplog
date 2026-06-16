@@ -149,9 +149,25 @@ describe('buildScene — 방어적 처리(검증기가 경고로 통과시키는
   });
 });
 
-describe('buildScene — cover-fit 크롭', () => {
-  it('정사각 사진에서 좌측 크롭 영역의 anchor 는 제외된다', () => {
-    // 사진 1000×1000 → 캔버스 1080×1920 cover-fit: 좌우 크롭. 사진 x=0.0 부근은 화면 밖.
+describe('buildScene — 캔버스 비율과 anchor 가시성', () => {
+  it('렌더 캔버스 = 사진 비율이면 가장자리 anchor 도 모두 살아남는다(crop 없음)', () => {
+    // 제품 렌더 규약: 캔버스를 사진 비율로 둬 cover-fit 이 항등 → 화면 밖 제외 0.
+    //   (이전에 캔버스를 1080×1920 고정으로 두면 좌우 크롭으로 문구가 사라지던 회귀 가드)
+    const items = [
+      { id: 0, center: [0.5, 0.5], bbox: [0.0, 0.0, 0.2, 0.2], anchors: [[0.02, 0.5, 0.9]] },
+      { id: 1, center: [0.5, 0.5], bbox: [0.8, 0.8, 1.0, 1.0], anchors: [[0.98, 0.5, 0.9]] },
+    ];
+    const scene = buildScene({
+      items,
+      captions: { objects: [{ itemId: 0, anchor: 0, note: ['a'] }, { itemId: 1, anchor: 0, note: ['b'] }] },
+      canvas: { W: 960, H: 1280 },
+      photo: { w: 960, h: 1280 },
+    });
+    expect(scene.layers.filter((l) => l.kind === 'note')).toHaveLength(2);
+  });
+
+  it('캔버스 ≠ 사진 비율이면 크롭 영역 anchor 는 제외된다(export/세로 고정 시나리오)', () => {
+    // coverFit 함수의 crop 동작. 제품 렌더 기본은 위처럼 캔버스=사진비율이라 여기 걸리지 않는다.
     const items = [{ id: 0, center: [0.5, 0.5], bbox: [0.4, 0.4, 0.6, 0.6], anchors: [[0.0, 0.5, 0.9]] }];
     const scene = buildScene({
       items,

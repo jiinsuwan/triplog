@@ -1,9 +1,9 @@
 // coverFit.js — 사진 좌표(photo-normalized 0~1) → 카드 캔버스 좌표 변환.
 //
 // 배경: 사이드카 items의 좌표는 "원본 사진 평면" 기준 0~1 정규화다(OUTLINE_API 좌표 규약).
-//   반면 카드 캔버스는 세로 1080×1920 고정이고, 사진은 cover-fit 풀블리드(넘치는 부분 크롭)로 깔린다.
-//   따라서 사진 정규화 좌표를 cover-fit 변환을 거쳐 캔버스 좌표로 옮겨야 한다.
-//   사진 aspect ≠ 캔버스 aspect 이면 단순 (x*W, y*H) 곱은 어긋난다(크롭 미반영).
+//   캔버스 크기는 호출자가 정한다 — 렌더는 캔버스를 사진 비율로 둬 cover-fit 이 항등이 되고(crop 0),
+//   세로 9:16 export(#73)처럼 캔버스 ≠ 사진 비율일 때만 cover-fit 으로 넘치는 부분이 크롭된다.
+//   사진 aspect ≠ 캔버스 aspect 이면 단순 (x*W, y*H) 곱은 어긋나므로 이 변환이 필요하다.
 //
 // 포팅 원본: poc/card/legacy-v3/overlay-prep.mjs 의 toCanvasData (s/dw/dh/ox/oy/pt/radf).
 //   순수 함수 — 캔버스 컨텍스트에 의존하지 않는다(단위 테스트 대상).
