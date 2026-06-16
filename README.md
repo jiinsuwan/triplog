@@ -57,9 +57,16 @@ cd backend && ./mvnw spring-boot:run
 
 # 2. Frontend — http://localhost:5173
 cd frontend && npm install && npm run dev
+
+# 3. Inference (카드 기능용 윤곽선 추론 서버) — http://localhost:8765
+#    최초: python venv + 모델 가중치 필요 → inference/README.md
+cd inference && .venv/bin/uvicorn serve_outline:app --port 8765
 ```
 
-환경변수·DB 셋업 상세: [backend/README.md](backend/README.md) · [frontend/README.md](frontend/README.md)
+- **환경변수·DB 셋업**: [backend/README.md](backend/README.md) · [frontend/README.md](frontend/README.md)
+- **추론 서버 설치·실행**: [inference/README.md](inference/README.md)
+- **테스트 실행**: backend = [backend/README.md §3](backend/README.md) · inference = [inference/README.md](inference/README.md) (`pytest`)
+- **어느 기능이 어느 패키지인지**: [docs/architecture.md §2 백엔드 패키지 구조](docs/architecture.md#2-백엔드-패키지-구조)
 
 ---
 

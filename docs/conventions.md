@@ -361,9 +361,18 @@ backend build
 
 ## 10. 금지 사항
 
-- 과도한 workflow 문서 생성
-- 무거운 spec/handoff/archive 문서 체계 도입
+협업·프로세스 금지(진입 가이드 `AGENTS.md`의 "절대 하지 말 것"이 가리키는 정본):
+
+- Issue 없이 `main`에 직접 push (§1 워크플로우 · §4 Branch)
+- 작업 완료 후 PR 발행 단계 생략 — 코멘트·요약 보고로 갈음 (§1-2 세션 운영)
+- 공유 영역(`core`) 변경을 단독 결정으로 진행 (§2 Track · §6-3 리뷰 필수 영역)
+- 기존 관행·형식 확인 없이 임의 형식으로 Issue·PR·문서 생성 (§9-2 핵심 원칙 — 규칙 공백은 공유 문서 갱신을 최우선)
+- 환경변수·비밀 키를 커밋 (§8 Test/CI · `architecture.md` §8 환경변수/비밀 관리)
+
+설계·범위 금지:
+
+- `conventions.md`에 정의되지 않은 새 워크플로우 도입 — 과도한 workflow 문서 생성 · 무거운 spec/handoff/archive 문서 체계 등 (§9-2 핵심 원칙)
 - DB/API 상세 설계를 기능 확정 전에 과하게 선행
 - MSA 구조 제안
-- AI 일정 자동 생성 기능을 P0로 복귀시키는 것
+- AI 일정 자동 생성 기능을 P0로 복귀시키는 것 (블루프린트 §6, decisions/0002)
 - GitLab을 개발 정본으로 설정 (SSAFY GitLab은 제출용 산출물 업로드 전용)
