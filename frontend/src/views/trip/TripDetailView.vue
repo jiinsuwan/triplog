@@ -54,7 +54,8 @@ const workspaceAction = computed(() => {
     : {
         label: '일정 이어서 만들기',
         icon: 'pi pi-map-marker',
-        routeName: 'trip-plan-workspace',
+        routeName: 'trip-place-search',
+        query: { mode: 'itinerary' },
         severity: 'success',
       }
 })
@@ -156,7 +157,11 @@ function goList() {
 }
 
 function goWorkspace() {
-  router.push({ name: workspaceAction.value.routeName, params: { tripId: tripId.value } })
+  router.push({
+    name: workspaceAction.value.routeName,
+    params: { tripId: tripId.value },
+    query: workspaceAction.value.query,
+  })
 }
 
 function fillForm(sourceTrip) {

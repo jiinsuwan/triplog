@@ -55,7 +55,11 @@ const routes = [
   {
     path: '/trips/:tripId/plan',
     name: 'trip-plan-workspace',
-    redirect: (to) => ({ name: 'trip-place-search', params: to.params }),
+    redirect: (to) => ({
+      name: 'trip-place-search',
+      params: to.params,
+      query: to.query,
+    }),
     meta: { requiresAuth: true, workspace: 'planning' },
   },
   {
@@ -140,9 +144,13 @@ function workspaceRedirect(to, workspace, status) {
     return true
   }
 
-  return {
-    name: targetWorkspace === 'record' ? 'trip-record-workspace' : 'trip-plan-workspace',
+  const redirect = {
+    name: targetWorkspace === 'record' ? 'trip-record-workspace' : 'trip-place-search',
     params: to.params,
     replace: true,
   }
+  if (Object.keys(to.query ?? {}).length > 0) {
+    redirect.query = to.query
+  }
+  return redirect
 }
