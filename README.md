@@ -63,9 +63,10 @@ cd frontend && npm install && npm run dev
 cd inference && .venv/bin/uvicorn serve_outline:app --port 8765
 ```
 
+- **실행 주의**: 세 서버는 각각 별도 터미널에서 실행합니다. backend는 `.env`를 자동 로드하지 않으니 env 주입 후 실행하세요([backend/README.md](backend/README.md) §2).
 - **환경변수·DB 셋업**: [backend/README.md](backend/README.md) · [frontend/README.md](frontend/README.md)
 - **추론 서버 설치·실행**: [inference/README.md](inference/README.md)
-- **테스트 실행**: backend = [backend/README.md §3](backend/README.md) · inference = [inference/README.md](inference/README.md) (`pytest`)
+- **테스트 실행**: backend = [backend/README.md §3](backend/README.md#3-실행--테스트) (`./mvnw test`) · frontend = [frontend/README.md](frontend/README.md) (`npm run test`) · inference = [inference/README.md](inference/README.md) (`pytest`)
 - **어느 기능이 어느 패키지인지**: [docs/architecture.md §2 백엔드 패키지 구조](docs/architecture.md#2-백엔드-패키지-구조)
 
 ---

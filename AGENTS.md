@@ -1,6 +1,6 @@
-# AGENTS.md — TripLog AI Agent 가이드 (정본)
+# AGENTS.md — TripLog AI Agent 진입 가이드
 
-> 이 파일은 Claude / Codex 등 로컬 AI agent가 TripLog 작업을 시작할 때 가장 먼저 읽는 정본 가이드입니다.
+> 이 파일은 Claude / Codex 등 로컬 AI agent가 TripLog 작업을 시작할 때 가장 먼저 읽는 진입 가이드입니다. 규칙 정본은 `docs/`(공통 운영 규칙은 `conventions.md`)이고, 이 파일은 그 정본을 가리키는 얇은 진입점입니다.
 > 본문은 **얇게 유지**하고, 상세 규칙은 항상 `docs/`를 가리킵니다.
 
 ---
@@ -69,7 +69,7 @@ GitHub Issue → Branch → Commit → Pull Request → GitHub Actions → Merge
 
 ## 6. 툴체인 자유
 
-각자 로컬 agent 운용 방식(Claude / Codex / 혼합)은 사적 영역입니다. 팀이 보는 것은 GitHub Issue · PR · CI · `docs/`뿐이고, **공통 규칙 정본은 [conventions.md](docs/conventions.md) + `docs/`** 입니다 — 이 파일은 진입 안내일 뿐 규칙 본문은 두지 않습니다. 공통/개인 경계 = [conventions §9-3](docs/conventions.md).
+각자 로컬 agent 운용 방식(Claude / Codex / 혼합)은 사적 영역입니다. 팀이 보는 것은 GitHub Issue · PR · CI · `docs/`뿐이고, **공통 운영 규칙 정본은 [conventions.md](docs/conventions.md)** 입니다 — 이 파일은 진입 안내일 뿐 규칙 본문은 두지 않습니다. 공통/개인 경계 = [conventions §9-3](docs/conventions.md#9-3-툴체인-자유--공통개인-경계).
 
 - Claude 사용자는 `CLAUDE.md`가 이 파일을 import합니다 (`@AGENTS.md`).
 - Codex 사용자는 이 파일을 직접 읽습니다.

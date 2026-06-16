@@ -68,7 +68,7 @@ Sprint → GitHub Issue → Branch → Commit → Pull Request → GitHub Action
 
 | Track | 범위 | 공유 |
 |---|---|---|
-| `trip` | 여행 생성, 관광지 탐색, 지도, 일정, 장소 저장 | 한 명 담당 |
+| `trip` | 여행 CRUD, 관광지 탐색, 지도, 일정, 장소 저장 | 한 명 담당 |
 | `log` | 사진 업로드, 사진 기록, AI 카드 생성, export | 한 명 담당 |
 | `core` | 인증, 공통 구조, DB schema, API convention, CI, 공통 UI | 공동 (PR 리뷰 필수) |
 
@@ -348,13 +348,13 @@ backend build
 - 테스트 가능한 로직은 테스트를 먼저 작성하거나 구현과 함께 작성합니다.
 - PR은 agent 결과물을 검토하고 프로젝트 기록으로 남기는 단위입니다.
 - **기존 관행 우선**: 무언가를 만들기 전(Issue·PR·문서·라벨·마일스톤 등) **이전 사례의 형식·관행을 먼저 확인하고 맞춥니다.** 기존 기록(이슈/PR 목록, docs)이 형식의 기준입니다.
-- **규칙 공백 = 공유 문서화 최우선**: 규칙에 없는 관행 때문에 어긋남이 생기면, 개인 메모·agent 기억이 아니라 **공유 문서(conventions·AGENTS.md) 갱신을 최우선**으로 합니다 — 두 작업자의 agent가 모두 따라야 규칙입니다. (개인 기억은 보조 수단일 뿐, 정본이 아닙니다 — §9-3.)
+- **규칙 공백 = 공유 문서화 최우선**: 규칙에 없는 관행 때문에 어긋남이 생기면, 개인 메모·agent 기억이 아니라 **공유 문서(규칙 정본 `docs/conventions.md`) 갱신을 최우선**으로 합니다 — 두 작업자의 agent가 모두 따라야 규칙입니다. (개인 기억은 보조 수단일 뿐, 정본이 아닙니다 — §9-3.)
 
 ### 9-3. 툴체인 자유 · 공통/개인 경계
 
 - 각자 로컬 agent 운용 방식(Claude / Codex / 혼합)은 **사적 영역**입니다.
 - 팀이 보는 공통 인터페이스는 **GitHub Issue · PR · CI · `docs/`** 뿐입니다.
-- **공통 규칙은 `AGENTS.md` + `docs/`에만** 둡니다 (git 공유). 여기엔 개인 규칙을 쓰지 않습니다 — 그래야 서로 섞이지 않습니다.
+- **공통 운영 규칙 정본은 `docs/conventions.md`**입니다. `AGENTS.md`/`CLAUDE.md`는 그 정본을 가리키는 진입 참조일 뿐 규칙 본문을 두지 않습니다 (git 공유). 여기엔 개인 규칙을 쓰지 않습니다 — 그래야 서로 섞이지 않습니다.
 - **개인 agent 규칙은 각자 git-ignored 파일에** 둡니다. Claude 사용자는 로컬 `CLAUDE.md`(`@AGENTS.md` import + 개인 규칙), 그 외 개인 오버라이드는 `AGENTS.local.md`. 둘 다 `.gitignore`로 제외됩니다.
 
 ---
@@ -374,5 +374,5 @@ backend build
 - `conventions.md`에 정의되지 않은 새 워크플로우 도입 — 과도한 workflow 문서 생성 · 무거운 spec/handoff/archive 문서 체계 등 (§9-2 핵심 원칙)
 - DB/API 상세 설계를 기능 확정 전에 과하게 선행
 - MSA 구조 제안
-- AI 일정 자동 생성 기능을 P0로 복귀시키는 것 (블루프린트 §6, decisions/0002)
+- AI 일정 자동 생성 기능을 P0로 복귀시키는 것 (블루프린트 §6, decisions/0002-scope-pivot.md)
 - GitLab을 개발 정본으로 설정 (SSAFY GitLab은 제출용 산출물 업로드 전용)
