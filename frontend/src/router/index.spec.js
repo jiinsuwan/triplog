@@ -6,8 +6,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
 
 // to 객체 최소 형태(가드는 path·fullPath·meta 만 본다).
-function route(path, meta = {}, params = {}) {
-  return { path, fullPath: path, meta, params }
+function route(path, meta = {}, params = {}, query = {}) {
+  return { path, fullPath: path, meta, params, query }
 }
 
 describe('router authGuard — 보호 라우트 가드', () => {
@@ -110,6 +110,28 @@ describe('router authGuard — 보호 라우트 가드', () => {
     ).toEqual({
       name: 'trip-place-search',
       params: { tripId: '10' },
+      replace: true,
+    })
+  })
+
+  it('workspace correction keeps query parameters', () => {
+    useAuthStore().setTokens('a1', 'r1')
+    const tripStore = useTripStore()
+    tripStore.trips = [{ id: 10, status: 'planning' }]
+
+    expect(
+      authGuard(
+        route(
+          '/trips/10/log',
+          { requiresAuth: true, workspace: 'record' },
+          { tripId: '10' },
+          { mode: 'itinerary' },
+        ),
+      ),
+    ).toEqual({
+      name: 'trip-place-search',
+      params: { tripId: '10' },
+      query: { mode: 'itinerary' },
       replace: true,
     })
   })

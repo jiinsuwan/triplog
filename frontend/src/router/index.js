@@ -144,10 +144,13 @@ function workspaceRedirect(to, workspace, status) {
     return true
   }
 
-  return {
+  const redirect = {
     name: targetWorkspace === 'record' ? 'trip-record-workspace' : 'trip-place-search',
     params: to.params,
-    query: undefined,
     replace: true,
   }
+  if (Object.keys(to.query ?? {}).length > 0) {
+    redirect.query = to.query
+  }
+  return redirect
 }

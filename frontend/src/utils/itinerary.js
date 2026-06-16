@@ -202,6 +202,9 @@ function calculateRelativePositions(places) {
     (place) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude),
   )
   if (!points.length) return new Map()
+  if (points.length === 1) {
+    return new Map([[placeKey(points[0]), { x: 50, y: 50 }]])
+  }
 
   const minLat = Math.min(...points.map((place) => place.latitude))
   const maxLat = Math.max(...points.map((place) => place.latitude))

@@ -98,6 +98,20 @@ describe('itinerary utils', () => {
     expect(data.polylinePoints).toContain(',')
   })
 
+  it('single routed place is centered on fallback map', () => {
+    const data = buildRouteMapData(
+      {
+        dayNumber: 1,
+        stops: [stop(1, hanok, 1)],
+      },
+      [],
+    )
+
+    expect(data.markers).toHaveLength(1)
+    expect(data.markers[0]).toMatchObject({ x: 50, y: 50 })
+    expect(data.routePoints).toEqual([{ x: 50, y: 50 }])
+  })
+
   it('DB/Kakao 장소를 #77 요청 payload 형태로 변환한다', () => {
     expect(toItineraryPlaceRequest(hanok)).toMatchObject({
       source: 'DB',

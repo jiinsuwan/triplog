@@ -10,8 +10,7 @@ import {
 
 const USE_MOCK =
   import.meta.env.MODE === 'test' ||
-  import.meta.env.VITE_USE_MOCK_ITINERARY === 'true' ||
-  import.meta.env.VITE_ENABLE_MOCK_ITINERARY === 'true'
+  import.meta.env.VITE_USE_MOCK_ITINERARY === 'true'
 
 export function isMockItineraryEnabled() {
   return USE_MOCK
