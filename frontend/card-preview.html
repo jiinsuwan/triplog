@@ -5,6 +5,7 @@
   공유 라우터(src/router)·main.js 를 건드리지 않는 독립 페이지다.
   폰트는 여기서 Google Fonts 로 로드(개발 확인용). 제품 self-host 편입은 별도 이슈.
   입력 = 실제 예시 사진(poc/card/images) + 실제 자동초안 items(poc/card/out/v12) + 손글씨 문구.
+  폰트는 self-host(public/fonts/ownglyph-ooa.ttf)로 로드한다. 라이선스 = public/fonts/LICENSE.txt.
 -->
 <html lang="ko">
   <head>
@@ -28,6 +29,13 @@
     <canvas id="card" width="1080" height="1920"></canvas>
     <div class="panel">
       <h3>카드 렌더 미리보기 (S3-LOG-04)</h3>
+      <label>
+        캔버스 크기
+        <select id="sizeSel">
+          <option value="card">1080×1920 (카드 목표 · cover-fit)</option>
+          <option value="photo">960×1280 (사진 원본 · 크롭 없음)</option>
+        </select>
+      </label>
       <label>
         무드 톤다운: <span id="tdv">35</span>%
         <input id="toneDown" type="range" min="0" max="50" value="35" />

@@ -29,7 +29,7 @@ function unit(v) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} scene  buildScene 결과 { canvas:{W,H}, tone, layers }
  * @param {{photo?:CanvasImageSource, grain?:CanvasImageSource}} assets
- * @param {{noteFont?:string, closingFont?:string}} [opts]  폰트는 교체 가능(기본 = PoC 손글씨체)
+ * @param {{noteFont?:string, closingFont?:string}} [opts]  폰트는 교체 가능(기본 = 온글잎 ooa; 라이선스 = frontend/public/fonts/LICENSE.txt)
  */
 export function renderCard(ctx, scene, assets = {}, opts = {}) {
   const { W, H } = scene.canvas;

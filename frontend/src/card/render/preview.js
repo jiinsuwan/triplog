@@ -1,6 +1,8 @@
 // preview.js — card-preview.html 구동부(개발 확인용, 제품 빌드와 무관).
-//   세로 사진(IMG_0988, 고기 한 상)을 세로 카드(사진 비율 그대로)에 렌더한다 — 크롭 없음.
-//   items 좌표는 세로 프레임(960×1280)에서 계산됐고, 커밋된 사진 파일은 가로라 세로로 회전해 맞춘다.
+//   세로 사진(IMG_0988, 본인 촬영)을 카드 캔버스에 cover-fit 렌더한다.
+//   기본 = 카드 목표 규격 1080×1920(9:16). 사진은 3:4라 위아래가 크롭된다(제품 실제 동작).
+//   토글로 사진 원본 프레임(960×1280)도 볼 수 있다(크롭 없이 객체 배치 확인용).
+//   items 좌표는 사진정규화(0~1)라 어느 캔버스 크기든 cover-fit 으로 해소된다.
 import { buildScene } from './buildScene.js';
 import { renderCard } from './renderCore.js';
 import photoUrl from './__fixtures__/sample-photo.jpg';
@@ -31,20 +33,28 @@ const captions = {
   closing: { text: '여행의 즐거움을 만끽하세요!' },
 };
 
-// 사진 비율 그대로(세로) = items 프레임. 세로 사진 → 세로 카드라 크롭이 없다.
-//   sample-photo.jpg 는 이미 세로(960×1280)로 정렬돼 있어 회전이 필요 없다.
-const CANVAS = { W: rawAuto.W, H: rawAuto.H }; // 960×1280
+// 캔버스 크기 = 카드 목표 규격(기본) / 사진 원본 프레임(토글). 사진은 둘 다 cover-fit.
+//   sample-photo.jpg 는 세로(960×1280)이며 회전이 필요 없다.
+const SIZES = {
+  card: { W: 1080, H: 1920 }, // 제품 목표(9:16). 사진(3:4) → cover-fit 위아래 크롭
+  photo: { W: rawAuto.W, H: rawAuto.H }, // 사진 원본 비율(크롭 없음, 객체 배치 확인용)
+};
+let CANVAS = SIZES.card;
 const photoSize = { w: rawAuto.W, h: rawAuto.H };
 
 const canvasEl = document.getElementById('card');
-canvasEl.width = CANVAS.W;
-canvasEl.height = CANVAS.H;
-canvasEl.style.height = '92vh';
-canvasEl.style.width = 'auto';
 const ctx = canvasEl.getContext('2d');
+function applyCanvasSize() {
+  canvasEl.width = CANVAS.W; // width/height 재설정은 캔버스를 초기화한다(rebuild 가 다시 그림)
+  canvasEl.height = CANVAS.H;
+  canvasEl.style.height = '92vh';
+  canvasEl.style.width = 'auto';
+}
+applyCanvasSize();
 const toneDownEl = document.getElementById('toneDown');
 const tdv = document.getElementById('tdv');
 const togglesEl = document.getElementById('layerToggles');
+const sizeSel = document.getElementById('sizeSel');
 
 let scene = null;
 let photoImg = null;
@@ -74,6 +84,13 @@ toneDownEl.addEventListener('input', () => {
   tdv.textContent = toneDownEl.value;
   scene.tone.toneDown = Number(toneDownEl.value) / 100;
   draw();
+});
+
+// 캔버스 크기 토글 — 카드 목표(1080×1920) ↔ 사진 원본(960×1280). 크기 바뀌면 scene 재계산.
+sizeSel.addEventListener('change', () => {
+  CANVAS = SIZES[sizeSel.value] || SIZES.card;
+  applyCanvasSize();
+  rebuild();
 });
 
 function loadImage(url) {
