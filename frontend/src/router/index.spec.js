@@ -72,8 +72,24 @@ describe('router authGuard — 보호 라우트 가드', () => {
 
     expect(planRoute?.path).toBe('/trips/:tripId/plan')
     expect(planRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'planning' })
+    expect(planRoute?.redirect).toBeTypeOf('function')
     expect(recordRoute?.path).toBe('/trips/:tripId/log')
     expect(recordRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'record' })
+  })
+
+  it('plan workspace redirect keeps itinerary mode query', () => {
+    const planRoute = router.getRoutes().find((item) => item.name === 'trip-plan-workspace')
+
+    expect(
+      planRoute.redirect({
+        params: { tripId: '12' },
+        query: { mode: 'itinerary' },
+      }),
+    ).toEqual({
+      name: 'trip-place-search',
+      params: { tripId: '12' },
+      query: { mode: 'itinerary' },
+    })
   })
 
   it('trip photos route belongs to record workspace', () => {
@@ -92,7 +108,7 @@ describe('router authGuard — 보호 라우트 가드', () => {
         route('/trips/10/log', { requiresAuth: true, workspace: 'record' }, { tripId: '10' }),
       ),
     ).toEqual({
-      name: 'trip-plan-workspace',
+      name: 'trip-place-search',
       params: { tripId: '10' },
       replace: true,
     })

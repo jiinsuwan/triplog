@@ -5,9 +5,19 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
+import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
+import { useItineraryStore } from '@/stores/itinerary'
 import { loadKakaoMaps } from '@/utils/kakaoMap'
+import {
+  TRANSPORT_OPTIONS,
+  formatDayDate,
+  hasStopForPlace,
+  nextDefaultTime,
+  placeKey,
+  stopPlaceKey,
+} from '@/utils/itinerary'
 import {
   CATEGORY_OPTIONS,
   buildDbPlaceQuery,
@@ -44,6 +54,16 @@ const KAKAO_CATEGORY_CODES = {
   restaurant: 'FD6',
   cafe: 'CE7',
 }
+const DAY_ROUTE_COLORS = [
+  '#2563eb',
+  '#f97316',
+  '#10b981',
+  '#a855f7',
+  '#e11d48',
+  '#0891b2',
+  '#ca8a04',
+]
+const COLLECTION_ROUTE_COLOR = '#ea580c'
 const GENERIC_FOOD_KEYWORDS = new Set([
   '맛집',
   '식당',
@@ -63,6 +83,7 @@ const GENERIC_CAFE_KEYWORDS = new Set(['카페', '커피', '찻집', '디저트'
 const route = useRoute()
 const router = useRouter()
 const tripStore = useTripStore()
+const itineraryStore = useItineraryStore()
 
 const tripId = computed(() => Number(route.params.tripId))
 const trip = computed(() => tripStore.selectedTrip)
@@ -76,6 +97,12 @@ const kakaoPlaces = ref([])
 const placeRegions = ref([])
 const selectedPlace = ref(null)
 const pocketIds = ref([])
+const pocketPlaceLookup = ref(new Map())
+const itineraryMode = ref(route.query.mode === 'itinerary')
+const activeDayNumber = ref(1)
+const selectedStopId = ref(null)
+const stopDrafts = ref({})
+const itineraryNotice = ref('')
 const loading = ref(false)
 const searching = ref(false)
 const sdkError = ref('')
@@ -90,6 +117,7 @@ let kakao = null
 let map = null
 let placesService = null
 let overlays = []
+let routePolylines = []
 let placePopupOverlay = null
 let placePopupTimer = null
 let mapIdleHandler = null
@@ -118,10 +146,47 @@ const paginatedPlaces = computed(() => {
   return visiblePlaces.value.slice(start, start + LIST_PAGE_SIZE)
 })
 const pocketPlaces = computed(() =>
-  places.value.filter((place) => pocketIds.value.includes(place.uid)),
+  pocketIds.value.map((id) => pocketPlaceLookup.value.get(id)).filter(Boolean),
 )
+const days = computed(() => itineraryStore.days)
+const activeDay = computed(() =>
+  days.value.find((day) => day.dayNumber === activeDayNumber.value) || days.value[0],
+)
+const activeStops = computed(() => activeDay.value?.stops ?? [])
+const dayTabs = computed(() =>
+  days.value.map((day) => ({
+    label: `${day.dayNumber}일차`,
+    value: day.dayNumber,
+    count: day.stops.length,
+    date: day.date,
+  })),
+)
+const activeRoutePlaceKeys = computed(
+  () => new Map(activeStops.value.map((stop) => [stopPlaceKey(stop), stop.sortOrder])),
+)
+const routeSummary = computed(() =>
+  activeStops.value
+    .map((stop) => `${stop.sortOrder}. ${stop.place.name}`)
+    .join(' → '),
+)
+const routeMapPlaces = computed(() => {
+  const candidatePlaces = pocketPlaces.value.length ? pocketPlaces.value : visiblePlaces.value
+  const routedPlaces = activeStops.value.map((stop) => toMapPlace(stop.place))
+  return dedupeRouteMapPlaces([...candidatePlaces, ...routedPlaces])
+})
+const allRouteMapPlaces = computed(() =>
+  dedupeRouteMapPlaces(
+    days.value.flatMap((day) => (day.stops ?? []).map((stop) => toMapPlace(stop.place))),
+  ),
+)
+const mapPlaces = computed(() => {
+  if (itineraryMode.value) return routeMapPlaces.value
+  return dedupeRouteMapPlaces([...allRouteMapPlaces.value, ...visiblePlaces.value])
+})
+const mapPlaceSignature = computed(() => mapPlaces.value.map((place) => place.uid).join('|'))
 const canSearchCurrentMapArea = computed(
   () =>
+    !itineraryMode.value &&
     !sdkError.value &&
     Boolean(currentMapSignature.value) &&
     currentMapSignature.value !== lastMapSearchSignature.value,
@@ -149,6 +214,9 @@ onMounted(async () => {
     await loadTrip()
     await loadPlaceRegions()
     await loadDbPlaces()
+    if (itineraryMode.value) {
+      await ensureItineraryLoaded()
+    }
   } finally {
     loading.value = false
   }
@@ -166,9 +234,22 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [visiblePlaces.value, pocketIds.value],
+  () => [mapPlaceSignature.value, pocketIds.value.join('|'), itineraryMode.value],
   () => renderMapPlaces(),
-  { deep: true },
+)
+
+watch(
+  () => activeStops.value.map((stop) => `${stop.id}:${stop.sortOrder}`).join('|'),
+  () => renderMapPlaces(),
+)
+
+watch(
+  () =>
+    activeStops.value
+      .map((stop) => `${stop.id}:${stop.selectedTime ?? ''}:${stop.memo ?? ''}:${stop.transport ?? ''}`)
+      .join('|'),
+  () => syncStopDrafts(),
+  { immediate: true },
 )
 
 watch(
@@ -177,6 +258,28 @@ watch(
     currentPage.value = 1
   },
 )
+
+watch(
+  () => route.query.mode,
+  async (mode) => {
+    itineraryMode.value = mode === 'itinerary'
+    itineraryNotice.value = ''
+    if (itineraryMode.value) {
+      await ensureItineraryLoaded()
+    }
+    clearPlacePopup()
+    await nextTick()
+    renderMapPlacesAfterLayout({
+      preserveViewport: !(itineraryMode.value && routeMapPlaces.value.length > 0),
+    })
+  },
+)
+
+watch(activeDayNumber, () => {
+  selectedStopId.value = activeStops.value[0]?.id ?? null
+  itineraryNotice.value = ''
+  renderMapPlaces()
+})
 
 watch(activeTab, async (nextTab) => {
   if (nextTab !== 'attraction') {
@@ -253,7 +356,7 @@ async function initMap() {
     )
     attachMapListeners()
     placesService = new kakao.maps.services.Places(map)
-    renderMapPlaces()
+    renderMapPlaces({ preserveViewport: false })
   } catch (error) {
     sdkError.value = error.message
   }
@@ -289,6 +392,7 @@ async function runSearch() {
 
     await loadDbPlaces()
     await searchKakaoPlaces()
+    renderMapPlaces({ preserveViewport: false })
     markMapSearchBaseline({ afterIdle: true })
   } finally {
     searching.value = false
@@ -667,8 +771,17 @@ function clampIndex(value, size) {
   return Math.min(size - 1, Math.max(0, value))
 }
 
-function renderMapPlaces() {
-  drawMapPlaces({ preserveViewport: false })
+function renderMapPlaces({ preserveViewport = true } = {}) {
+  drawMapPlaces({ preserveViewport })
+}
+
+function renderMapPlacesAfterLayout({ preserveViewport = true } = {}) {
+  map?.relayout?.()
+  renderMapPlaces({ preserveViewport })
+  window.requestAnimationFrame(() => {
+    map?.relayout?.()
+    renderMapPlaces({ preserveViewport })
+  })
 }
 
 function attachMapListeners() {
@@ -734,7 +847,7 @@ function drawMapPlaces({ preserveViewport }) {
   if (!kakao || !map) return
 
   clearOverlays()
-  const drawable = visiblePlaces.value.filter(hasCoordinates)
+  const drawable = mapPlaces.value.filter(hasCoordinates)
   const bounds = new kakao.maps.LatLngBounds()
   const viewport = activeRegion.value
   const markerStates = createMarkerDisplayStates(drawable)
@@ -753,6 +866,7 @@ function drawMapPlaces({ preserveViewport }) {
     overlay.setMap(map)
     overlays.push(overlay)
   })
+  drawRoutePolylines()
 
   if (mapViewportFilter.value) {
     return
@@ -781,11 +895,47 @@ function drawMapPlaces({ preserveViewport }) {
 }
 
 function clearOverlays() {
+  routePolylines.forEach((polyline) => polyline.setMap(null))
+  routePolylines = []
   overlays.forEach((overlay) => overlay.setMap(null))
   overlays = []
 }
 
+function drawRoutePolylines() {
+  if (!kakao || !map) return
+
+  days.value.forEach((day) => {
+    const routePath = (day.stops ?? [])
+      .map((stop) => stop.place)
+      .filter(hasCoordinates)
+      .map((place) => new kakao.maps.LatLng(place.latitude, place.longitude))
+
+    if (routePath.length < 2) return
+
+    const isActiveDay = day.dayNumber === activeDayNumber.value
+    const isCollectionMode = !itineraryMode.value
+    const polyline = new kakao.maps.Polyline({
+      path: routePath,
+      strokeWeight: isCollectionMode ? 3 : isActiveDay ? 5 : 3,
+      strokeColor: dayRouteColor(day.dayNumber),
+      strokeOpacity: isCollectionMode ? 0.52 : isActiveDay ? 0.9 : 0.38,
+      strokeStyle: 'shortdash',
+      zIndex: isCollectionMode ? 20 : isActiveDay ? 36 : 22,
+    })
+    polyline.setMap(map)
+    routePolylines.push(polyline)
+  })
+}
+
 function createOverlayContent(place, markerState = defaultMarkerState()) {
+  const routeOrder = itineraryMode.value ? routeOrderForPlace(place) : null
+  const routeUsages = itineraryMode.value
+    ? otherRouteDayUsagesForPlace(place)
+    : allRouteDayUsagesForPlace(place)
+  const isCollectionRouteMarker = !itineraryMode.value && routeUsages.length > 0
+  const routeStatus = itineraryMode.value
+    ? markerRouteStatus(place, routeOrder, routeUsages)
+    : collectionMarkerRouteStatus(place, routeUsages)
   const button = document.createElement('button')
   button.type = 'button'
   button.className = [
@@ -793,14 +943,28 @@ function createOverlayContent(place, markerState = defaultMarkerState()) {
     place.origin === 'db' ? 'is-db' : 'is-kakao',
     `is-${mapMarkerType(place)}`,
     isPocketed(place) ? 'is-pocketed' : '',
-    markerState.dot ? 'is-dot' : '',
-    markerState.labelHidden ? 'is-label-hidden' : '',
+    routeOrder ? 'is-routed' : '',
+    itineraryMode.value && routeUsages.length ? 'is-used-other-day' : '',
+    !itineraryMode.value && routeUsages.length ? 'is-used-in-route' : '',
+    !routeOrder && markerState.dot ? 'is-dot' : '',
+    !routeOrder && markerState.labelHidden && !isCollectionRouteMarker ? 'is-label-hidden' : '',
     markerState.groupSize > 1 ? 'is-grouped' : '',
   ]
     .filter(Boolean)
     .join(' ')
+  const collectionRouteColor = routeUsages[0]?.color || COLLECTION_ROUTE_COLOR
   button.style.setProperty('--marker-offset-x', `${markerState.offset.x}px`)
   button.style.setProperty('--marker-offset-y', `${markerState.offset.y}px`)
+  button.style.setProperty(
+    '--trip-active-day-color',
+    itineraryMode.value ? dayRouteColor(activeDayNumber.value) : collectionRouteColor,
+  )
+  button.style.setProperty(
+    '--trip-other-day-color',
+    itineraryMode.value
+      ? routeUsages[0]?.color || dayRouteColor(activeDayNumber.value)
+      : collectionRouteColor,
+  )
   if (markerState.dot) {
     const hiddenCount = markerState.groupSize > 1 ? ` 외 ${markerState.groupSize - 1}곳` : ''
     button.title = `${place.name}${hiddenCount}`
@@ -808,15 +972,31 @@ function createOverlayContent(place, markerState = defaultMarkerState()) {
   }
 
   const dot = document.createElement('span')
-  const icon = document.createElement('i')
-  icon.className = markerIconClass(place)
-  dot.append(icon)
+  if (routeOrder) {
+    dot.textContent = String(routeOrder)
+  } else {
+    const icon = document.createElement('i')
+    icon.className = markerIconClass(place)
+    dot.append(icon)
+  }
   const label = document.createElement('strong')
-  label.textContent = mapMarkerLabel(place)
+  label.textContent = isCollectionRouteMarker && routeStatus ? routeStatus.label : mapMarkerLabel(place)
   button.append(dot, label)
+  if (routeStatus && !isCollectionRouteMarker) {
+    const status = document.createElement('em')
+    status.className = 'trip-map-pin__status'
+    status.textContent = routeStatus.label
+    button.append(status)
+    button.title = routeStatus.title
+    button.setAttribute('aria-label', routeStatus.title)
+  }
+  if (isCollectionRouteMarker && routeStatus) {
+    button.title = routeStatus.title
+    button.setAttribute('aria-label', routeStatus.title)
+  }
   button.addEventListener('click', (event) => {
     event.stopPropagation()
-    selectPlace(place, { pan: false })
+    handleMapPlaceClick(place)
   })
   return button
 }
@@ -824,7 +1004,8 @@ function createOverlayContent(place, markerState = defaultMarkerState()) {
 function createMarkerDisplayStates(drawable) {
   const states = new Map()
   const level = map?.getLevel?.() ?? 5
-  const wideRegionView = level >= 6 && !mapViewportFilter.value
+  const keepFullLabels = itineraryMode.value
+  const wideRegionView = !keepFullLabels && level >= 6 && !mapViewportFilter.value
   const entries = drawable
     .map((place, index) => ({
       place,
@@ -852,7 +1033,7 @@ function createMarkerDisplayStates(drawable) {
       state.offset = markerGroupOffset(groupIndex, rankedGroup.length)
       state.groupSize = rankedGroup.length
       state.groupPlaces = groupPlaces
-      if (groupIndex > 0) {
+      if (groupIndex > 0 && !keepFullLabels && !shouldKeepRouteMarkerLabel(entry.place)) {
         state.dot = true
       }
     })
@@ -869,7 +1050,11 @@ function createMarkerDisplayStates(drawable) {
     }
 
     const labelRect = markerLabelRect(entry, state)
-    if (occupiedLabelRects.some((rect) => rectsOverlap(labelRect, rect))) {
+    if (
+      occupiedLabelRects.some((rect) => rectsOverlap(labelRect, rect)) &&
+      !keepFullLabels &&
+      !shouldKeepRouteMarkerLabel(entry.place)
+    ) {
       state.dot = true
       state.zIndex = 8
       return
@@ -979,10 +1164,18 @@ function compareMarkerPriority(a, b) {
 
 function markerPriorityScore(entry) {
   let score = entry.index
+  if (shouldKeepRouteMarkerLabel(entry.place)) score -= 1500
   if (isPocketed(entry.place)) score -= 1000
   if (entry.place.origin === 'kakao') score -= 80
   if (entry.place.origin === 'db') score -= 40
   return score
+}
+
+function shouldKeepRouteMarkerLabel(place) {
+  if (itineraryMode.value) {
+    return Boolean(routeOrderForPlace(place) || otherRouteDayUsagesForPlace(place).length)
+  }
+  return Boolean(allRouteDayUsagesForPlace(place).length)
 }
 
 function distanceBetweenPoints(a, b) {
@@ -1262,6 +1455,113 @@ function safeExternalUrl(value = '') {
   return /^https?:\/\//i.test(trimmed) ? trimmed : ''
 }
 
+async function openItineraryBuilder() {
+  itineraryMode.value = true
+  await router.replace({
+    name: 'trip-place-search',
+    params: { tripId: tripId.value },
+    query: { ...route.query, mode: 'itinerary' },
+  })
+  await ensureItineraryLoaded()
+  clearPlacePopup()
+  await nextTick()
+  renderMapPlacesAfterLayout({ preserveViewport: false })
+}
+
+async function closeItineraryBuilder() {
+  itineraryMode.value = false
+  itineraryNotice.value = ''
+  const { mode, ...nextQuery } = route.query
+  await router.replace({
+    name: 'trip-place-search',
+    params: { tripId: tripId.value },
+    query: nextQuery,
+  })
+  await nextTick()
+  renderMapPlacesAfterLayout()
+}
+
+async function ensureItineraryLoaded() {
+  if (!tripId.value) return
+  if (itineraryStore.itinerary?.trip?.id === tripId.value) return
+  try {
+    await itineraryStore.fetchTripItinerary(tripId.value, trip.value)
+    activeDayNumber.value = days.value[0]?.dayNumber ?? 1
+    selectedStopId.value = activeStops.value[0]?.id ?? null
+  } catch {
+    // store error를 오른쪽 일정 패널에서 표시한다.
+  }
+}
+
+async function addPocketPlaceToRoute(place) {
+  await ensureItineraryLoaded()
+  if (!activeDay.value) return
+
+  const itineraryPlace = toItineraryPlace(place)
+  if (hasStopForPlace(activeDay.value, itineraryPlace)) {
+    const currentStop = activeDay.value.stops.find(
+      (stop) => stopPlaceKey(stop) === placeKey(itineraryPlace),
+    )
+    selectedStopId.value = currentStop?.id ?? selectedStopId.value
+    itineraryNotice.value = '이미 이 날짜 루트에 들어간 장소입니다.'
+    return
+  }
+
+  try {
+    const stop = await itineraryStore.addPlaceToDay(tripId.value, activeDayNumber.value, itineraryPlace, {
+      selectedTime: nextDefaultTime(activeStops.value),
+      transport: 'walk',
+    })
+    selectedStopId.value = stop.id
+    itineraryNotice.value = `${place.name}을(를) ${activeDayNumber.value}일차 루트에 추가했습니다.`
+  } catch {
+    // store error를 오른쪽 일정 패널에서 표시한다.
+  }
+}
+
+async function handleMapPlaceClick(place) {
+  if (itineraryMode.value) {
+    await addPocketPlaceToRoute(place)
+    return
+  }
+
+  selectPlace(place, { pan: false })
+}
+
+async function updateStopField(stop) {
+  const draft = stopDraft(stop)
+  try {
+    await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
+      selectedTime: draft.selectedTime,
+      memo: draft.memo,
+      transport: draft.transport,
+    })
+    selectedStopId.value = stop.id
+  } catch {
+    resetStopDraft(stop)
+    // store error를 오른쪽 일정 패널에서 표시한다.
+  }
+}
+
+async function moveStop(stop, direction) {
+  try {
+    await itineraryStore.moveStopWithinDay(tripId.value, activeDayNumber.value, stop.id, direction)
+    selectedStopId.value = stop.id
+  } catch {
+    // store error를 오른쪽 일정 패널에서 표시한다.
+  }
+}
+
+async function deleteStop(stop) {
+  try {
+    await itineraryStore.deleteStop(tripId.value, activeDayNumber.value, stop.id)
+    selectedStopId.value = activeStops.value[0]?.id ?? null
+    itineraryNotice.value = `${stop.place.name}을(를) 루트에서 제거했습니다.`
+  } catch {
+    // store error를 오른쪽 일정 패널에서 표시한다.
+  }
+}
+
 function keepPlacePopupInView() {
   if (!mapEl.value || !placePopupOverlay) return
 
@@ -1293,8 +1593,14 @@ function keepPlacePopupInView() {
 function togglePocket(place) {
   if (isPocketed(place)) {
     pocketIds.value = pocketIds.value.filter((id) => id !== place.uid)
+    const nextLookup = new Map(pocketPlaceLookup.value)
+    nextLookup.delete(place.uid)
+    pocketPlaceLookup.value = nextLookup
     return
   }
+  const nextLookup = new Map(pocketPlaceLookup.value)
+  nextLookup.set(place.uid, place)
+  pocketPlaceLookup.value = nextLookup
   pocketIds.value = [...pocketIds.value, place.uid]
 }
 
@@ -1308,6 +1614,198 @@ function goToPage(pageNumber) {
 
 function isPocketed(place) {
   return pocketIds.value.includes(place.uid)
+}
+
+function syncStopDrafts() {
+  const nextDrafts = {}
+  activeStops.value.forEach((stop) => {
+    nextDrafts[stop.id] = defaultStopDraft(stop)
+  })
+  stopDrafts.value = nextDrafts
+}
+
+function stopDraft(stop) {
+  return stopDrafts.value[stop.id] || defaultStopDraft(stop)
+}
+
+function setStopDraft(stop, patch) {
+  stopDrafts.value = {
+    ...stopDrafts.value,
+    [stop.id]: {
+      ...defaultStopDraft(stop),
+      ...stopDrafts.value[stop.id],
+      ...patch,
+    },
+  }
+}
+
+function resetStopDraft(stop) {
+  setStopDraft(stop, defaultStopDraft(stop))
+}
+
+function defaultStopDraft(stop) {
+  return {
+    selectedTime: stop.selectedTime || '',
+    memo: stop.memo || '',
+    transport: stop.transport || 'walk',
+  }
+}
+
+function transportLabel(value) {
+  return TRANSPORT_OPTIONS.find((option) => option.value === value)?.label || '이동수단'
+}
+
+function routeOrderForPlace(place) {
+  return activeRoutePlaceKeys.value.get(routePlaceKey(place)) ?? null
+}
+
+function otherRouteDayUsagesForPlace(place) {
+  const key = routePlaceKey(place)
+  return days.value
+    .filter((day) => day.dayNumber !== activeDayNumber.value)
+    .filter((day) => day.stops.some((stop) => stopPlaceKey(stop) === key))
+    .map((day) => ({
+      dayNumber: day.dayNumber,
+      label: `${day.dayNumber}일차`,
+      color: dayRouteColor(day.dayNumber),
+    }))
+}
+
+function allRouteDayUsagesForPlace(place) {
+  const key = routePlaceKey(place)
+  return days.value
+    .filter((day) => day.stops.some((stop) => stopPlaceKey(stop) === key))
+    .map((day) => ({
+      dayNumber: day.dayNumber,
+      label: `${day.dayNumber}일차`,
+      color: dayRouteColor(day.dayNumber),
+    }))
+}
+
+function collectionMarkerRouteStatus(place, routeUsages = []) {
+  if (!routeUsages.length) return null
+
+  const dayLabels = routeUsages.map((usage) => usage.label)
+  const daysText = dayLabels.join(', ')
+  return {
+    label: dayLabels.join('·'),
+    title: `${place.name}, ${daysText} 일정에 포함된 장소`,
+  }
+}
+
+function markerRouteStatus(place, routeOrder, otherDayUsages = []) {
+  const otherDayLabels = otherDayUsages.map((usage) => usage.label)
+
+  if (routeOrder && otherDayLabels.length) {
+    const otherDays = otherDayLabels.join(', ')
+    return {
+      label: `추가됨 · ${otherDayLabels.join('·')}`,
+      title: `${place.name}, 현재 ${activeDayNumber.value}일차에 추가됨, ${otherDays}에도 포함됨`,
+    }
+  }
+
+  if (routeOrder) {
+    return {
+      label: '추가됨',
+      title: `${place.name}, 현재 ${activeDayNumber.value}일차에 이미 추가됨`,
+    }
+  }
+
+  if (otherDayLabels.length) {
+    const otherDays = otherDayLabels.join(', ')
+    return {
+      label: otherDayLabels.join('·'),
+      title: `${place.name}, ${otherDays}에 이미 포함됨. 현재 날짜에도 추가할 수 있음`,
+    }
+  }
+
+  return null
+}
+
+function dayRouteColor(dayNumber) {
+  const index = Math.max(0, Number(dayNumber || 1) - 1)
+  return DAY_ROUTE_COLORS[index % DAY_ROUTE_COLORS.length]
+}
+
+function routePlaceKey(place) {
+  return placeKey(toItineraryPlace(place))
+}
+
+function dedupeRouteMapPlaces(places = []) {
+  const merged = new Map()
+  places
+    .filter(Boolean)
+    .map(toMapPlace)
+    .filter(hasCoordinates)
+    .forEach((place) => {
+      merged.set(routePlaceKey(place), place)
+    })
+  return [...merged.values()]
+}
+
+function toMapPlace(place = {}) {
+  if (place.uid && place.origin) return place
+
+  const source = String(place.source || place.provider || '').toUpperCase()
+  const origin = source === 'DB' ? 'db' : 'kakao'
+  const sourceId = origin === 'db' ? place.dbPlaceId : place.sourcePlaceId
+  const uid = placeKey(place)
+  return {
+    uid,
+    origin,
+    sourceId,
+    provider: place.provider || source || origin.toUpperCase(),
+    dbPlaceId: place.dbPlaceId ?? null,
+    sourcePlaceId: place.sourcePlaceId || String(sourceId ?? uid),
+    placeType: place.placeType || 'ETC',
+    name: place.name || '장소',
+    category: place.category || '',
+    categoryGroup: place.categoryGroup || '',
+    region1: place.region1 || '',
+    region2: place.region2 || '',
+    address: place.address || '',
+    roadAddress: place.roadAddress || '',
+    latitude: place.latitude,
+    longitude: place.longitude,
+    phone: place.phone || '',
+    homepage: place.homepage || '',
+    placeUrl: place.placeUrl || '',
+    description: place.description || '',
+    summary: place.summary || '',
+    facilities: place.facilities || '',
+    imageUrl: place.imageUrl || '',
+  }
+}
+
+function toItineraryPlace(place) {
+  const placeType = toItineraryPlaceType(place)
+  const source = place.origin === 'db' ? 'DB' : 'KAKAO'
+  return {
+    source,
+    provider: place.provider || source,
+    dbPlaceId: place.origin === 'db' ? place.sourceId : null,
+    sourcePlaceId: String(place.sourceId ?? place.uid ?? place.name),
+    placeType,
+    name: place.name,
+    category: place.category || '',
+    categoryGroup: place.categoryGroup || '',
+    region1: place.region1 || '',
+    region2: place.region2 || '',
+    address: place.address || '',
+    roadAddress: place.roadAddress || '',
+    latitude: place.latitude,
+    longitude: place.longitude,
+    phone: place.phone || '',
+    placeUrl: place.placeUrl || '',
+  }
+}
+
+function toItineraryPlaceType(place) {
+  const markerType = mapMarkerType(place)
+  if (markerType === 'attraction') return 'ATTRACTION'
+  if (markerType === 'restaurant') return 'RESTAURANT'
+  if (markerType === 'cafe') return 'CAFE'
+  return 'ETC'
 }
 
 function goBack() {
@@ -1344,7 +1842,7 @@ function hasCoordinates(place) {
 }
 
 function fallbackPinStyle(place) {
-  const drawable = visiblePlaces.value.filter(hasCoordinates)
+  const drawable = mapPlaces.value.filter(hasCoordinates)
   const lats = drawable.map((item) => item.latitude)
   const lngs = drawable.map((item) => item.longitude)
   const minLat = Math.min(...lats)
@@ -1612,99 +2110,243 @@ function normalizeSearchText(value = '') {
       <span>지도와 장소 데이터를 준비하는 중입니다.</span>
     </section>
 
-    <section v-else class="search-shell">
-      <aside class="place-list-panel">
-        <div class="search-card">
-          <div class="field-row">
-            <InputText
-              v-model="keyword"
-              placeholder="장소, 골목, 맛집 검색"
-              aria-label="장소 검색어"
-              @keyup.enter="runSearch"
+    <section v-else class="search-shell" :class="{ planning: itineraryMode }">
+      <aside class="place-list-panel" :class="{ planning: itineraryMode }">
+        <template v-if="!itineraryMode">
+          <div class="search-card">
+            <div class="field-row">
+              <InputText
+                v-model="keyword"
+                placeholder="장소, 골목, 맛집 검색"
+                aria-label="장소 검색어"
+                @keyup.enter="runSearch"
+              />
+              <Button icon="pi pi-search" aria-label="검색" :loading="searching" @click="runSearch" />
+            </div>
+            <SelectButton
+              v-model="activeTab"
+              :options="CATEGORY_OPTIONS"
+              option-label="label"
+              option-value="value"
+              aria-label="장소 유형"
             />
-            <Button icon="pi pi-search" aria-label="검색" :loading="searching" @click="runSearch" />
           </div>
-          <SelectButton
-            v-model="activeTab"
-            :options="CATEGORY_OPTIONS"
-            option-label="label"
-            option-value="value"
-            aria-label="장소 유형"
-          />
-        </div>
 
-        <Message v-if="placeError" severity="warn" :closable="false">
-          {{ placeError }}
-        </Message>
-        <Message v-if="kakaoSearchNotice" severity="info" :closable="false">
-          {{ kakaoSearchNotice }}
-        </Message>
+          <Message v-if="placeError" severity="warn" :closable="false">
+            {{ placeError }}
+          </Message>
+          <Message v-if="kakaoSearchNotice" severity="info" :closable="false">
+            {{ kakaoSearchNotice }}
+          </Message>
 
-        <div class="list-head">
-          <strong>{{ visiblePlaces.length }}곳</strong>
-        </div>
+          <div class="list-head">
+            <strong>{{ visiblePlaces.length }}곳</strong>
+          </div>
 
-        <div class="place-list">
-          <article
-            v-for="place in paginatedPlaces"
-            :key="place.uid"
-            class="place-row"
-            :class="{ active: selectedPlace?.uid === place.uid }"
-          >
-            <button type="button" class="place-row__main" @click="selectPlace(place)">
-              <span>
-                <strong>{{ place.name }}</strong>
-                <small>{{ place.address || place.category }}</small>
-              </span>
-            </button>
+          <div class="place-list">
+            <article
+              v-for="place in paginatedPlaces"
+              :key="place.uid"
+              class="place-row"
+              :class="{ active: selectedPlace?.uid === place.uid }"
+            >
+              <button type="button" class="place-row__main" @click="selectPlace(place)">
+                <span>
+                  <strong>{{ place.name }}</strong>
+                  <small>{{ place.address || place.category }}</small>
+                </span>
+              </button>
+              <Button
+                class="place-row__pocket"
+                :icon="isPocketed(place) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
+                :severity="isPocketed(place) ? 'success' : 'secondary'"
+                text
+                rounded
+                :aria-label="`${place.name} ${pocketActionLabel(place)}`"
+                @click.stop="togglePocket(place)"
+              />
+            </article>
+          </div>
+
+          <nav v-if="totalPages > 1" class="pagination" aria-label="장소 목록 페이지">
             <Button
-              class="place-row__pocket"
-              :icon="isPocketed(place) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
-              :severity="isPocketed(place) ? 'success' : 'secondary'"
-              text
-              rounded
-              :aria-label="`${place.name} ${pocketActionLabel(place)}`"
-              @click.stop="togglePocket(place)"
+              icon="pi pi-chevron-left"
+              severity="secondary"
+              outlined
+              size="small"
+              aria-label="이전 페이지"
+              :disabled="!canGoPrevPage"
+              @click="goToPage(currentPage - 1)"
             />
-          </article>
-        </div>
+            <Button
+              v-for="pageNumber in pageNumbers"
+              :key="pageNumber"
+              :label="String(pageNumber)"
+              :severity="pageNumber === currentPage ? 'primary' : 'secondary'"
+              :outlined="pageNumber !== currentPage"
+              size="small"
+              @click="goToPage(pageNumber)"
+            />
+            <Button
+              icon="pi pi-chevron-right"
+              severity="secondary"
+              outlined
+              size="small"
+              aria-label="다음 페이지"
+              :disabled="!canGoNextPage"
+              @click="goToPage(currentPage + 1)"
+            />
+          </nav>
+        </template>
 
-        <nav v-if="totalPages > 1" class="pagination" aria-label="장소 목록 페이지">
-          <Button
-            icon="pi pi-chevron-left"
-            severity="secondary"
-            outlined
-            size="small"
-            aria-label="이전 페이지"
-            :disabled="!canGoPrevPage"
-            @click="goToPage(currentPage - 1)"
-          />
-          <Button
-            v-for="pageNumber in pageNumbers"
-            :key="pageNumber"
-            :label="String(pageNumber)"
-            :severity="pageNumber === currentPage ? 'primary' : 'secondary'"
-            :outlined="pageNumber !== currentPage"
-            size="small"
-            @click="goToPage(pageNumber)"
-          />
-          <Button
-            icon="pi pi-chevron-right"
-            severity="secondary"
-            outlined
-            size="small"
-            aria-label="다음 페이지"
-            :disabled="!canGoNextPage"
-            @click="goToPage(currentPage + 1)"
-          />
-        </nav>
+        <template v-else>
+          <div class="route-panel-tools">
+            <Button
+              label="장소 더 담기"
+              icon="pi pi-bookmark"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="closeItineraryBuilder"
+            />
+          </div>
+
+          <Message v-if="itineraryStore.isMock" severity="info" :closable="false" class="compact-message">
+            현재는 mock/local state로 루트 편집 흐름을 검증합니다.
+          </Message>
+          <Message v-if="itineraryStore.error" severity="error" :closable="false" class="compact-message">
+            {{ itineraryStore.error }}
+          </Message>
+          <Message v-if="itineraryNotice" severity="success" :closable="false" class="compact-message">
+            {{ itineraryNotice }}
+          </Message>
+
+          <div class="day-tabs" role="tablist" aria-label="편집할 날짜">
+            <button
+              v-for="day in dayTabs"
+              :key="day.value"
+              type="button"
+              class="day-tab"
+              :class="{ active: day.value === activeDayNumber }"
+              :style="{ '--trip-day-color': dayRouteColor(day.value) }"
+              role="tab"
+              :aria-selected="day.value === activeDayNumber"
+              @click="activeDayNumber = day.value"
+            >
+              <strong>{{ day.label }}</strong>
+              <span>{{ formatDayDate(day.date) }}</span>
+              <em>{{ day.count }}</em>
+            </button>
+          </div>
+
+          <section class="route-stop-section">
+            <div class="route-section-head">
+              <strong>현재 루트</strong>
+              <small>
+                {{
+                  routeSummary ||
+                  (pocketPlaces.length || visiblePlaces.length
+                    ? '지도 마커를 누르는 순서대로 루트가 만들어집니다.'
+                    : '장소를 검색하거나 담은 뒤 지도 마커를 눌러 루트를 만들어보세요.')
+                }}
+              </small>
+            </div>
+
+            <div v-if="activeStops.length" class="route-stop-list">
+              <template v-for="(stop, index) in activeStops" :key="stop.id">
+                <article
+                  class="route-stop-card"
+                  :class="{ active: selectedStopId === stop.id }"
+                >
+                <button
+                  type="button"
+                  class="route-stop-main"
+                  :aria-label="`${stop.sortOrder}번 ${stop.place.name} 선택`"
+                  @click="selectedStopId = stop.id"
+                >
+                  <span>{{ stop.sortOrder }}</span>
+                  <strong>{{ stop.place.name }}</strong>
+                  <small>{{ stop.place.roadAddress || stop.place.address || stop.place.category }}</small>
+                </button>
+
+                <div class="route-stop-fields">
+                  <InputText
+                    :model-value="stopDraft(stop).selectedTime"
+                    type="time"
+                    aria-label="방문 시각"
+                    @update:model-value="setStopDraft(stop, { selectedTime: $event })"
+                    @change="updateStopField(stop)"
+                  />
+                  <Select
+                    :model-value="stopDraft(stop).transport"
+                    :options="TRANSPORT_OPTIONS"
+                    option-label="label"
+                    option-value="value"
+                    aria-label="이동수단"
+                    @update:model-value="setStopDraft(stop, { transport: $event })"
+                    @change="updateStopField(stop)"
+                  />
+                </div>
+                <textarea
+                  :value="stopDraft(stop).memo"
+                  rows="2"
+                  placeholder="메모"
+                  aria-label="방문 메모"
+                  @input="setStopDraft(stop, { memo: $event.target.value })"
+                  @blur="updateStopField(stop)"
+                />
+                <div class="route-stop-actions">
+                  <Button
+                    icon="pi pi-arrow-up"
+                    severity="secondary"
+                    outlined
+                    rounded
+                    size="small"
+                    :disabled="index === 0 || itineraryStore.mutating"
+                    :aria-label="`${stop.place.name} 위로 이동`"
+                    @click="moveStop(stop, 'up')"
+                  />
+                  <Button
+                    icon="pi pi-arrow-down"
+                    severity="secondary"
+                    outlined
+                    rounded
+                    size="small"
+                    :disabled="index === activeStops.length - 1 || itineraryStore.mutating"
+                    :aria-label="`${stop.place.name} 아래로 이동`"
+                    @click="moveStop(stop, 'down')"
+                  />
+                  <Button
+                    icon="pi pi-trash"
+                    severity="danger"
+                    outlined
+                    rounded
+                    size="small"
+                    :disabled="itineraryStore.mutating"
+                    :aria-label="`${stop.place.name} 삭제`"
+                    @click="deleteStop(stop)"
+                  />
+                </div>
+                </article>
+                <div v-if="index < activeStops.length - 1" class="route-leg">
+                  <span>
+                    <i class="pi pi-arrow-down" aria-hidden="true"></i>
+                    {{ stop.place.name }} → {{ activeStops[index + 1].place.name }}
+                  </span>
+                  <em>{{ transportLabel(activeStops[index + 1].transport) }}</em>
+                </div>
+              </template>
+            </div>
+            <p v-else class="empty-pocket">담긴 장소를 순서대로 눌러 루트를 만들어보세요.</p>
+          </section>
+        </template>
       </aside>
 
       <section class="map-panel">
         <div class="map-toolbar">
           <div>
             <span class="eyebrow">Map</span>
-            <h2>{{ tripRegion }} 주변 장소</h2>
+            <h2>{{ itineraryMode ? '담은 장소 일정 만들기' : `${tripRegion} 주변 장소` }}</h2>
           </div>
           <div class="map-tools">
             <Button
@@ -1728,7 +2370,7 @@ function normalizeSearchText(value = '') {
           </Message>
           <div v-if="sdkError" class="fallback-map">
             <button
-              v-for="place in visiblePlaces.filter(hasCoordinates)"
+              v-for="place in mapPlaces.filter(hasCoordinates)"
               :key="place.uid"
               type="button"
               class="fallback-pin"
@@ -1738,7 +2380,7 @@ function normalizeSearchText(value = '') {
                 pocketed: isPocketed(place),
               }"
               :style="fallbackPinStyle(place)"
-              @click="selectPlace(place)"
+              @click="handleMapPlaceClick(place)"
             >
               <span aria-hidden="true" />
               <strong>{{ place.name }}</strong>
@@ -1747,7 +2389,7 @@ function normalizeSearchText(value = '') {
         </div>
       </section>
 
-      <aside class="pocket-panel">
+      <aside v-if="!itineraryMode" class="pocket-panel">
         <div class="pocket-head">
           <div>
             <span class="eyebrow">Pocket</span>
@@ -1771,6 +2413,15 @@ function normalizeSearchText(value = '') {
           </article>
         </div>
         <p v-else class="empty-pocket">지도나 목록에서 장소를 골라 담아보세요.</p>
+        <Button
+          class="route-start-button"
+          label="일정 루트 만들기"
+          icon="pi pi-sitemap"
+          severity="success"
+          :disabled="!pocketPlaces.length"
+          :loading="itineraryStore.loading"
+          @click="openItineraryBuilder"
+        />
       </aside>
     </section>
   </main>
@@ -1830,9 +2481,13 @@ function normalizeSearchText(value = '') {
 
 .search-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(420px, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(280px, 360px) minmax(420px, 1fr) minmax(320px, 390px);
   gap: 16px;
   align-items: stretch;
+}
+
+.search-shell.planning {
+  grid-template-columns: minmax(300px, 390px) minmax(520px, 1fr);
 }
 
 .place-list-panel,
@@ -1851,6 +2506,11 @@ function normalizeSearchText(value = '') {
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 14px;
   min-height: 0;
+}
+
+.place-list-panel.planning {
+  grid-template-rows: auto auto auto minmax(0, auto) minmax(0, 1fr);
+  align-content: start;
 }
 
 .search-card {
@@ -1961,7 +2621,7 @@ function normalizeSearchText(value = '') {
 }
 
 .place-row.active {
-  border-color: #151d25;
+  border-color: transparent;
   background: #eefbf6;
 }
 
@@ -2086,7 +2746,11 @@ function normalizeSearchText(value = '') {
 }
 
 .fallback-pin.pocketed {
-  outline: 6px solid rgba(139, 92, 246, 0.22);
+  outline: 0;
+}
+
+.fallback-pin.pocketed span {
+  background: #7c3aed;
 }
 
 .empty-pocket {
@@ -2098,8 +2762,8 @@ function normalizeSearchText(value = '') {
 
 .pocket-panel {
   padding: 18px;
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
@@ -2124,7 +2788,242 @@ function normalizeSearchText(value = '') {
   right: 8px;
 }
 
+.route-start-button {
+  width: 100%;
+  justify-content: center;
+  margin-top: auto;
+}
+
+.route-panel-tools {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.compact-message {
+  margin: 0;
+}
+
+.day-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.day-tab {
+  min-width: 0;
+  min-height: 70px;
+  border: 1px solid #d9e0ea;
+  border-radius: 14px;
+  padding: 9px;
+  background: #fff;
+  color: #151d25;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  cursor: pointer;
+  box-shadow: inset 4px 0 0 var(--trip-day-color, #2563eb);
+}
+
+.day-tab strong {
+  font-size: 14px;
+}
+
+.day-tab span,
+.day-tab small {
+  color: #687586;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.day-tab em {
+  min-width: 26px;
+  min-height: 22px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--trip-day-color, #2563eb) 12%, #fff);
+  color: var(--trip-day-color, #2563eb);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.day-tab.active {
+  border-color: var(--trip-day-color, #2563eb);
+  background: color-mix(in srgb, var(--trip-day-color, #2563eb) 9%, #fff);
+  box-shadow: inset 4px 0 0 var(--trip-day-color, #2563eb),
+    inset 0 0 0 1px var(--trip-day-color, #2563eb);
+}
+
+.route-stop-section {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.route-section-head {
+  display: grid;
+  gap: 3px;
+}
+
+.route-section-head strong {
+  color: #151d25;
+  font-size: 15px;
+}
+
+.route-section-head small {
+  min-width: 0;
+  color: #687586;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.route-stop-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding-right: 4px;
+}
+
+.route-stop-list {
+  max-height: min(420px, 44vh);
+}
+
+.route-stop-main span {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #10b981;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.route-stop-main strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.route-stop-main small {
+  grid-column: 2;
+  min-width: 0;
+  color: #687586;
+  font-size: 12px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.route-stop-card {
+  border: 1px solid #e5e8ef;
+  border-radius: 18px;
+  padding: 11px;
+  display: grid;
+  gap: 9px;
+  background: #fff;
+}
+
+.route-stop-card.active {
+  border-color: #c8eadb;
+  background: #f7fffb;
+  box-shadow: none;
+}
+
+.route-stop-main {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 9px;
+  align-items: center;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.route-stop-fields {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(132px, 1fr);
+  gap: 8px;
+}
+
+.route-stop-fields :deep(.p-inputtext),
+.route-stop-fields :deep(.p-select) {
+  width: 100%;
+}
+
+.route-stop-card textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #d9e0ea;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  color: #151d25;
+  font: inherit;
+  font-size: 13px;
+}
+
+.route-stop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.route-leg {
+  margin: -1px 14px;
+  padding: 10px 12px;
+  border-left: 2px solid #d9e0ea;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 150px);
+  align-items: center;
+  gap: 10px;
+  color: #536173;
+}
+
+.route-leg span {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.route-leg i {
+  color: #10b981;
+  font-size: 12px;
+}
+
+.route-leg em {
+  justify-self: end;
+  min-width: 82px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #eefbf6;
+  color: #0f8f63;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+
 :global(.trip-map-pin) {
+  position: relative;
   border: 0;
   display: grid;
   justify-items: center;
@@ -2151,6 +3050,42 @@ function normalizeSearchText(value = '') {
   color: #151d25;
   font-size: 12px;
   line-height: 1.15;
+}
+
+:global(.trip-map-pin__status) {
+  display: block;
+  margin-top: -1px;
+  color: var(--trip-active-day-color, #2563eb);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+:global(.trip-map-pin.is-used-other-day:not(.is-routed)::before) {
+  content: '';
+  width: 34px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--trip-other-day-color, #2563eb);
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 2px 7px rgba(37, 99, 235, 0.25);
+}
+
+:global(.trip-map-pin.is-used-in-route::before) {
+  content: '';
+  width: 34px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--trip-other-day-color, #2563eb);
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 25%, transparent);
 }
 
 :global(.trip-map-pin span) {
@@ -2181,6 +3116,43 @@ function normalizeSearchText(value = '') {
 
 :global(.trip-map-pin.is-cafe span) {
   background: #8b5cf6;
+}
+
+:global(.trip-map-pin.is-routed span) {
+  background: var(--trip-active-day-color, #2563eb);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--trip-active-day-color, #2563eb) 18%, transparent),
+    0 10px 24px rgba(15, 23, 42, 0.22);
+}
+
+:global(.trip-map-pin.is-pocketed:not(.is-routed):not(.is-used-other-day):not(.is-used-in-route) span) {
+  background: #f59e0b;
+  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.24);
+}
+
+:global(.trip-map-pin.is-pocketed:not(.is-routed):not(.is-used-other-day):not(.is-used-in-route) strong) {
+  color: #92400e;
+}
+
+:global(.trip-map-pin.is-used-other-day:not(.is-routed) span) {
+  background: var(--trip-other-day-color, #2563eb);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 16%, transparent),
+    0 8px 18px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 24%, transparent);
+}
+
+:global(.trip-map-pin.is-used-other-day:not(.is-routed) strong),
+:global(.trip-map-pin.is-used-other-day:not(.is-routed) .trip-map-pin__status) {
+  color: var(--trip-other-day-color, #2563eb);
+}
+
+:global(.trip-map-pin.is-used-in-route span) {
+  background: var(--trip-other-day-color, #2563eb);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 16%, transparent),
+    0 8px 18px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 24%, transparent);
+}
+
+:global(.trip-map-pin.is-used-in-route strong),
+:global(.trip-map-pin.is-used-in-route .trip-map-pin__status) {
+  color: var(--trip-other-day-color, #2563eb);
 }
 
 :global(.trip-map-pin i) {
@@ -2227,6 +3199,14 @@ function normalizeSearchText(value = '') {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+:global(.trip-map-pin.is-dot .trip-map-pin__status) {
+  display: none;
+}
+
+:global(.trip-map-pin.is-label-hidden .trip-map-pin__status) {
+  display: none;
 }
 
 :global(.trip-place-popup) {
@@ -2398,12 +3378,16 @@ function normalizeSearchText(value = '') {
 }
 
 :global(.trip-map-pin.is-pocketed) {
-  outline: 6px solid rgba(139, 92, 246, 0.23);
+  outline: 0;
 }
 
 @media (max-width: 1180px) {
   .search-shell {
     grid-template-columns: minmax(280px, 360px) 1fr;
+  }
+
+  .search-shell.planning {
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   }
 
   .pocket-panel {
@@ -2417,6 +3401,10 @@ function normalizeSearchText(value = '') {
     grid-template-columns: 1fr;
   }
 
+  .search-shell.planning {
+    grid-template-columns: 1fr;
+  }
+
   .place-list-panel,
   .map-panel,
   .pocket-panel {
@@ -2425,6 +3413,15 @@ function normalizeSearchText(value = '') {
 
   .map-stage {
     min-height: 420px;
+  }
+
+  .route-stop-fields,
+  .route-leg {
+    grid-template-columns: 1fr;
+  }
+
+  .route-leg em {
+    justify-self: start;
   }
 }
 

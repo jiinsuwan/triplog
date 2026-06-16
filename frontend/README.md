@@ -11,6 +11,7 @@ Vue 3 · Vite · Pinia · Vue Router · axios · PrimeVue(Aura) · Vitest
   | 키 | 설명 |
   |---|---|
   | `VITE_API_BASE_URL` | 백엔드 API 베이스 URL (기본 `http://localhost:8080`) |
+  | `VITE_USE_MOCK_ITINERARY` | 일정 편집을 backend 없이 mock/local state로 확인할 때만 `true` |
   | `VITE_KAKAO_MAP_KEY` | 카카오맵 JavaScript 키 (trip 트랙) |
 
 > `VITE_` 접두사 변수만 클라이언트에 노출된다. `.env` 는 커밋 금지.
