@@ -1,4 +1,4 @@
-// renderCore.js — 카드 overlay 렌더 코어 (Canvas2D, 세로 1080×1920).
+// renderCore.js — 카드 overlay 렌더 코어 (Canvas2D). 캔버스 = 사진 비율(crop 0); 세로 9:16 맞춤은 #73 내보내기.
 //
 // 포팅 원본: poc/card/legacy-v3/render-overlay.mjs (드로잉 프리미티브) + overlay-place.mjs (배치 기하).
 //   변경점:
@@ -54,7 +54,9 @@ export function renderCard(ctx, scene, assets = {}, opts = {}) {
 // ---------- 사진 + 톤 + 무드 톤다운 ----------
 function drawPhotoTone(ctx, img, W, H, t, grain) {
   ctx.save();
-  if (img) {
+  // 유효 이미지(로딩 완료 + 크기>0)만 그린다. 빈/미로딩 객체는 cover-fit 좌표가 NaN 이 되어 브라우저
+  //   Canvas 가 throw 하므로, 배경 fallback 으로 처리한다(테스트 mock 은 통과시켜도 실제 Canvas 는 예외).
+  if (img && img.width > 0 && img.height > 0) {
     const f = [];
     f.push(`brightness(${t.brightness ?? 1.02})`);
     f.push(`contrast(${t.contrast ?? 1.04})`);

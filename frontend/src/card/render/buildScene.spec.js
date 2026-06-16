@@ -166,8 +166,9 @@ describe('buildScene — 캔버스 비율과 anchor 가시성', () => {
     expect(scene.layers.filter((l) => l.kind === 'note')).toHaveLength(2);
   });
 
-  it('캔버스 ≠ 사진 비율이면 크롭 영역 anchor 는 제외된다(export/세로 고정 시나리오)', () => {
-    // coverFit 함수의 crop 동작. 제품 렌더 기본은 위처럼 캔버스=사진비율이라 여기 걸리지 않는다.
+  it('캔버스 ≠ 사진 비율이면 크롭 영역 anchor 는 제외된다(coverFit 함수 방어 — 제품 경로 아님)', () => {
+    // coverFit 은 cover-fit 함수라 캔버스≠사진비율이면 크롭이 생긴다. 제품 렌더는 항상 캔버스=사진비율(crop 0)
+    //   이고 9:16 맞춤은 #73 내보내기 위아래 패딩이라, 이 경로로 들어가지 않는다(함수 방어 확인용).
     const items = [{ id: 0, center: [0.5, 0.5], bbox: [0.4, 0.4, 0.6, 0.6], anchors: [[0.0, 0.5, 0.9]] }];
     const scene = buildScene({
       items,

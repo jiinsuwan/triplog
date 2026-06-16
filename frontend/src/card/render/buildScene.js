@@ -54,16 +54,17 @@ function flattenLines(note) {
  * @param {object}   p
  * @param {Array}    p.items     사이드카 items (사진정규화 0~1: id/center/bbox/area/polygons/anchors)
  * @param {object}   p.captions  문구 LLM 응답 { objects:[{itemId,anchor,note}], closing:{text} }
- * @param {{W:number,H:number}} p.canvas  카드 캔버스(기본 1080×1920)
+ * @param {{W:number,H:number}} [p.canvas]  카드 캔버스(생략 시 사진 비율 = crop 0). 세로 9:16 맞춤은 #73 내보내기 책임
  * @param {{w:number,h:number}} p.photo   원본 사진 크기(cover-fit 계산용, 필수)
  * @param {object}  [p.style]   { toneDown?:0~0.5, outline?:boolean, tone?:object }
  * @returns {{canvas:{W,H}, tone:object, layers:Array}}
  */
-export function buildScene({ items = [], captions = {}, canvas = { W: 1080, H: 1920 }, photo, style = {} }) {
+export function buildScene({ items = [], captions = {}, canvas, photo, style = {} }) {
   if (!photo || !(photo.w > 0) || !(photo.h > 0)) {
     throw new Error('buildScene: photo {w,h}(원본 사진 크기)가 필요합니다 — cover-fit 변환에 필수');
   }
-  const { W, H } = canvas;
+  // 캔버스 기본 = 사진 비율(cover-fit 항등 → crop 0). 세로 9:16 맞춤(위아래 패딩)은 #73 내보내기 책임.
+  const { W, H } = canvas || { W: photo.w, H: photo.h };
   const cf = makeCoverFit(photo.w, photo.h, W, H);
   const itemById = new Map(items.map((it) => [it.id, it]));
 

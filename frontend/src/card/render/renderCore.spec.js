@@ -63,12 +63,15 @@ describe('renderCore — 핵심 드로잉 호출 기록', () => {
     expect(c.fillRect || 0).toBeGreaterThanOrEqual(1); // 톤다운/가독 음영
   });
 
-  it('사진 자산이 없으면 drawImage 대신 배경을 채운다', () => {
-    const ctx = makeMockCtx();
+  it('사진 자산이 없거나 무효(빈 객체)면 drawImage 대신 배경을 채운다', () => {
+    // {} = 자산 없음, { photo: {} } = width/height 없는 무효 이미지(좌표 NaN 위험) — 둘 다 배경 fallback
     const scene = buildScene({ items: sampleItems, captions: sampleCaptions, canvas: { W: 1080, H: 1920 }, photo: samplePhoto });
-    renderCard(ctx, scene, {}); // assets.photo 없음
-    const c = ctx.__calls;
-    expect(c.drawImage || 0).toBe(0);
-    expect(c.fillRect || 0).toBeGreaterThanOrEqual(1); // 배경 + 음영
+    for (const assets of [{}, { photo: {} }]) {
+      const ctx = makeMockCtx();
+      renderCard(ctx, scene, assets);
+      const c = ctx.__calls;
+      expect(c.drawImage || 0).toBe(0); // 무효 이미지로 drawImage(…, NaN) 호출하지 않음
+      expect(c.fillRect || 0).toBeGreaterThanOrEqual(1); // 배경
+    }
   });
 });
