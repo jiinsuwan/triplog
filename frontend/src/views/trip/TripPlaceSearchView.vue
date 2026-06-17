@@ -148,7 +148,17 @@ const paginatedPlaces = computed(() => {
 const pocketPlaces = computed(() =>
   pocketIds.value.map((id) => pocketPlaceLookup.value.get(id)).filter(Boolean),
 )
-const days = computed(() => itineraryStore.days)
+const routedPlaces = computed(() =>
+  dedupeRouteMapPlaces(
+    days.value.flatMap((day) => (day.stops ?? []).map((stop) => toMapPlace(stop.place))),
+  ),
+)
+const pocketDisplayPlaces = computed(() =>
+  dedupeRouteMapPlaces([...pocketPlaces.value, ...routedPlaces.value]),
+)
+const days = computed(() =>
+  itineraryStore.itinerary?.trip?.id === tripId.value ? itineraryStore.days : [],
+)
 const activeDay = computed(() =>
   days.value.find((day) => day.dayNumber === activeDayNumber.value) || days.value[0],
 )
@@ -170,14 +180,11 @@ const routeSummary = computed(() =>
     .join(' → '),
 )
 const routeMapPlaces = computed(() => {
-  const candidatePlaces = pocketPlaces.value.length ? pocketPlaces.value : visiblePlaces.value
   const routedPlaces = activeStops.value.map((stop) => toMapPlace(stop.place))
-  return dedupeRouteMapPlaces([...candidatePlaces, ...routedPlaces])
+  return dedupeRouteMapPlaces([...pocketPlaces.value, ...routedPlaces])
 })
 const allRouteMapPlaces = computed(() =>
-  dedupeRouteMapPlaces(
-    days.value.flatMap((day) => (day.stops ?? []).map((stop) => toMapPlace(stop.place))),
-  ),
+  routedPlaces.value,
 )
 const mapPlaces = computed(() => {
   if (itineraryMode.value) return routeMapPlaces.value
@@ -246,7 +253,14 @@ watch(
 watch(
   () =>
     activeStops.value
-      .map((stop) => `${stop.id}:${stop.selectedTime ?? ''}:${stop.memo ?? ''}:${stop.transport ?? ''}`)
+      .map((stop) => [
+        stop.id,
+        stop.selectedTime ?? '',
+        stop.memo ?? '',
+        stop.transport ?? '',
+        stop.travelFromPrevious?.status ?? '',
+        stop.travelFromPrevious?.durationSeconds ?? '',
+      ].join(':'))
       .join('|'),
   () => syncStopDrafts(),
   { immediate: true },
@@ -274,6 +288,26 @@ watch(
     })
   },
 )
+
+watch(tripId, async (nextTripId, previousTripId) => {
+  if (!Number.isFinite(nextTripId) || nextTripId === previousTripId) return
+
+  resetTripLocalState()
+  loading.value = true
+  try {
+    await loadTrip()
+    await loadDbPlaces()
+    if (itineraryMode.value) {
+      await ensureItineraryLoaded()
+    }
+    await searchKakaoPlaces()
+  } finally {
+    loading.value = false
+  }
+
+  await nextTick()
+  renderMapPlacesAfterLayout({ preserveViewport: false })
+})
 
 watch(activeDayNumber, () => {
   selectedStopId.value = activeStops.value[0]?.id ?? null
@@ -905,26 +939,61 @@ function drawRoutePolylines() {
   if (!kakao || !map) return
 
   days.value.forEach((day) => {
-    const routePath = (day.stops ?? [])
-      .map((stop) => stop.place)
-      .filter(hasCoordinates)
-      .map((place) => new kakao.maps.LatLng(place.latitude, place.longitude))
-
-    if (routePath.length < 2) return
-
     const isActiveDay = day.dayNumber === activeDayNumber.value
     const isCollectionMode = !itineraryMode.value
-    const polyline = new kakao.maps.Polyline({
-      path: routePath,
-      strokeWeight: isCollectionMode ? 3 : isActiveDay ? 5 : 3,
-      strokeColor: dayRouteColor(day.dayNumber),
-      strokeOpacity: isCollectionMode ? 0.52 : isActiveDay ? 0.9 : 0.38,
-      strokeStyle: 'shortdash',
-      zIndex: isCollectionMode ? 20 : isActiveDay ? 36 : 22,
+    routeSegments(day).forEach((segment) => {
+      const polyline = new kakao.maps.Polyline({
+        path: segment.path,
+        strokeWeight: isCollectionMode ? 3 : isActiveDay ? 5 : 3,
+        strokeColor: routeSegmentColor(segment.mode, day.dayNumber),
+        strokeOpacity: isCollectionMode ? 0.52 : isActiveDay ? 0.92 : 0.38,
+        strokeStyle: segment.actual ? routeSegmentStyle(segment.mode) : 'shortdash',
+        zIndex: isCollectionMode ? 20 : isActiveDay ? 36 : 22,
+      })
+      polyline.setMap(map)
+      routePolylines.push(polyline)
     })
-    polyline.setMap(map)
-    routePolylines.push(polyline)
   })
+}
+
+function routeSegments(day) {
+  const stops = (day.stops ?? []).filter((stop) => hasCoordinates(stop.place))
+  const segments = []
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    const from = stops[index]
+    const to = stops[index + 1]
+    const actualPath = routePathForLeg(from, to)
+    const fallbackPath = [from.place, to.place].map((place) => new kakao.maps.LatLng(place.latitude, place.longitude))
+    segments.push({
+      mode: to.travelFromPrevious?.mode || from.transport || 'other',
+      actual: actualPath.length >= 2,
+      path: actualPath.length >= 2 ? actualPath : fallbackPath,
+    })
+  }
+  return segments
+}
+
+function routePathForLeg(from, to) {
+  const estimate = to.travelFromPrevious
+  if (!estimate || estimate.fromStopId !== from.id || estimate.status !== 'estimated') {
+    return []
+  }
+  return (estimate.routePath ?? [])
+    .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+    .map((point) => new kakao.maps.LatLng(point.latitude, point.longitude))
+}
+
+function routeSegmentColor(mode, dayNumber) {
+  if (mode === 'walk') return '#10b981'
+  if (mode === 'car') return dayRouteColor(dayNumber)
+  if (mode === 'public_transit') return '#8b5cf6'
+  return '#64748b'
+}
+
+function routeSegmentStyle(mode) {
+  if (mode === 'walk') return 'shortdash'
+  if (mode === 'public_transit') return 'dash'
+  return 'solid'
 }
 
 function createOverlayContent(place, markerState = defaultMarkerState()) {
@@ -1502,8 +1571,8 @@ async function addPocketPlaceToRoute(place) {
     const currentStop = activeDay.value.stops.find(
       (stop) => stopPlaceKey(stop) === placeKey(itineraryPlace),
     )
-    selectedStopId.value = currentStop?.id ?? selectedStopId.value
-    itineraryNotice.value = '이미 이 날짜 루트에 들어간 장소입니다.'
+    if (!currentStop) return
+    await deleteStop(currentStop)
     return
   }
 
@@ -1543,11 +1612,45 @@ async function updateStopField(stop) {
   }
 }
 
-async function moveStop(stop, direction) {
+async function updateLegTransport(stop, transport) {
+  const draft = {
+    ...stopDraft(stop),
+    transport,
+  }
+  setStopDraft(stop, { transport })
   try {
-    await itineraryStore.moveStopWithinDay(tripId.value, activeDayNumber.value, stop.id, direction)
+    await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
+      selectedTime: draft.selectedTime,
+      memo: draft.memo,
+      transport: draft.transport,
+    })
+    await itineraryStore.fetchTripItinerary(tripId.value, trip.value)
     selectedStopId.value = stop.id
   } catch {
+    resetStopDraft(stop)
+    // store error를 오른쪽 일정 패널에서 표시한다.
+  }
+}
+
+async function updateManualTravelDuration(stop) {
+  const draft = stopDraft(stop)
+  const manualTravelDurationMinutes = normalizeManualTravelMinutes(draft.manualTravelMinutes)
+  if (!manualTravelDurationMinutes) {
+    resetStopDraft(stop)
+    return
+  }
+
+  try {
+    await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
+      selectedTime: draft.selectedTime,
+      memo: draft.memo,
+      transport: draft.transport,
+      manualTravelDurationMinutes,
+    })
+    await itineraryStore.fetchTripItinerary(tripId.value, trip.value)
+    selectedStopId.value = stop.id
+  } catch {
+    resetStopDraft(stop)
     // store error를 오른쪽 일정 패널에서 표시한다.
   }
 }
@@ -1604,6 +1707,26 @@ function togglePocket(place) {
   pocketIds.value = [...pocketIds.value, place.uid]
 }
 
+function clearPocketPlaces() {
+  pocketIds.value = []
+  pocketPlaceLookup.value = new Map()
+}
+
+function resetTripLocalState() {
+  clearPocketPlaces()
+  selectedPlace.value = null
+  selectedStopId.value = null
+  stopDrafts.value = {}
+  itineraryNotice.value = ''
+  placeError.value = ''
+  kakaoSearchNotice.value = ''
+  currentPage.value = 1
+  mapViewportFilter.value = null
+  currentMapSignature.value = ''
+  lastMapSearchSignature.value = ''
+  clearPlacePopup()
+}
+
 function pocketActionLabel(place) {
   return isPocketed(place) ? '담기 취소' : '담기'
 }
@@ -1614,6 +1737,10 @@ function goToPage(pageNumber) {
 
 function isPocketed(place) {
   return pocketIds.value.includes(place.uid)
+}
+
+function isRoutedPlace(place) {
+  return allRouteDayUsagesForPlace(place).length > 0
 }
 
 function syncStopDrafts() {
@@ -1648,11 +1775,78 @@ function defaultStopDraft(stop) {
     selectedTime: stop.selectedTime || '',
     memo: stop.memo || '',
     transport: stop.transport || 'walk',
+    manualTravelMinutes: manualTravelMinutesValue(stop.travelFromPrevious),
   }
 }
 
-function transportLabel(value) {
-  return TRANSPORT_OPTIONS.find((option) => option.value === value)?.label || '이동수단'
+function travelEstimateLabel(stop) {
+  const estimate = stop?.travelFromPrevious
+  if (!estimate) return '계산 대기'
+  if (estimate.status === 'manual') {
+    return `직접 ${formatTravelDuration(estimate.durationSeconds)}`
+  }
+  if (estimate.status === 'estimated') {
+    return [travelProviderLabel(estimate.provider), formatTravelDuration(estimate.durationSeconds), formatTravelDistance(estimate.distanceMeters)]
+      .filter(Boolean)
+      .join(' · ')
+  }
+  const labels = {
+    manual_required: '직접 입력 필요',
+    missing_coordinates: '좌표 없음',
+    not_configured: '키 미설정',
+    failed: '계산 실패',
+  }
+  return labels[estimate.status] || '계산 대기'
+}
+
+function travelProviderLabel(provider) {
+  if (provider === 'tmap') return 'TMAP'
+  return ''
+}
+
+function travelEstimateTitle(stop) {
+  const estimate = stop?.travelFromPrevious
+  if (estimate?.status === 'manual') {
+    return '직접 입력한 구간 소요시간입니다.'
+  }
+  if (estimate?.provider === 'tmap' && estimate.status === 'estimated') {
+    return 'TMAP API로 계산된 구간 소요시간입니다.'
+  }
+  return travelEstimateLabel(stop)
+}
+
+function formatTravelDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return ''
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  if (minutes < 60) return `${minutes}분`
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return restMinutes ? `${hours}시간 ${restMinutes}분` : `${hours}시간`
+}
+
+function formatTravelDistance(meters) {
+  if (!Number.isFinite(meters) || meters < 0) return ''
+  if (meters < 1000) return `${Math.round(meters)}m`
+  return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)}km`
+}
+
+function isManualTravelInputVisible(stop) {
+  return stopDraft(stop).transport === 'public_transit'
+}
+
+function manualTravelMinutesValue(estimate) {
+  if (!estimate || estimate.status !== 'manual' || !Number.isFinite(estimate.durationSeconds)) {
+    return ''
+  }
+  return String(Math.max(1, Math.round(estimate.durationSeconds / 60)))
+}
+
+function normalizeManualTravelMinutes(value) {
+  const numeric = Number.parseInt(String(value ?? '').trim(), 10)
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return null
+  }
+  return Math.min(numeric, 1440)
 }
 
 function routeOrderForPlace(place) {
@@ -2245,7 +2439,7 @@ function normalizeSearchText(value = '') {
               <small>
                 {{
                   routeSummary ||
-                  (pocketPlaces.length || visiblePlaces.length
+                  (routeMapPlaces.length
                     ? '지도 마커를 누르는 순서대로 루트가 만들어집니다.'
                     : '장소를 검색하거나 담은 뒤 지도 마커를 눌러 루트를 만들어보세요.')
                 }}
@@ -2277,15 +2471,6 @@ function normalizeSearchText(value = '') {
                     @update:model-value="setStopDraft(stop, { selectedTime: $event })"
                     @change="updateStopField(stop)"
                   />
-                  <Select
-                    :model-value="stopDraft(stop).transport"
-                    :options="TRANSPORT_OPTIONS"
-                    option-label="label"
-                    option-value="value"
-                    aria-label="이동수단"
-                    @update:model-value="setStopDraft(stop, { transport: $event })"
-                    @change="updateStopField(stop)"
-                  />
                 </div>
                 <textarea
                   :value="stopDraft(stop).memo"
@@ -2296,26 +2481,6 @@ function normalizeSearchText(value = '') {
                   @blur="updateStopField(stop)"
                 />
                 <div class="route-stop-actions">
-                  <Button
-                    icon="pi pi-arrow-up"
-                    severity="secondary"
-                    outlined
-                    rounded
-                    size="small"
-                    :disabled="index === 0 || itineraryStore.mutating"
-                    :aria-label="`${stop.place.name} 위로 이동`"
-                    @click="moveStop(stop, 'up')"
-                  />
-                  <Button
-                    icon="pi pi-arrow-down"
-                    severity="secondary"
-                    outlined
-                    rounded
-                    size="small"
-                    :disabled="index === activeStops.length - 1 || itineraryStore.mutating"
-                    :aria-label="`${stop.place.name} 아래로 이동`"
-                    @click="moveStop(stop, 'down')"
-                  />
                   <Button
                     icon="pi pi-trash"
                     severity="danger"
@@ -2333,7 +2498,42 @@ function normalizeSearchText(value = '') {
                     <i class="pi pi-arrow-down" aria-hidden="true"></i>
                     {{ stop.place.name }} → {{ activeStops[index + 1].place.name }}
                   </span>
-                  <em>{{ transportLabel(activeStops[index + 1].transport) }}</em>
+                  <div
+                    class="route-leg__details"
+                    :class="{ 'has-manual': isManualTravelInputVisible(stop) }"
+                  >
+                    <Select
+                      :model-value="stopDraft(stop).transport"
+                      :options="TRANSPORT_OPTIONS"
+                      option-label="label"
+                      option-value="value"
+                      :aria-label="`${stop.place.name}에서 ${activeStops[index + 1].place.name} 이동수단`"
+                      :disabled="itineraryStore.mutating"
+                      @update:model-value="updateLegTransport(stop, $event)"
+                    />
+                    <label
+                      v-if="isManualTravelInputVisible(stop)"
+                      class="route-leg__manual"
+                      :aria-label="`${stop.place.name}에서 ${activeStops[index + 1].place.name} 직접 소요시간`"
+                    >
+                      <input
+                        class="route-leg__manual-input"
+                        type="number"
+                        min="1"
+                        max="1440"
+                        inputmode="numeric"
+                        placeholder="분"
+                        :value="stopDraft(activeStops[index + 1]).manualTravelMinutes"
+                        :disabled="itineraryStore.mutating"
+                        @input="setStopDraft(activeStops[index + 1], { manualTravelMinutes: $event.target.value })"
+                        @change="updateManualTravelDuration(activeStops[index + 1])"
+                      />
+                      <span>분</span>
+                    </label>
+                    <em :title="travelEstimateTitle(activeStops[index + 1])">
+                      <small>{{ travelEstimateLabel(activeStops[index + 1]) }}</small>
+                    </em>
+                  </div>
                 </div>
               </template>
             </div>
@@ -2395,14 +2595,20 @@ function normalizeSearchText(value = '') {
             <span class="eyebrow">Pocket</span>
             <h2>담긴 장소</h2>
           </div>
-          <strong>{{ pocketPlaces.length }}</strong>
+          <strong>{{ pocketDisplayPlaces.length }}</strong>
         </div>
 
-        <div v-if="pocketPlaces.length" class="pocket-list">
-          <article v-for="place in pocketPlaces" :key="place.uid" class="pocket-item">
+        <div v-if="pocketDisplayPlaces.length" class="pocket-list">
+          <article
+            v-for="place in pocketDisplayPlaces"
+            :key="place.uid"
+            class="pocket-item"
+            :class="{ routed: isRoutedPlace(place) }"
+          >
             <strong>{{ place.name }}</strong>
             <small>{{ place.address || place.category }}</small>
             <Button
+              v-if="isPocketed(place)"
               icon="pi pi-times"
               severity="secondary"
               text
@@ -2410,6 +2616,7 @@ function normalizeSearchText(value = '') {
               aria-label="담기 취소"
               @click="togglePocket(place)"
             />
+            <em v-else>일정 포함</em>
           </article>
         </div>
         <p v-else class="empty-pocket">지도나 목록에서 장소를 골라 담아보세요.</p>
@@ -2418,7 +2625,7 @@ function normalizeSearchText(value = '') {
           label="일정 루트 만들기"
           icon="pi pi-sitemap"
           severity="success"
-          :disabled="!pocketPlaces.length"
+          :disabled="!pocketDisplayPlaces.length"
           :loading="itineraryStore.loading"
           @click="openItineraryBuilder"
         />
@@ -2788,6 +2995,22 @@ function normalizeSearchText(value = '') {
   right: 8px;
 }
 
+.pocket-item em {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: #eefbf6;
+  color: #0f8f63;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .route-start-button {
   width: 100%;
   justify-content: center;
@@ -2923,6 +3146,7 @@ function normalizeSearchText(value = '') {
 }
 
 .route-stop-card {
+  position: relative;
   border: 1px solid #e5e8ef;
   border-radius: 18px;
   padding: 11px;
@@ -2941,7 +3165,7 @@ function normalizeSearchText(value = '') {
   min-width: 0;
   width: 100%;
   border: 0;
-  padding: 0;
+  padding: 0 42px 0 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 4px 9px;
@@ -2954,12 +3178,11 @@ function normalizeSearchText(value = '') {
 
 .route-stop-fields {
   display: grid;
-  grid-template-columns: minmax(110px, 0.8fr) minmax(132px, 1fr);
+  grid-template-columns: minmax(110px, 180px);
   gap: 8px;
 }
 
-.route-stop-fields :deep(.p-inputtext),
-.route-stop-fields :deep(.p-select) {
+.route-stop-fields :deep(.p-inputtext) {
   width: 100%;
 }
 
@@ -2976,19 +3199,21 @@ function normalizeSearchText(value = '') {
 }
 
 .route-stop-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   display: flex;
   justify-content: flex-end;
-  gap: 7px;
 }
 
 .route-leg {
-  margin: -1px 14px;
-  padding: 10px 12px;
+  margin: -2px 16px;
+  padding: 12px 0 12px 20px;
   border-left: 2px solid #d9e0ea;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(132px, 150px);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   color: #536173;
 }
 
@@ -3009,17 +3234,81 @@ function normalizeSearchText(value = '') {
   font-size: 12px;
 }
 
+.route-leg__details {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(118px, 0.9fr) minmax(116px, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.route-leg__details.has-manual {
+  grid-template-columns: minmax(104px, 0.8fr) minmax(76px, 0.62fr) minmax(98px, 1fr);
+}
+
+.route-leg__details :deep(.p-select) {
+  width: 100%;
+  min-width: 0;
+  background: #fff;
+}
+
+.route-leg__manual {
+  min-width: 0;
+  height: 34px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid #d9e0ea;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.route-leg__manual-input {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0 4px 0 10px;
+  background: transparent;
+  color: #151d25;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  outline: none;
+}
+
+.route-leg__manual span {
+  padding-right: 8px;
+  color: #687586;
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .route-leg em {
   justify-self: end;
-  min-width: 82px;
+  width: 100%;
   border-radius: 999px;
   padding: 5px 9px;
   background: #eefbf6;
   color: #0f8f63;
   font-style: normal;
-  font-size: 12px;
-  font-weight: 900;
   text-align: center;
+  display: grid;
+  gap: 1px;
+}
+
+.route-leg em small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-leg em small {
+  color: #256f54;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 :global(.trip-map-pin) {
@@ -3417,6 +3706,11 @@ function normalizeSearchText(value = '') {
 
   .route-stop-fields,
   .route-leg {
+    grid-template-columns: 1fr;
+  }
+
+  .route-leg__details,
+  .route-leg__details.has-manual {
     grid-template-columns: 1fr;
   }
 

@@ -132,6 +132,11 @@ const mockPlaces = [
 let nextStopId = 9200
 const itineraryByTripId = new Map()
 
+export function resetMockItineraryData() {
+  nextStopId = 9200
+  itineraryByTripId.clear()
+}
+
 export function listMockItineraryPlaces() {
   return clone(mockPlaces)
 }
@@ -173,6 +178,24 @@ export async function updateMockItineraryStop(tripId, dayNumber, stopId, payload
     selectedTime: payload.selectedTime ?? day.stops[index].selectedTime,
     memo: payload.memo ?? day.stops[index].memo,
     transport: payload.transport ?? day.stops[index].transport,
+  }
+  if (payload.manualTravelDurationMinutes) {
+    const previousStop = day.stops[index - 1]
+    day.stops[index] = {
+      ...day.stops[index],
+      travelFromPrevious: previousStop
+        ? {
+            fromStopId: previousStop.id,
+            mode: previousStop.transport || 'other',
+            provider: null,
+            status: 'manual',
+            durationSeconds: Number(payload.manualTravelDurationMinutes) * 60,
+            distanceMeters: null,
+            routePath: [],
+            updatedAt: new Date().toISOString(),
+          }
+        : null,
+    }
   }
   return clone(day.stops[index])
 }
