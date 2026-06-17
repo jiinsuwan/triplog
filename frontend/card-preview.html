@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  card-preview.html — S3-LOG-04 카드 렌더 결과를 눈으로 확인하는 개발용 미리보기 페이지.
+  실행: frontend 에서 `npm run dev` 후 브라우저로 http://localhost:5173/card-preview.html
+  공유 라우터(src/router)·main.js 를 건드리지 않는 독립 페이지다.
+  입력 = 실제 예시 사진(poc/card/images) + 실제 자동초안 items(poc/card/out/v12) + 손글씨 문구.
+  폰트는 self-host(public/fonts/ownglyph-ooa.ttf)로 로드한다. 라이선스 = public/fonts/LICENSE.txt.
+-->
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>카드 렌더 미리보기 — S3-LOG-04</title>
+    <style>
+      /* 카드 폰트: 온글잎(Ownglyph ooa) — self-host(public/fonts), CDN 불필요. */
+      @font-face {
+        font-family: 'Ownglyph ooa';
+        src: url('/fonts/ownglyph-ooa.ttf') format('truetype');
+        font-display: block;
+      }
+      body { margin: 0; background: #2a2622; color: #e8e0d4; font-family: sans-serif; display: flex; gap: 24px; padding: 20px; }
+      canvas { height: 92vh; box-shadow: 0 8px 40px rgba(0,0,0,0.5); background: #111; }
+      .panel { display: flex; flex-direction: column; gap: 12px; min-width: 240px; }
+      label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+      .layers label { flex-direction: row; gap: 8px; align-items: center; }
+    </style>
+  </head>
+  <body>
+    <canvas id="card" width="960" height="1280"></canvas>
+    <div class="panel">
+      <h3>카드 렌더 미리보기 (S3-LOG-04)</h3>
+      <label>
+        무드 톤다운: <span id="tdv">35</span>%
+        <input id="toneDown" type="range" min="0" max="50" value="35" />
+      </label>
+      <div class="layers">
+        <strong>레이어 켜기/끄기 (item = 레이어 1개)</strong>
+        <div id="layerToggles"></div>
+      </div>
+      <p style="font-size:12px;opacity:0.7">
+        실제 예시 사진 + 자동초안 객체(items) + 손글씨 문구. 렌더 캔버스 = 사진 비율(crop 없음).
+      </p>
+    </div>
+    <script type="module" src="/src/card/render/preview.js"></script>
+  </body>
+</html>
