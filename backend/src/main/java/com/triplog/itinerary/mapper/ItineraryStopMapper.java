@@ -23,6 +23,8 @@ public interface ItineraryStopMapper {
 
     int updateDetails(ItineraryStop stop);
 
+    int updateTravelEstimate(ItineraryStop stop);
+
     int deleteById(@Param("id") Long id,
                    @Param("tripId") Long tripId,
                    @Param("dayNumber") Integer dayNumber);

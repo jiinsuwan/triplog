@@ -11,6 +11,7 @@ public record ItineraryStopResponse(
         String selectedTime,
         String memo,
         String transport,
+        TravelEstimateResponse travelFromPrevious,
         ItineraryPlaceResponse place
 ) {
 
@@ -24,6 +25,7 @@ public record ItineraryStopResponse(
                 stop.getSelectedTime() == null ? null : stop.getSelectedTime().format(TIME_FORMATTER),
                 stop.getMemo(),
                 stop.getTransport(),
+                TravelEstimateResponse.from(stop),
                 ItineraryPlaceResponse.from(stop));
     }
 }

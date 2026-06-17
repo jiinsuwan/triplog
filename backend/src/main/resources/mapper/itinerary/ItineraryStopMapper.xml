@@ -28,6 +28,14 @@
         <result property="selectedTime" column="selected_time"/>
         <result property="memo" column="memo"/>
         <result property="transport" column="transport"/>
+        <result property="travelFromStopId" column="travel_from_stop_id"/>
+        <result property="travelRouteKey" column="travel_route_key"/>
+        <result property="travelProvider" column="travel_provider"/>
+        <result property="travelStatus" column="travel_status"/>
+        <result property="travelDurationSeconds" column="travel_duration_seconds"/>
+        <result property="travelDistanceMeters" column="travel_distance_meters"/>
+        <result property="travelGeometryJson" column="travel_geometry_json"/>
+        <result property="travelUpdatedAt" column="travel_updated_at"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
@@ -36,7 +44,9 @@
         id, trip_id, day_number, sort_order, place_source, place_provider, db_place_id,
         source_place_id, place_type, place_name, category, category_group, region1, region2,
         address, road_address, latitude, longitude, phone, place_url, selected_time, memo,
-        transport, created_at, updated_at
+        transport, travel_from_stop_id, travel_route_key, travel_provider, travel_status,
+        travel_duration_seconds, travel_distance_meters, travel_geometry_json, travel_updated_at,
+        created_at, updated_at
     </sql>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
@@ -88,6 +98,21 @@
         SET selected_time = #{selectedTime},
             memo = #{memo},
             transport = #{transport}
+        WHERE id = #{id}
+          AND trip_id = #{tripId}
+          AND day_number = #{dayNumber}
+    </update>
+
+    <update id="updateTravelEstimate">
+        UPDATE itinerary_stops
+        SET travel_from_stop_id = #{travelFromStopId},
+            travel_route_key = #{travelRouteKey},
+            travel_provider = #{travelProvider},
+            travel_status = #{travelStatus},
+            travel_duration_seconds = #{travelDurationSeconds},
+            travel_distance_meters = #{travelDistanceMeters},
+            travel_geometry_json = #{travelGeometryJson},
+            travel_updated_at = #{travelUpdatedAt}
         WHERE id = #{id}
           AND trip_id = #{tripId}
           AND day_number = #{dayNumber}

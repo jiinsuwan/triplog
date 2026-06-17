@@ -29,6 +29,14 @@ public class ItineraryStop {
     private LocalTime selectedTime;
     private String memo;
     private String transport;
+    private Long travelFromStopId;
+    private String travelRouteKey;
+    private String travelProvider;
+    private String travelStatus;
+    private Integer travelDurationSeconds;
+    private Integer travelDistanceMeters;
+    private String travelGeometryJson;
+    private LocalDateTime travelUpdatedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -214,6 +222,70 @@ public class ItineraryStop {
 
     public void setTransport(String transport) {
         this.transport = transport;
+    }
+
+    public Long getTravelFromStopId() {
+        return travelFromStopId;
+    }
+
+    public void setTravelFromStopId(Long travelFromStopId) {
+        this.travelFromStopId = travelFromStopId;
+    }
+
+    public String getTravelRouteKey() {
+        return travelRouteKey;
+    }
+
+    public void setTravelRouteKey(String travelRouteKey) {
+        this.travelRouteKey = travelRouteKey;
+    }
+
+    public String getTravelProvider() {
+        return travelProvider;
+    }
+
+    public void setTravelProvider(String travelProvider) {
+        this.travelProvider = travelProvider;
+    }
+
+    public String getTravelStatus() {
+        return travelStatus;
+    }
+
+    public void setTravelStatus(String travelStatus) {
+        this.travelStatus = travelStatus;
+    }
+
+    public Integer getTravelDurationSeconds() {
+        return travelDurationSeconds;
+    }
+
+    public void setTravelDurationSeconds(Integer travelDurationSeconds) {
+        this.travelDurationSeconds = travelDurationSeconds;
+    }
+
+    public Integer getTravelDistanceMeters() {
+        return travelDistanceMeters;
+    }
+
+    public void setTravelDistanceMeters(Integer travelDistanceMeters) {
+        this.travelDistanceMeters = travelDistanceMeters;
+    }
+
+    public String getTravelGeometryJson() {
+        return travelGeometryJson;
+    }
+
+    public void setTravelGeometryJson(String travelGeometryJson) {
+        this.travelGeometryJson = travelGeometryJson;
+    }
+
+    public LocalDateTime getTravelUpdatedAt() {
+        return travelUpdatedAt;
+    }
+
+    public void setTravelUpdatedAt(LocalDateTime travelUpdatedAt) {
+        this.travelUpdatedAt = travelUpdatedAt;
     }
 
     public LocalDateTime getCreatedAt() {

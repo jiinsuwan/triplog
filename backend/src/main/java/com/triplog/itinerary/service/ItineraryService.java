@@ -44,13 +44,16 @@ public class ItineraryService {
     private final TripMapper tripMapper;
     private final PlaceMapper placeMapper;
     private final ItineraryStopMapper itineraryStopMapper;
+    private final ItineraryTravelTimeService itineraryTravelTimeService;
 
     public ItineraryService(TripMapper tripMapper,
                             PlaceMapper placeMapper,
-                            ItineraryStopMapper itineraryStopMapper) {
+                            ItineraryStopMapper itineraryStopMapper,
+                            ItineraryTravelTimeService itineraryTravelTimeService) {
         this.tripMapper = tripMapper;
         this.placeMapper = placeMapper;
         this.itineraryStopMapper = itineraryStopMapper;
+        this.itineraryTravelTimeService = itineraryTravelTimeService;
     }
 
     @Transactional(readOnly = true)
@@ -69,6 +72,7 @@ public class ItineraryService {
         int maxSortOrder = itineraryStopMapper.findMaxSortOrder(trip.getId(), dayNumber);
         stop.setSortOrder(maxSortOrder + 1);
         itineraryStopMapper.insert(stop);
+        refreshDayTravelTimes(trip.getId(), dayNumber);
 
         return ItineraryStopResponse.from(requireStop(trip.getId(), dayNumber, stop.getId()));
     }
@@ -85,6 +89,8 @@ public class ItineraryService {
         stop.setTransport(canonicalTransport(request.transport()));
 
         itineraryStopMapper.updateDetails(stop);
+        refreshDayTravelTimes(trip.getId(), dayNumber);
+        applyManualTravelDurationIfRequested(trip.getId(), dayNumber, stopId, request.manualTravelDurationMinutes());
         return ItineraryStopResponse.from(requireStop(trip.getId(), dayNumber, stopId));
     }
 
@@ -96,6 +102,7 @@ public class ItineraryService {
         ItineraryStop stop = requireStop(trip.getId(), dayNumber, stopId);
         itineraryStopMapper.deleteById(stop.getId(), trip.getId(), dayNumber);
         itineraryStopMapper.decrementSortOrdersAfter(trip.getId(), dayNumber, stop.getSortOrder());
+        refreshDayTravelTimes(trip.getId(), dayNumber);
     }
 
     @Transactional
@@ -116,7 +123,28 @@ public class ItineraryService {
             }
         }
 
+        refreshDayTravelTimes(trip.getId(), dayNumber);
         return buildResponse(trip, itineraryStopMapper.findByTripId(trip.getId()));
+    }
+
+    private void refreshDayTravelTimes(Long tripId, Integer dayNumber) {
+        itineraryTravelTimeService.refreshDayTravelTimes(
+                tripId,
+                dayNumber,
+                itineraryStopMapper.findByTripIdAndDay(tripId, dayNumber));
+    }
+
+    private void applyManualTravelDurationIfRequested(Long tripId, Integer dayNumber, Long stopId,
+                                                      Integer manualTravelDurationMinutes) {
+        if (manualTravelDurationMinutes == null) {
+            return;
+        }
+        itineraryTravelTimeService.applyManualTravelDuration(
+                tripId,
+                dayNumber,
+                itineraryStopMapper.findByTripIdAndDay(tripId, dayNumber),
+                stopId,
+                manualTravelDurationMinutes * 60);
     }
 
     private ItineraryResponse buildResponse(Trip trip, List<ItineraryStop> stops) {

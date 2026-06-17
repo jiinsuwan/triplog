@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +62,24 @@ class ItineraryStopMapperIntegrationTest {
 
         stops = itineraryStopMapper.findByTripIdAndDay(TRIP_ID, 1);
         assertThat(stops).extracting(ItineraryStop::getId).containsExactly(second.getId(), first.getId());
+
+        first.setTravelFromStopId(second.getId());
+        first.setTravelRouteKey("walk:35.849:127.161:35.849:127.161");
+        first.setTravelProvider("tmap");
+        first.setTravelStatus("estimated");
+        first.setTravelDurationSeconds(420);
+        first.setTravelDistanceMeters(840);
+        first.setTravelGeometryJson("[[35.849,127.161],[35.850,127.162]]");
+        first.setTravelUpdatedAt(LocalDateTime.of(2026, 7, 1, 10, 0));
+        itineraryStopMapper.updateTravelEstimate(first);
+
+        ItineraryStop reloaded = itineraryStopMapper.findByIdAndTripAndDay(first.getId(), TRIP_ID, 1);
+        assertThat(reloaded.getTravelFromStopId()).isEqualTo(second.getId());
+        assertThat(reloaded.getTravelProvider()).isEqualTo("tmap");
+        assertThat(reloaded.getTravelStatus()).isEqualTo("estimated");
+        assertThat(reloaded.getTravelDurationSeconds()).isEqualTo(420);
+        assertThat(reloaded.getTravelDistanceMeters()).isEqualTo(840);
+        assertThat(reloaded.getTravelGeometryJson()).isEqualTo("[[35.849,127.161],[35.850,127.162]]");
 
         itineraryStopMapper.deleteById(second.getId(), TRIP_ID, 1);
         itineraryStopMapper.decrementSortOrdersAfter(TRIP_ID, 1, 1);

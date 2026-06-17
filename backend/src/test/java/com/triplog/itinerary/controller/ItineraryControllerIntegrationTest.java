@@ -105,7 +105,7 @@ class ItineraryControllerIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateItineraryStopRequest(
-                                "11:00", "점심 전 방문", "public_transit"))))
+                                "11:00", "점심 전 방문", "public_transit", null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.selectedTime").value("11:00"))
                 .andExpect(jsonPath("$.data.memo").value("점심 전 방문"))
