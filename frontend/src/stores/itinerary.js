@@ -9,7 +9,7 @@ import {
   reorderItineraryStops,
   updateItineraryStop,
 } from '@/api/itineraryApi'
-import { moveStop, removeStop, toItineraryPlaceRequest } from '@/utils/itinerary'
+import { moveStop, toItineraryPlaceRequest } from '@/utils/itinerary'
 
 export const useItineraryStore = defineStore('itinerary', () => {
   const itinerary = ref(null)
@@ -90,7 +90,7 @@ export const useItineraryStore = defineStore('itinerary', () => {
     error.value = ''
     try {
       await deleteItineraryStop(tripId, dayNumber, stopId, { trip: itinerary.value?.trip })
-      replaceDayStops(dayNumber, removeStop(findDay(dayNumber).stops, stopId))
+      itinerary.value = await fetchItinerary(tripId, { trip: itinerary.value?.trip })
     } catch (deleteError) {
       error.value = toMessage(deleteError, '방문지를 삭제하지 못했습니다.')
       throw deleteError

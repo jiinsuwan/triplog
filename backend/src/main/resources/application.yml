@@ -63,7 +63,7 @@ springdoc:
 app:
   upload-dir: ${UPLOAD_DIR:./uploads}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   password-reset:
     ttl: ${PASSWORD_RESET_TTL:20m}
     min-response-delay: ${PASSWORD_RESET_MIN_RESPONSE_DELAY:250ms}
@@ -76,6 +76,10 @@ external-api:
   read-timeout: ${EXTERNAL_API_READ_TIMEOUT:5s}
   max-attempts: ${EXTERNAL_API_MAX_ATTEMPTS:3}
   backoff: ${EXTERNAL_API_BACKOFF:200ms}
+
+tmap:
+  app-key: ${TMAP_APP_KEY:}
+  route-base-url: ${TMAP_ROUTE_BASE_URL:https://apis.openapi.sk.com}
 
 # 윤곽선 추론 서버(inference/) — 업로드 후 백그라운드 전처리 (S3-LOG-02 #70). 같은 호스트 내부 비공개.
 inference:

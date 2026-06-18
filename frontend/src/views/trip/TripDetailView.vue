@@ -52,10 +52,9 @@ const workspaceAction = computed(() => {
         severity: 'info',
       }
     : {
-        label: '일정 이어서 만들기',
+        label: '장소 담기',
         icon: 'pi pi-map-marker',
         routeName: 'trip-place-search',
-        query: { mode: 'itinerary' },
         severity: 'success',
       }
 })

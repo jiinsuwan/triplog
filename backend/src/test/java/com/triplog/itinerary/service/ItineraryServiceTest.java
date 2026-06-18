@@ -6,6 +6,7 @@ import com.triplog.itinerary.domain.ItineraryStop;
 import com.triplog.itinerary.dto.CreateItineraryStopRequest;
 import com.triplog.itinerary.dto.ItineraryPlaceRequest;
 import com.triplog.itinerary.dto.ReorderItineraryStopsRequest;
+import com.triplog.itinerary.dto.UpdateItineraryStopRequest;
 import com.triplog.itinerary.mapper.ItineraryStopMapper;
 import com.triplog.place.domain.Place;
 import com.triplog.place.mapper.PlaceMapper;
@@ -38,12 +39,15 @@ class ItineraryServiceTest {
     private PlaceMapper placeMapper;
     @Mock
     private ItineraryStopMapper itineraryStopMapper;
+    @Mock
+    private ItineraryTravelTimeService itineraryTravelTimeService;
 
     private ItineraryService itineraryService;
 
     @BeforeEach
     void setUp() {
-        itineraryService = new ItineraryService(tripMapper, placeMapper, itineraryStopMapper);
+        itineraryService = new ItineraryService(
+                tripMapper, placeMapper, itineraryStopMapper, itineraryTravelTimeService);
     }
 
     @Test
@@ -119,6 +123,22 @@ class ItineraryServiceTest {
                         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.ITIN_INVALID_REORDER));
 
         verify(itineraryStopMapper, never()).bumpSortOrders(any(), any(), any());
+    }
+
+    @Test
+    void updateStop_appliesManualTravelDurationWhenProvided() {
+        Trip trip = trip(10L, 1L);
+        ItineraryStop stop = insertedStop(100L);
+        when(tripMapper.findById(10L)).thenReturn(trip);
+        when(itineraryStopMapper.findByIdAndTripAndDay(100L, 10L, 1)).thenReturn(stop);
+        when(itineraryStopMapper.findByTripIdAndDay(10L, 1)).thenReturn(List.of(stop));
+
+        itineraryService.updateStop(1L, 10L, 1, 100L,
+                new UpdateItineraryStopRequest("11:00", "버스 이동", "walk", 25));
+
+        verify(itineraryStopMapper).updateDetails(stop);
+        verify(itineraryTravelTimeService).refreshDayTravelTimes(10L, 1, List.of(stop));
+        verify(itineraryTravelTimeService).applyManualTravelDuration(10L, 1, List.of(stop), 100L, 1500);
     }
 
     private Trip trip(Long id, Long userId) {
