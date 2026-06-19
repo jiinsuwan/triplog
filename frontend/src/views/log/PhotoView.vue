@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import ProgressBar from 'primevue/progressbar'
@@ -9,8 +9,14 @@ import { fetchTrip } from '@/api/tripApi'
 import { useUploadQueue, QueueStatus, ACCEPT_ATTR } from '@/composables/useUploadQueue'
 
 const route = useRoute()
+const router = useRouter()
 // 라우트 파라미터는 문자열 → 서버 계약(Long)에 맞춰 숫자로 변환.
 const tripId = Number(route.params.tripId)
+
+// 카드 생성 위저드로 이동(이 여행 컨텍스트 고정). S3-LOG-06.
+function goToCardCreate() {
+  router.push({ name: 'card-create', query: { tripId: String(tripId) } })
+}
 
 const { items, addFiles, retry, remove, failedCount, linkedCount } = useUploadQueue(tripId)
 
@@ -102,12 +108,13 @@ const connectLabel = computed(() =>
         <h1>사진 업로드</h1>
         <p>{{ connectLabel }} · 업로드하면 EXIF(촬영시간·GPS)를 추출합니다.</p>
       </div>
-      <!-- 카드 생성은 다음 스프린트(S3) — 비활성 + 안내 -->
+      <!-- 카드 생성 위저드 진입(이 여행 사진으로). 유효한 여행일 때만 활성. -->
       <Button
         label="카드 만들기"
         icon="pi pi-images"
-        disabled
-        title="카드 기능은 다음 스프린트에 제공됩니다."
+        :disabled="!canUpload"
+        title="이 여행 사진으로 카드를 만듭니다."
+        @click="goToCardCreate"
       />
     </header>
 
