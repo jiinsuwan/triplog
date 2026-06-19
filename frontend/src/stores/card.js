@@ -55,6 +55,8 @@ export const useCardStore = defineStore('card', {
     photoIds: [],
     // 외곽선 결과: photoId -> { status, items }. 3단계 폴링이 채우고, 이후 렌더 단계가 쓴다.
     outlines: {},
+    // 문구 결과: photoId -> { response, warnings }. 4단계가 채우고, 렌더(buildScene)는 response 만 쓴다.
+    captions: {},
   }),
   getters: {
     selectedCount: (state) => state.photoIds.length,
@@ -67,10 +69,15 @@ export const useCardStore = defineStore('card', {
       this.selectedTripId = Number.isInteger(id) && id > 0 ? id : null
       this.photoIds = []
       this.outlines = {}
+      this.captions = {}
     },
     // 외곽선 폴링 결과를 보관한다(이후 렌더 단계 입력).
     setOutline(photoId, data) {
       this.outlines = { ...this.outlines, [photoId]: data }
+    },
+    // 문구 생성 결과를 보관한다. 세션 캐시 역할 — 같은 사진 재호출(크레딧 차감)을 막는다.
+    setCaption(photoId, data) {
+      this.captions = { ...this.captions, [photoId]: data }
     },
     // 사진 선택 토글. 한도 초과로 추가가 막히면 true 를 돌려준다(호출부 피드백용).
     togglePhoto(photoId) {
