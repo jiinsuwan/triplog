@@ -7,10 +7,12 @@
 // 매 렌더 ctx.setTransform 리셋 · 폰트(document.fonts.ready) 로드 후 첫 렌더(measureText 폴백 방지) ·
 // 사진은 usePhotoContent(blob→objectURL, same-origin)로 tainted canvas 회피.
 import { ref, shallowRef, computed, watch, onMounted, onScopeDispose } from 'vue'
+import Button from 'primevue/button'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import { usePhotoContent } from '@/composables/usePhotoContent'
 import { buildScene } from '@/card/render/buildScene'
 import { renderCard } from '@/card/render/renderCore'
+import { exportCardPng } from '@/card/render/exportCard'
 import { useCardStore } from '@/stores/card'
 
 const props = defineProps({
@@ -20,15 +22,22 @@ const props = defineProps({
 const card = useCardStore()
 const { load } = usePhotoContent()
 
-// 카드 캔버스 = 세로 9:16(내보내기와 동일 프레임). 화면에선 contain 축소.
-const CANVAS = { W: 1080, H: 1920 }
-
 const current = ref(0)
 const currentId = computed(() => props.photoIds[current.value] ?? null)
 const canvasEl = ref(null)
 const photoImg = shallowRef(null)
 const fontReady = ref(false)
 const toneDown = ref(0.35)
+
+// 출력 포맷: 원본 비율(기본 — #73 범위: 원본비율 기본·9:16 옵션) / 9:16 고정(영상 엮기용).
+// 미리보기 캔버스도 이 포맷을 따른다 → 보이는 대로 저장된다(미리보기=내보내기 일치).
+const format = ref('native')
+const FIXED = { W: 1080, H: 1920 }
+const canvasDims = computed(() => {
+  const img = photoImg.value
+  if (format.value === 'fixed' || !img) return FIXED
+  return { W: img.naturalWidth, H: img.naturalHeight }
+})
 
 let disposed = false
 onScopeDispose(() => {
@@ -80,7 +89,7 @@ const scene = computed(() => {
   return buildScene({
     items,
     captions,
-    canvas: CANVAS,
+    canvas: canvasDims.value,
     photo: { w: img.naturalWidth, h: img.naturalHeight },
     style: { toneDown: toneDown.value },
   })
@@ -91,8 +100,8 @@ function redraw() {
   const sc = scene.value
   const img = photoImg.value
   if (!el || !sc || !img || !fontReady.value) return
-  el.width = CANVAS.W
-  el.height = CANVAS.H
+  el.width = canvasDims.value.W
+  el.height = canvasDims.value.H
   const ctx = el.getContext('2d', { willReadFrequently: true })
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   renderCard(ctx, sc, { photo: img })
@@ -100,11 +109,119 @@ function redraw() {
 
 watch(currentId, loadCurrent, { immediate: true })
 watch([scene, photoImg, fontReady], redraw, { flush: 'post' })
+
+// --- PNG 내보내기 (#73 exportCardPng 호출만, 신규 렌더 테스트 금지) ---
+// 디코드 완료 후에만 활성. 연타 가드. (format/canvasDims 는 위 미리보기와 공유.)
+const exporting = ref(false)
+const exportNote = ref('')
+
+function buildInputsFor(img, id) {
+  const outline = card.outlines[id]
+  const items = outline?.status === 'READY' && Array.isArray(outline.items) ? outline.items : []
+  const captions = card.captions[id]?.response ?? { objects: [], closing: null }
+  return {
+    items,
+    captions,
+    photo: { w: img.naturalWidth, h: img.naturalHeight },
+    style: { toneDown: toneDown.value },
+  }
+}
+
+// 다운로드: 앵커를 DOM 에 부착해 click 후, object URL 은 지연 해제(다운로드 시작 전 revoke 방지).
+function triggerDownload(blob, name) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function exportOne(id, img) {
+  const blob = await exportCardPng(buildInputsFor(img, id), { photo: img }, { format: format.value })
+  triggerDownload(blob, `triplog-card-${id}.png`)
+}
+
+async function downloadCurrent() {
+  if (exporting.value || !photoImg.value) return
+  exporting.value = true
+  exportNote.value = ''
+  try {
+    await exportOne(currentId.value, photoImg.value)
+    exportNote.value = '저장 완료'
+  } catch (e) {
+    exportNote.value = `저장 실패: ${e.message}`
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function downloadAll() {
+  if (exporting.value) return
+  exporting.value = true
+  exportNote.value = ''
+  let ok = 0
+  try {
+    for (const id of props.photoIds) {
+      try {
+        const img = await decode(await load(id))
+        await exportOne(id, img)
+        ok += 1
+      } catch {
+        /* 이 카드 건너뜀 */
+      }
+    }
+    exportNote.value = `${ok}/${props.photoIds.length}장 저장 완료`
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="preview">
-    <p class="hint">자동 초안 미리보기 — 보정은 다음 단계에서.</p>
+    <p class="hint">자동 초안 미리보기 · 문구 위치/외곽선 보정은 다음 단계에서.</p>
+
+    <div class="controls">
+      <label class="tone">
+        톤 낮춤
+        <input
+          type="range"
+          min="0"
+          max="50"
+          :value="Math.round(toneDown * 100)"
+          :disabled="exporting"
+          @input="toneDown = Number($event.target.value) / 100"
+        />
+      </label>
+      <label class="fmt">
+        포맷
+        <select v-model="format" :disabled="exporting">
+          <option value="native">원본 비율</option>
+          <option value="fixed">9:16</option>
+        </select>
+      </label>
+      <Button
+        label="이 카드 저장"
+        icon="pi pi-download"
+        size="small"
+        :disabled="exporting || !photoImg"
+        @click="downloadCurrent"
+      />
+      <Button
+        v-if="photoIds.length > 1"
+        :label="`전체 저장 (${photoIds.length})`"
+        icon="pi pi-download"
+        size="small"
+        severity="secondary"
+        :disabled="exporting"
+        @click="downloadAll"
+      />
+      <span v-if="exportNote" class="export-note" role="status">{{ exportNote }}</span>
+    </div>
+
     <div class="stage">
       <canvas ref="canvasEl" class="card-canvas" aria-label="카드 미리보기" />
     </div>
@@ -130,14 +247,35 @@ watch([scene, photoImg, fontReady], redraw, { flush: 'post' })
   color: #8b95a1;
   margin: 0 0 12px;
 }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+.export-note {
+  color: #16c47e;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
 .stage {
   display: flex;
   justify-content: center;
 }
 .card-canvas {
-  height: min(68vh, 620px);
+  /* 표시 비율 = 캔버스 픽셀 비율(포맷에 따라 원본/9:16). 보이는 대로 저장된다. */
+  max-height: min(68vh, 620px);
+  max-width: 100%;
+  height: auto;
   width: auto;
-  aspect-ratio: 9 / 16;
   border-radius: 12px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
   background: #f2f4f6;
