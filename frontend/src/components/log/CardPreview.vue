@@ -178,6 +178,41 @@ async function downloadAll() {
     exporting.value = false
   }
 }
+
+// fixed(9:16) 미리보기 = 실제 export 결과를 그대로 보여준다(WYSIWYG). 미리보기 canvas 의
+// cover-crop 과 export 의 contain+여백채움이 달라 9:16 아닌 사진에서 어긋나므로, fixed 일 때는
+// exportCardPng 결과 이미지를 렌더한다. 디바운스 + objectURL 정리.
+const fixedUrl = ref(null)
+let fixedTimer = null
+let fixedUrlValue = null
+function scheduleFixedPreview() {
+  clearTimeout(fixedTimer)
+  fixedTimer = setTimeout(async () => {
+    const img = photoImg.value
+    if (disposed || format.value !== 'fixed' || !img || !fontReady.value) return
+    try {
+      const blob = await exportCardPng(
+        buildInputsFor(img, currentId.value),
+        { photo: img },
+        { format: 'fixed' },
+      )
+      if (disposed) return
+      const url = URL.createObjectURL(blob)
+      if (fixedUrlValue) URL.revokeObjectURL(fixedUrlValue)
+      fixedUrlValue = url
+      fixedUrl.value = url
+    } catch {
+      /* 미리보기 생성 실패는 무시 — 저장 시 에러로 표면 */
+    }
+  }, 250)
+}
+watch([format, currentId, photoImg, fontReady, toneDown], () => {
+  if (format.value === 'fixed') scheduleFixedPreview()
+})
+onScopeDispose(() => {
+  clearTimeout(fixedTimer)
+  if (fixedUrlValue) URL.revokeObjectURL(fixedUrlValue)
+})
 </script>
 
 <template>
@@ -223,7 +258,14 @@ async function downloadAll() {
     </div>
 
     <div class="stage">
-      <canvas ref="canvasEl" class="card-canvas" aria-label="카드 미리보기" />
+      <!-- 원본 비율: 캔버스 직접 렌더 / 9:16: 실제 export 결과를 표시(저장과 일치) -->
+      <canvas v-show="format !== 'fixed'" ref="canvasEl" class="card-canvas" aria-label="카드 미리보기" />
+      <img
+        v-if="format === 'fixed' && fixedUrl"
+        :src="fixedUrl"
+        class="card-canvas"
+        alt="카드 미리보기 (9:16)"
+      />
     </div>
 
     <ul v-if="photoIds.length > 1" class="filmstrip">
