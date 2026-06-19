@@ -116,8 +116,10 @@ exportBtn.addEventListener('click', async () => {
     const a = document.createElement('a');
     a.href = url;
     a.download = 'triplog-card.png';
+    document.body.appendChild(a); // 일부 브라우저는 DOM 에 붙어 있어야 다운로드가 동작
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000); // 다운로드 시작 전에 URL 이 해제되지 않도록 지연
   } catch (e) {
     alert(`내보내기 실패: ${e.message}`);
   } finally {
@@ -137,4 +139,5 @@ const fontsReady = document.fonts
 Promise.all([loadImage(photoUrl), fontsReady]).then(([img]) => {
   photoImg = img; // 이미 세로(960×1280) — 회전 불필요
   rebuild();
+  exportBtn.disabled = false; // 사진 로드 완료 후에만 내보내기 허용(사진 없는 PNG 방지)
 });

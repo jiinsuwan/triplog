@@ -8,17 +8,18 @@
 // 품질: 콘텐츠를 출력 해상도로 buildScene 재빌드한 뒤 렌더한다 — renderCore 는 W 기준 해상도 독립이라
 //   출력 크기로 다시 빌드하면 오버레이가 네이티브로 선명하다(기존 scene 확대-합성의 업샘플 softness 회피).
 //
-// 래스터화(filter blur·toBlob)는 실제 Canvas 픽셀에 의존하므로 단위 테스트 밖(수동 확인)이다.
-//   computeFitRect(고정 포맷 레터박스 기하)만 순수 함수로 분리해 단위 테스트한다.
+// 래스터화(filter blur·toBlob)는 실제 Canvas 픽셀에 의존하므로 수동 확인 영역이다.
+//   computeFitRect(고정 포맷 레터박스 기하)는 순수 함수로, exportCardPng 오케스트레이션(검증·캔버스 크기)은
+//   Canvas mock 으로 단위 테스트한다(spec 참조). 폰트·외곽선 깨짐/패딩 모양은 card-preview.html 에서 수동 확인.
 
 import { buildScene } from './buildScene.js';
-import { renderCard } from './renderCore.js';
+import { renderCard, WHITE } from './renderCore.js';
+import { makeCoverFit } from './coverFit.js';
 
 // 9:16 고정 포맷의 기본 픽셀 크기(고정 포맷을 고를 때만 쓰임 — 기본 export 는 원본 비율).
 export const FIXED_W = 1080;
 export const FIXED_H = 1920;
 
-const DEFAULT_PAD_BG = '#fdf8ee'; // 단색 여백 폴백 색(호출자가 안 주면) — renderCore 의 WHITE(크림)와 동일 값
 const CARD_FONT = 'Ownglyph ooa'; // 렌더 기본 폰트(로딩 트리거용)
 
 /**
@@ -39,14 +40,16 @@ export function computeFitRect(photoW, photoH, frameW = FIXED_W, frameH = FIXED_
   return { cw, ch, dx, dy };
 }
 
-// toBlob 을 Promise 로 감싼다. 교차출처 사진(tainted canvas)은 동기 throw, 미지원/실패는 null 콜백 —
-//   둘 다 명확한 에러로 reject 한다.
+// toBlob 을 Promise 로 감싼다.
+//   - 동기 throw = 교차출처 사진(tainted canvas, SecurityError).
+//   - null 콜백 = 캔버스가 브라우저 한도를 넘었거나(대형 사진) 그 밖의 변환 실패.
+//   원인별로 다른 메시지를 준다(원인 오인 방지).
 function canvasToPngBlob(canvas) {
   return new Promise((resolve, reject) => {
     try {
       canvas.toBlob((b) => {
         if (b) resolve(b);
-        else reject(new Error('PNG 변환 실패(toBlob null) — 교차출처 사진(tainted canvas)일 수 있습니다'));
+        else reject(new Error('PNG 변환 실패 — 캔버스가 너무 크거나(브라우저 한도 초과) 변환에 실패했습니다'));
       }, 'image/png');
     } catch (e) {
       reject(new Error(`PNG 변환 실패 — 교차출처 사진(tainted canvas)일 수 있습니다: ${e.message}`));
@@ -55,51 +58,60 @@ function canvasToPngBlob(canvas) {
 }
 
 // 콘텐츠 카드를 (W×H) 캔버스에 그린다 — 출력 해상도로 재빌드 후 렌더(오버레이 네이티브 선명).
-function renderContent(buildInputs, assets, opts, W, H) {
+//   renderCore 가 레이어마다 getImageData 로 밝기를 샘플하므로 willReadFrequently 로 리드백을 최적화한다.
+function renderContent(buildInputs, { W, H, syncVisibilityFrom, noteFont, closingFont }) {
   const { items, captions, photo, style } = buildInputs;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const scene = buildScene({ items, captions, canvas: { W, H }, photo, style });
-  if (opts.syncVisibilityFrom) applyVisibility(scene, opts.syncVisibilityFrom);
-  renderCard(canvas.getContext('2d'), scene, assets, {
-    noteFont: opts.noteFont || CARD_FONT,
-    closingFont: opts.closingFont || CARD_FONT,
-  });
+  if (syncVisibilityFrom) applyVisibility(scene, syncVisibilityFrom);
+  renderCard(ctx, scene, buildInputs.assets, { noteFont, closingFont });
   return canvas;
 }
 
 // 고정 포맷 여백: 사진만 cover-fit 으로 깔고 블러한다(오버레이 제외 → 여백에 글씨가 번지지 않음).
-//   살짝 어둡게 덮어 위에 얹는 선명 카드가 도드라지게 한다.
+//   살짝 어둡게 덮어 위에 얹는 선명 카드가 도드라지게 한다. cover-fit 계산은 makeCoverFit 재사용.
 function drawBlurredPhotoBg(ctx, img, W, H) {
-  const s = Math.max(W / img.width, H / img.height); // cover: 틀보다 크게 깔아 가장자리 블러 헤일로 방지
-  const dw = img.width * s, dh = img.height * s;
+  const { dw, dh, ox, oy } = makeCoverFit(img.width, img.height, W, H); // 틀보다 크게(cover) → 가장자리 블러 헤일로 방지
   ctx.save();
   ctx.filter = `blur(${Math.round(W * 0.03)}px)`;
-  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  ctx.drawImage(img, ox, oy, dw, dh);
   ctx.restore(); // filter 리셋(이후 선명 콘텐츠가 흐려지지 않도록)
-  ctx.save();
-  ctx.fillStyle = 'rgba(20,14,8,0.18)';
+  ctx.fillStyle = 'rgba(20,14,8,0.18)'; // 살짝 어둡게 → 위 카드 도드라짐
   ctx.fillRect(0, 0, W, H);
-  ctx.restore();
 }
 
-// 재빌드 scene 에 미리보기 가시성(visible)을 복사한다. 같은 입력 → 같은 레이어 순서이므로 인덱스로 매칭.
+// 재빌드 scene 에 미리보기 가시성(visible)을 복사한다.
+//   캔버스 크기 차이로 레이어 수가 달라질 수 있으므로(buildScene 이 가장자리 앵커를 컬링) 인덱스가 아니라
+//   (kind, itemId) 키로 매칭한다 — 같은 키가 여럿이면 등장 순서로 구분.
 function applyVisibility(scene, ref) {
   if (!ref || !Array.isArray(ref.layers)) return;
-  scene.layers.forEach((layer, i) => {
-    const r = ref.layers[i];
-    if (r && typeof r.visible === 'boolean') layer.visible = r.visible;
-  });
+  const key = (layer, n) => `${layer.kind}:${layer.itemId}#${n}`;
+  const visByKey = new Map();
+  const refSeen = new Map();
+  for (const r of ref.layers) {
+    const n = refSeen.get(`${r.kind}:${r.itemId}`) || 0;
+    refSeen.set(`${r.kind}:${r.itemId}`, n + 1);
+    if (typeof r.visible === 'boolean') visByKey.set(key(r, n), r.visible);
+  }
+  const seen = new Map();
+  for (const layer of scene.layers) {
+    const n = seen.get(`${layer.kind}:${layer.itemId}`) || 0;
+    seen.set(`${layer.kind}:${layer.itemId}`, n + 1);
+    const v = visByKey.get(key(layer, n));
+    if (typeof v === 'boolean') layer.visible = v;
+  }
 }
 
 // 사용 폰트 로딩 보장 — ready 만으로는 약하므로 명시 트리거 후 대기. 실패해도 폴백 폰트로 진행.
-async function ensureFonts(opts) {
+async function ensureFonts(noteFont, closingFont) {
   if (typeof document === 'undefined' || !document.fonts) return;
   try {
     await Promise.all([
-      document.fonts.load(`64px "${opts.noteFont || CARD_FONT}"`),
-      document.fonts.load(`64px "${opts.closingFont || CARD_FONT}"`),
+      document.fonts.load(`64px "${noteFont}"`),
+      document.fonts.load(`64px "${closingFont}"`),
     ]);
     await document.fonts.ready;
   } catch {
@@ -112,7 +124,7 @@ async function ensureFonts(opts) {
  *
  * @param {{items:Array, captions:object, photo:{w:number,h:number}, style?:object}} buildInputs
  *        buildScene 입력(canvas 제외 — 출력 해상도로 내부에서 채운다)
- * @param {{photo?:CanvasImageSource, grain?:CanvasImageSource}} [assets]
+ * @param {{photo?:CanvasImageSource, grain?:CanvasImageSource}} [assets]  photo 는 디코딩 완료 이미지 필수
  * @param {object} [opts]
  *        - format: 'native'(기본, 원본 비율) | 'fixed'(고정 포맷, 영상/스토리 엮기용)
  *        - width/height: 출력 픽셀 크기. native 는 width 만 쓰고 높이는 비율로 계산(기본 = 사진 크기).
@@ -127,32 +139,45 @@ export async function exportCardPng(buildInputs, assets = {}, opts = {}) {
   if (!photo || !(photo.w > 0) || !(photo.h > 0)) {
     throw new Error('exportCardPng: photo {w,h}(원본 사진 크기)가 필요합니다');
   }
-  await ensureFonts(opts);
+  // 디코딩된 사진이 실제로 있어야 한다 — 없으면 renderCore 폴백 배경만 그려진 "사진 없는 성공 PNG" 가 나온다.
+  const src = assets.photo;
+  const decoded = src && (src.naturalWidth ?? src.width) > 0 && (src.naturalHeight ?? src.height) > 0;
+  if (!decoded) {
+    throw new Error('exportCardPng: 디코딩된 사진(assets.photo)이 필요합니다 — 이미지 로드 완료 후 호출하세요');
+  }
+
+  const noteFont = opts.noteFont || CARD_FONT;
+  const closingFont = opts.closingFont || CARD_FONT;
+  await ensureFonts(noteFont, closingFont);
+
+  // renderContent 가 assets 를 쓰도록 buildInputs 에 실어 보낸다(파라미터 수 절제).
+  const inputs = { ...buildInputs, assets };
+  const common = { syncVisibilityFrom: opts.syncVisibilityFrom, noteFont, closingFont };
 
   // 기본 = 원본 사진 비율 그대로(여백·크롭 없음).
   if (opts.format !== 'fixed') {
     const W = Math.round(opts.width || photo.w);
     const H = Math.round((W * photo.h) / photo.w); // 사진 비율 유지(세로면 세로, 가로면 가로)
-    return canvasToPngBlob(renderContent(buildInputs, assets, opts, W, H));
+    return canvasToPngBlob(renderContent(inputs, { ...common, W, H }));
   }
 
   // 선택 = 고정 포맷(예: 9:16). 사진을 contain 으로 넣고 남는 여백을 사용자 선택대로 채운다.
   const frameW = Math.round(opts.width || FIXED_W);
   const frameH = Math.round(opts.height || FIXED_H);
   const pad = opts.pad === 'solid' ? 'solid' : 'blur';
-  const bg = opts.bg || DEFAULT_PAD_BG;
+  const bg = opts.bg || WHITE;
 
   const { cw, ch, dx, dy } = computeFitRect(photo.w, photo.h, frameW, frameH);
-  const content = renderContent(buildInputs, assets, opts, cw, ch);
+  const content = renderContent(inputs, { ...common, W: cw, H: ch });
 
   const out = document.createElement('canvas');
   out.width = frameW;
   out.height = frameH;
   const octx = out.getContext('2d');
-  if (pad === 'blur' && assets.photo && assets.photo.width > 0 && assets.photo.height > 0) {
+  if (pad === 'blur') {
     drawBlurredPhotoBg(octx, assets.photo, frameW, frameH);
   } else {
-    octx.fillStyle = bg; // 단색(또는 블러용 사진이 없을 때 폴백)
+    octx.fillStyle = bg; // 단색
     octx.fillRect(0, 0, frameW, frameH);
   }
   octx.drawImage(content, dx, dy); // 선명 콘텐츠를 여백 위에 얹음

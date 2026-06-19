@@ -11,7 +11,7 @@
 //
 // 표준 CanvasRenderingContext2D 만 사용 — Konva·rough.js 미채택.
 
-const WHITE = '#fdf8ee'; // 따뜻한 흰 (강조 1색, 크림 톤)
+export const WHITE = '#fdf8ee'; // 따뜻한 흰 (강조 1색, 크림 톤) — 단색 여백 기본색도 이 값을 재사용(exportCard)
 const SHADOW = 'rgba(22,15,8,'; // 따뜻한 어두운 그림자 베이스
 
 const NOTE_SIZE_RATIO = 0.034; // overlay-place 와 동일(작고 섬세)
