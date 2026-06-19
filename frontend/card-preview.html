@@ -36,8 +36,31 @@
         <strong>레이어 켜기/끄기 (item = 레이어 1개)</strong>
         <div id="layerToggles"></div>
       </div>
+      <label>
+        내보내기 포맷:
+        <select id="exportFormat">
+          <option value="native">원본 비율 (세로면 세로 · 가로면 가로)</option>
+          <option value="fixed">9:16 고정 (1080×1920)</option>
+        </select>
+      </label>
+      <div id="fixedOpts" style="display:none; flex-direction:column; gap:8px;">
+        <label>
+          여백 채움:
+          <select id="padMode">
+            <option value="blur">블러</option>
+            <option value="solid">단색</option>
+          </select>
+        </label>
+        <label id="padColorWrap" style="display:none;">
+          단색 색상:
+          <input id="padColor" type="color" value="#fdf8ee" />
+        </label>
+      </div>
+      <button id="exportBtn" type="button" disabled>PNG 내보내기</button>
       <p style="font-size:12px;opacity:0.7">
         실제 예시 사진 + 자동초안 객체(items) + 손글씨 문구. 렌더 캔버스 = 사진 비율(crop 없음).
+        기본 내보내기는 원본 비율 그대로다. 9:16 고정은 여러 카드를 엮어 영상 등으로 쓸 때를 위한 옵션이며,
+        남는 여백 채움(블러/단색·색)은 사용자가 고른다.
       </p>
     </div>
     <script type="module" src="/src/card/render/preview.js"></script>
