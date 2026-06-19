@@ -5,6 +5,7 @@
 //   items 좌표는 사진정규화(0~1)다.
 import { buildScene } from './buildScene.js';
 import { renderCard } from './renderCore.js';
+import { exportCardPng } from './exportCard.js';
 import photoUrl from './__fixtures__/sample-photo.jpg';
 import rawAuto from './__fixtures__/auto_IMG_0988.json';
 
@@ -47,6 +48,22 @@ const ctx = canvasEl.getContext('2d');
 const toneDownEl = document.getElementById('toneDown');
 const tdv = document.getElementById('tdv');
 const togglesEl = document.getElementById('layerToggles');
+const exportFormatEl = document.getElementById('exportFormat');
+const fixedOptsEl = document.getElementById('fixedOpts');
+const padModeEl = document.getElementById('padMode');
+const padColorWrap = document.getElementById('padColorWrap');
+const padColorEl = document.getElementById('padColor');
+const exportBtn = document.getElementById('exportBtn');
+
+// 포맷·여백 옵션 표시 토글: 고정 포맷일 때만 여백 옵션, 단색일 때만 색 선택을 보인다.
+function syncExportControls() {
+  const fixed = exportFormatEl.value === 'fixed';
+  fixedOptsEl.style.display = fixed ? 'flex' : 'none';
+  padColorWrap.style.display = fixed && padModeEl.value === 'solid' ? 'flex' : 'none';
+}
+exportFormatEl.addEventListener('change', syncExportControls);
+padModeEl.addEventListener('change', syncExportControls);
+syncExportControls();
 
 let scene = null;
 let photoImg = null;
@@ -76,6 +93,37 @@ toneDownEl.addEventListener('input', () => {
   tdv.textContent = toneDownEl.value;
   scene.tone.toneDown = Number(toneDownEl.value) / 100;
   draw();
+});
+
+// PNG 내보내기(#73) — 현재 미리보기 상태(톤다운·레이어 토글) 그대로. 기본 = 원본 비율, 옵션 = 9:16 고정.
+exportBtn.addEventListener('click', async () => {
+  const prev = exportBtn.textContent;
+  exportBtn.disabled = true;
+  exportBtn.textContent = '내보내는 중…';
+  try {
+    const format = exportFormatEl.value;
+    const opts = { format, syncVisibilityFrom: scene };
+    if (format === 'fixed') {
+      opts.pad = padModeEl.value;
+      opts.bg = padColorEl.value; // 단색 색상 = 사용자 선택
+    }
+    const blob = await exportCardPng(
+      { items, captions, photo: photoSize, style: { toneDown: Number(toneDownEl.value) / 100 } },
+      { photo: photoImg },
+      opts,
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'triplog-card.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(`내보내기 실패: ${e.message}`);
+  } finally {
+    exportBtn.disabled = false;
+    exportBtn.textContent = prev;
+  }
 });
 
 function loadImage(url) {
