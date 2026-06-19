@@ -53,6 +53,8 @@ export const useCardStore = defineStore('card', {
   state: () => ({
     selectedTripId: null,
     photoIds: [],
+    // 외곽선 결과: photoId -> { status, items }. 3단계 폴링이 채우고, 이후 렌더 단계가 쓴다.
+    outlines: {},
   }),
   getters: {
     selectedCount: (state) => state.photoIds.length,
@@ -64,6 +66,11 @@ export const useCardStore = defineStore('card', {
       const id = Number(tripId)
       this.selectedTripId = Number.isInteger(id) && id > 0 ? id : null
       this.photoIds = []
+      this.outlines = {}
+    },
+    // 외곽선 폴링 결과를 보관한다(이후 렌더 단계 입력).
+    setOutline(photoId, data) {
+      this.outlines = { ...this.outlines, [photoId]: data }
     },
     // 사진 선택 토글. 한도 초과로 추가가 막히면 true 를 돌려준다(호출부 피드백용).
     togglePhoto(photoId) {

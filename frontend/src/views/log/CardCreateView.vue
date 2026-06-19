@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Steps from 'primevue/steps'
 import Button from 'primevue/button'
 import CardPhotoPicker from '@/components/log/CardPhotoPicker.vue'
+import CardOutlineProgress from '@/components/log/CardOutlineProgress.vue'
 import {
   CARD_STEPS,
   normalizeStepKey,
@@ -76,12 +77,7 @@ watch(
     <!-- 1단계=골격, 2단계=고르기 본문. 에디터 본문은 이후 단계에서 채운다. -->
     <CardPhotoPicker v-if="currentStepKey === 'pick'" :trip-id="card.selectedTripId" />
 
-    <section v-else class="cc-step-body">
-      <h2>에디터</h2>
-      <p class="cc-placeholder">
-        다음 단계에서 여기에 미리보기 · 문구 보정 · 외곽선 편집 · PNG 저장이 들어옵니다.
-      </p>
-    </section>
+    <CardOutlineProgress v-else :photo-ids="card.photoIds" />
 
     <footer class="cc-nav">
       <Button
