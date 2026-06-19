@@ -3,9 +3,12 @@ import { setActivePinia, createPinia } from 'pinia'
 
 import {
   CARD_STEPS,
+  MAX_CARD_PHOTOS,
   normalizeStepKey,
   nextStepKey,
   prevStepKey,
+  togglePhotoSelection,
+  groupPhotosByDay,
   useCardStore,
 } from '@/stores/card'
 
@@ -44,26 +47,103 @@ describe('카드 위저드 step 모델', () => {
       expect(prevStepKey('xxx')).toBe('pick')
     })
   })
+})
 
-  describe('useCardStore.startForTrip', () => {
-    beforeEach(() => setActivePinia(createPinia()))
+describe('togglePhotoSelection — 사진 선택 토글(순수함수)', () => {
+  it('선택 안 된 사진은 추가한다', () => {
+    expect(togglePhotoSelection([1, 2], 3, 10)).toEqual({ ids: [1, 2, 3], blocked: false })
+  })
 
-    it('유효 tripId 는 숫자로 저장한다', () => {
+  it('이미 선택된 사진은 해제한다', () => {
+    expect(togglePhotoSelection([1, 2, 3], 2, 10)).toEqual({ ids: [1, 3], blocked: false })
+  })
+
+  it('한도에 도달하면 새 추가를 막고 blocked 를 돌려준다', () => {
+    const full = [1, 2, 3]
+    expect(togglePhotoSelection(full, 4, 3)).toEqual({ ids: [1, 2, 3], blocked: true })
+  })
+
+  it('한도에 도달해도 이미 선택된 사진의 해제는 허용한다', () => {
+    expect(togglePhotoSelection([1, 2, 3], 2, 3)).toEqual({ ids: [1, 3], blocked: false })
+  })
+
+  it('원본 배열을 변형하지 않는다', () => {
+    const original = [1, 2]
+    togglePhotoSelection(original, 3, 10)
+    expect(original).toEqual([1, 2])
+  })
+})
+
+describe('groupPhotosByDay — 촬영 날짜 묶음(순수함수)', () => {
+  it('날짜별로 묶고 오름차순 DAY 라벨을 매긴다', () => {
+    const photos = [
+      { id: 1, takenAt: '2024-05-02T10:00:00' },
+      { id: 2, takenAt: '2024-05-01T09:00:00' },
+      { id: 3, takenAt: '2024-05-02T08:00:00' },
+    ]
+    const groups = groupPhotosByDay(photos)
+    expect(groups.map((g) => g.dayLabel)).toEqual(['DAY 1', 'DAY 2'])
+    expect(groups[0]).toMatchObject({ key: '2024-05-01', dateLabel: '2024-05-01' })
+    // DAY 2 그룹 내부는 촬영시각 오름차순(08:00 → 10:00)
+    expect(groups[1].photos.map((p) => p.id)).toEqual([3, 1])
+  })
+
+  it('촬영시각 없는 사진은 맨 뒤 "촬영시각 없음" 그룹으로 모은다', () => {
+    const photos = [
+      { id: 1, takenAt: '2024-05-01T09:00:00' },
+      { id: 2, takenAt: null },
+      { id: 3 },
+    ]
+    const groups = groupPhotosByDay(photos)
+    expect(groups).toHaveLength(2)
+    const last = groups[groups.length - 1]
+    expect(last.dayLabel).toBe('촬영시각 없음')
+    expect(last.photos.map((p) => p.id)).toEqual([2, 3])
+  })
+
+  it('빈 입력은 빈 배열', () => {
+    expect(groupPhotosByDay([])).toEqual([])
+  })
+})
+
+describe('useCardStore', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  describe('startForTrip', () => {
+    it('유효 tripId 는 숫자로 저장하고 선택을 초기화한다', () => {
       const card = useCardStore()
+      card.photoIds = [9, 8]
       card.startForTrip('12')
       expect(card.selectedTripId).toBe(12)
+      expect(card.photoIds).toEqual([])
     })
 
     it('무효 tripId(0·음수·비숫자·미지정)는 null 로 둔다', () => {
       const card = useCardStore()
-      card.startForTrip('0')
-      expect(card.selectedTripId).toBeNull()
-      card.startForTrip('-3')
-      expect(card.selectedTripId).toBeNull()
-      card.startForTrip('abc')
-      expect(card.selectedTripId).toBeNull()
-      card.startForTrip(undefined)
-      expect(card.selectedTripId).toBeNull()
+      for (const bad of ['0', '-3', 'abc', undefined]) {
+        card.startForTrip(bad)
+        expect(card.selectedTripId).toBeNull()
+      }
+    })
+  })
+
+  describe('togglePhoto', () => {
+    it('추가/해제하며 카운트·한도 게터가 따라온다', () => {
+      const card = useCardStore()
+      expect(card.togglePhoto(1)).toBe(false)
+      expect(card.togglePhoto(2)).toBe(false)
+      expect(card.selectedCount).toBe(2)
+      expect(card.atPhotoLimit).toBe(false)
+      expect(card.togglePhoto(1)).toBe(false) // 해제
+      expect(card.photoIds).toEqual([2])
+    })
+
+    it('한도(10장)에 도달하면 새 추가를 막고 true 를 돌려준다', () => {
+      const card = useCardStore()
+      for (let i = 1; i <= MAX_CARD_PHOTOS; i += 1) card.togglePhoto(i)
+      expect(card.atPhotoLimit).toBe(true)
+      expect(card.togglePhoto(99)).toBe(true)
+      expect(card.selectedCount).toBe(MAX_CARD_PHOTOS)
     })
   })
 })

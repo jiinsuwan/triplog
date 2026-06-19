@@ -1,10 +1,11 @@
 <script setup>
-// 카드 생성 위저드 셸 (S3-LOG-06 / #74, S1 — 골격만).
-// 단일 라우트 /cards/new + ?step= 쿼리. 단계 본문은 S1 에선 placeholder.
-import { computed, onMounted, watch } from 'vue'
+// 카드 생성 위저드 셸 (S3-LOG-06 / #74).
+// 단일 라우트 /cards/new + ?step= 쿼리(URL이 단계 정본). 1단계=골격, 2단계=고르기 본문.
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Steps from 'primevue/steps'
 import Button from 'primevue/button'
+import CardPhotoPicker from '@/components/log/CardPhotoPicker.vue'
 import {
   CARD_STEPS,
   normalizeStepKey,
@@ -18,10 +19,11 @@ const route = useRoute()
 const router = useRouter()
 const card = useCardStore()
 
-// 진입 시 여행 컨텍스트 세팅. 진입점: 사진 화면 "카드 만들기" → ?tripId=.
-onMounted(() => card.startForTrip(route.query.tripId))
+// 진입 시 여행 컨텍스트 세팅 + 선택 초기화. 아래 스텝 가드보다 먼저 동기 실행한다
+// (가드가 갓 초기화된 photoIds 를 봐야 에디터 딥링크를 올바로 막는다).
+card.startForTrip(route.query.tripId)
 
-// 현재 단계 = URL ?step= 을 정규화한 값(URL이 정본).
+// 현재 단계 = URL ?step= 을 정규화한 값.
 const currentStepKey = computed(() => normalizeStepKey(route.query.step))
 const activeIndex = computed(() => stepIndexOf(currentStepKey.value))
 
@@ -29,7 +31,17 @@ const activeIndex = computed(() => stepIndexOf(currentStepKey.value))
 const stepItems = CARD_STEPS.map((step) => ({ label: step.label }))
 
 const canPrev = computed(() => activeIndex.value > 0)
-const canNext = computed(() => activeIndex.value < CARD_STEPS.length - 1)
+// 다음: 마지막 단계가 아니어야 하고, 고르기 단계에선 사진을 1장 이상 골라야 활성.
+const canNext = computed(() => {
+  if (activeIndex.value >= CARD_STEPS.length - 1) return false
+  if (currentStepKey.value === 'pick') return card.photoIds.length >= 1
+  return true
+})
+const nextLabel = computed(() =>
+  currentStepKey.value === 'pick' && card.photoIds.length > 0
+    ? `다음 (${card.photoIds.length}장)`
+    : '다음',
+)
 
 function goToStep(key) {
   router.push({ query: { ...route.query, step: key } })
@@ -37,11 +49,13 @@ function goToStep(key) {
 const goNext = () => goToStep(nextStepKey(currentStepKey.value))
 const goPrev = () => goToStep(prevStepKey(currentStepKey.value))
 
-// URL 의 step 이 비었거나 잘못된 값이면 정규 단계로 교정(딥링크 안정화).
+// URL step 정규화 + 에디터 진입 가드.
+// 잘못된 step 은 첫 단계로, 사진 0장인데 에디터로 들어오면 고르기로 되돌린다(딥링크·새로고침 안정화).
 watch(
   () => route.query.step,
   (raw) => {
-    const valid = normalizeStepKey(raw)
+    let valid = normalizeStepKey(raw)
+    if (valid === 'editor' && card.photoIds.length === 0) valid = 'pick'
     if (raw !== valid) {
       router.replace({ query: { ...route.query, step: valid } })
     }
@@ -61,16 +75,13 @@ watch(
 
     <Steps :model="stepItems" :activeStep="activeIndex" :readonly="true" class="cc-steps" />
 
-    <!-- S1: 단계 골격만. 본문은 placeholder. 실제 기능은 이후 단계에서 채워진다. -->
-    <section v-if="currentStepKey === 'pick'" class="cc-step-body">
-      <h2>고르기</h2>
-      <p class="cc-placeholder">S2에서 여기에 여행 선택과 사진(최대 10장) 고르기가 들어옵니다.</p>
-    </section>
+    <!-- 1단계=골격, 2단계=고르기 본문. 에디터 본문은 이후 단계에서 채운다. -->
+    <CardPhotoPicker v-if="currentStepKey === 'pick'" :trip-id="card.selectedTripId" />
 
     <section v-else class="cc-step-body">
       <h2>에디터</h2>
       <p class="cc-placeholder">
-        S5~S7에서 여기에 미리보기 · 문구 보정 · 외곽선 편집 · PNG 저장이 들어옵니다.
+        다음 단계에서 여기에 미리보기 · 문구 보정 · 외곽선 편집 · PNG 저장이 들어옵니다.
       </p>
     </section>
 
@@ -83,7 +94,7 @@ watch(
         @click="goPrev"
       />
       <Button
-        label="다음"
+        :label="nextLabel"
         icon="pi pi-chevron-right"
         icon-pos="right"
         :disabled="!canNext"
