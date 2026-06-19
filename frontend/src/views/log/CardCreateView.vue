@@ -38,9 +38,7 @@ const canNext = computed(() => {
   return true
 })
 const nextLabel = computed(() =>
-  currentStepKey.value === 'pick' && card.photoIds.length > 0
-    ? `다음 (${card.photoIds.length}장)`
-    : '다음',
+  currentStepKey.value === 'pick' ? `✨ AI 초안 생성 (${card.photoIds.length}장)` : '다음',
 )
 
 function goToStep(key) {

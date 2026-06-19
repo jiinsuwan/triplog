@@ -8,7 +8,6 @@ import {
   nextStepKey,
   prevStepKey,
   togglePhotoSelection,
-  groupPhotosByDay,
   useCardStore,
 } from '@/stores/card'
 
@@ -71,38 +70,6 @@ describe('togglePhotoSelection — 사진 선택 토글(순수함수)', () => {
     const original = [1, 2]
     togglePhotoSelection(original, 3, 10)
     expect(original).toEqual([1, 2])
-  })
-})
-
-describe('groupPhotosByDay — 촬영 날짜 묶음(순수함수)', () => {
-  it('날짜별로 묶고 오름차순 DAY 라벨을 매긴다', () => {
-    const photos = [
-      { id: 1, takenAt: '2024-05-02T10:00:00' },
-      { id: 2, takenAt: '2024-05-01T09:00:00' },
-      { id: 3, takenAt: '2024-05-02T08:00:00' },
-    ]
-    const groups = groupPhotosByDay(photos)
-    expect(groups.map((g) => g.dayLabel)).toEqual(['DAY 1', 'DAY 2'])
-    expect(groups[0]).toMatchObject({ key: '2024-05-01', dateLabel: '2024-05-01' })
-    // DAY 2 그룹 내부는 촬영시각 오름차순(08:00 → 10:00)
-    expect(groups[1].photos.map((p) => p.id)).toEqual([3, 1])
-  })
-
-  it('촬영시각 없는 사진은 맨 뒤 "촬영시각 없음" 그룹으로 모은다', () => {
-    const photos = [
-      { id: 1, takenAt: '2024-05-01T09:00:00' },
-      { id: 2, takenAt: null },
-      { id: 3 },
-    ]
-    const groups = groupPhotosByDay(photos)
-    expect(groups).toHaveLength(2)
-    const last = groups[groups.length - 1]
-    expect(last.dayLabel).toBe('촬영시각 없음')
-    expect(last.photos.map((p) => p.id)).toEqual([2, 3])
-  })
-
-  it('빈 입력은 빈 배열', () => {
-    expect(groupPhotosByDay([])).toEqual([])
   })
 })
 

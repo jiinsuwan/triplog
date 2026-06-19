@@ -47,40 +47,6 @@ export function togglePhotoSelection(currentIds, photoId, max = MAX_CARD_PHOTOS)
   return { ids: [...currentIds, photoId], blocked: false }
 }
 
-// 사진을 촬영 날짜(takenAt)로 묶는다(순수함수).
-// 사진에 장소 연결 정보가 없어(추후 trip 트랙) 장소 대신 날짜 기준으로 묶는다.
-//  - 촬영시각 있는 사진: 날짜별로 묶고 날짜 오름차순. DAY 1·DAY 2… 라벨.
-//  - 촬영시각 없는 사진: 맨 뒤 "촬영시각 없음" 그룹.
-export function groupPhotosByDay(photos) {
-  const byDate = new Map() // 'YYYY-MM-DD' → photo[]
-  const undated = []
-  for (const photo of photos) {
-    const date = typeof photo.takenAt === 'string' ? photo.takenAt.slice(0, 10) : null
-    if (date) {
-      if (!byDate.has(date)) byDate.set(date, [])
-      byDate.get(date).push(photo)
-    } else {
-      undated.push(photo)
-    }
-  }
-
-  const groups = [...byDate.keys()]
-    .sort()
-    .map((date, index) => ({
-      key: date,
-      dayLabel: `DAY ${index + 1}`,
-      dateLabel: date,
-      photos: [...byDate.get(date)].sort((a, b) =>
-        String(a.takenAt).localeCompare(String(b.takenAt)),
-      ),
-    }))
-
-  if (undated.length > 0) {
-    groups.push({ key: '__undated__', dayLabel: '촬영시각 없음', dateLabel: '', photos: undated })
-  }
-  return groups
-}
-
 // 위저드의 직렬화 도메인 상태. 단계 이동(SPA) 동안 선택을 유지한다.
 // (S4에서 items/captions, S6에서 visibility 가 추가될 예정.)
 export const useCardStore = defineStore('card', {
