@@ -31,6 +31,10 @@ export function usePhotoPlacement(tripId) {
     return photos.value.filter((p) => placement[p.id] === stopId)
   }
   function placePhoto(photoId, stopId) {
+    // 장소당 사진 1장 — 그 장소에 있던 다른 사진은 미배치로(교체).
+    for (const p of photos.value) {
+      if (p.id !== photoId && placement[p.id] === stopId) delete placement[p.id]
+    }
     placement[photoId] = stopId
   }
   function unplacePhoto(photoId) {
@@ -41,29 +45,36 @@ export function usePhotoPlacement(tripId) {
     for (const key of Object.keys(placement)) delete placement[key]
   }
 
-  // EXIF 시각 기준 근사 자동배치 — 같은 stop 시간에 가장 가까운 사진을 그 장소로.
+  // EXIF 시각 기준 근사 자동배치 — 장소당 사진 1장(촬영시각이 가장 가까운 사진). 같은 날짜 우선.
   function autoPlaceByTime() {
     const stops = stopsFlat.value.filter((s) => s.selectedTime)
     if (stops.length === 0) return
-    for (const photo of photos.value) {
-      if (placement[photo.id] != null || !photo.takenAt) continue
-      const taken = new Date(photo.takenAt)
-      const minutes = taken.getHours() * 60 + taken.getMinutes()
-      const takenDate = `${taken.getFullYear()}-${String(taken.getMonth() + 1).padStart(2, '0')}-${String(taken.getDate()).padStart(2, '0')}`
-      // 같은 날짜 stop 우선(다일자 여행에서 다른 날에 붙는 것 방지) — 없으면 전체에서 시각 근사.
-      const sameDay = stops.filter((s) => s.date === takenDate)
-      const candidates = sameDay.length ? sameDay : stops
+    const dateStr = (iso) => {
+      const d = new Date(iso)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    const used = new Set() // 이번 자동배치로 쓴 사진
+    for (const stop of stops) {
+      if (photos.value.some((p) => placement[p.id] === stop.id)) continue // 이미 1장 있음
+      const [h, m] = String(stop.selectedTime).split(':').map(Number)
+      const stopMin = h * 60 + m
+      const cands = photos.value.filter((p) => placement[p.id] == null && !used.has(p.id) && p.takenAt)
+      const sameDay = stop.date ? cands.filter((p) => dateStr(p.takenAt) === stop.date) : []
+      const pool = sameDay.length ? sameDay : cands
       let bestId = null
       let bestDiff = Infinity
-      for (const stop of candidates) {
-        const [h, m] = String(stop.selectedTime).split(':').map(Number)
-        const diff = Math.abs(h * 60 + m - minutes)
+      for (const p of pool) {
+        const t = new Date(p.takenAt)
+        const diff = Math.abs(t.getHours() * 60 + t.getMinutes() - stopMin)
         if (diff < bestDiff) {
           bestDiff = diff
-          bestId = stop.id
+          bestId = p.id
         }
       }
-      if (bestId != null) placement[photo.id] = bestId
+      if (bestId != null) {
+        placement[bestId] = stop.id
+        used.add(bestId)
+      }
     }
   }
 
