@@ -1,19 +1,16 @@
 <script setup>
-// 카드 위저드 "고르기" 단계 본문 (S3-LOG-06 / #74, 2단계).
-// 배치 정본 = docs/design/log-flow-proposal.html ④: 경로 순서대로 장소(여행지/숙소)를 나열하고
-// 장소마다 그 장소 사진을 1:1로 매칭해 고른다(장소당 1장 권장 · 전체 최대 10장).
-// 선택 상태는 useCardStore 에 두어 단계 이동 간 유지된다. 업로드는 이 화면 책임이 아니다.
-//
-// 사진↔장소 연결이 스키마에 없어, 장소 구조는 목업(buildMockPlaceGroups)으로 깔고 실제 사진을
-// 장소별로 분배한다 — 고른 결과는 실제 photoId.
-import { computed, onMounted, onScopeDispose, ref } from 'vue'
+// 카드 위저드 "고르기" 단계 본문 (S3-LOG-06 2단계).
+// 배치 정본 = 목업 ④: 경로 순서대로 장소(여행지/숙소)를 나열하고 장소마다 그 장소 사진을 고른다.
+// 일정·사진↔장소 배치는 기록 뷰와 동일하게 usePhotoPlacement(실제 일정 stop + EXIF 자동배치)를
+// 재사용한다 — 가짜 장소 목업을 버리고 실제 장소로 묶는다. 배치 안 된 사진은 "미배치" 묶음.
+// 선택(≤10)은 useCardStore.photoIds(단계 이동 간 유지).
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
-import { fetchTripPhotos } from '@/api/photoApi'
 import { MAX_CARD_PHOTOS, useCardStore } from '@/stores/card'
-import { buildMockPlaceGroups } from '@/card/mock/mockPlaceGroups'
+import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
 
 const props = defineProps({
   tripId: { type: Number, default: null },
@@ -21,73 +18,49 @@ const props = defineProps({
 
 const router = useRouter()
 const card = useCardStore()
+const { loading, error, stopsFlat, unplaced, photosForStop, photos } = usePhotoPlacement(props.tripId)
 
-const status = ref('loading') // 'loading' | 'ready' | 'error'
-const photos = ref([])
+const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
 
-let disposed = false
-onScopeDispose(() => {
-  disposed = true
+// 실제 일정 장소(사진 있는 곳)별 + 미배치 묶음. 가짜 장소 없음.
+const groups = computed(() => {
+  const result = stopsFlat.value
+    .map((stop) => ({
+      key: `stop-${stop.id}`,
+      no: stop.sortOrder,
+      name: stop.place?.name ?? '장소',
+      icon: TYPE_ICON[stop.place?.placeType] ?? '📍',
+      meta: `DAY${stop.dayNumber}${stop.selectedTime ? ' ' + stop.selectedTime : ''} · 사진 ${photosForStop(stop.id).length}`,
+      photos: photosForStop(stop.id),
+    }))
+    .filter((group) => group.photos.length > 0)
+  if (unplaced.value.length > 0) {
+    result.push({ key: 'unplaced', no: null, name: '미배치', icon: '📷', meta: `사진 ${unplaced.value.length}`, photos: unplaced.value })
+  }
+  return result
 })
 
-async function loadPhotos() {
-  if (!props.tripId) {
-    photos.value = []
-    status.value = 'ready'
-    return
-  }
-  status.value = 'loading'
-  try {
-    const list = await fetchTripPhotos(props.tripId)
-    if (disposed) return
-    photos.value = Array.isArray(list) ? list : []
-    status.value = 'ready'
-  } catch {
-    if (disposed) return
-    status.value = 'error'
-  }
-}
-onMounted(loadPhotos)
-
-// 경로 순서대로 장소별로 묶은 사진(장소 구조는 목업, 사진은 실제).
-const placeGroups = computed(() => buildMockPlaceGroups(photos.value))
-const isEmpty = computed(() => status.value === 'ready' && photos.value.length === 0)
+const isEmpty = computed(() => !loading.value && !error.value && photos.value.length === 0)
 const selectedCount = computed(() => card.photoIds.length)
 const atLimit = computed(() => selectedCount.value >= MAX_CARD_PHOTOS)
 
-// 한도 초과 클릭 피드백(전역 토스트 인프라가 없어 인라인 안내).
-const showLimitNotice = ref(false)
-let noticeTimer = null
 function onPick(photoId) {
-  const blocked = card.togglePhoto(photoId)
-  if (!blocked) return
-  showLimitNotice.value = true
-  clearTimeout(noticeTimer)
-  noticeTimer = setTimeout(() => {
-    showLimitNotice.value = false
-  }, 2200)
-}
-onScopeDispose(() => clearTimeout(noticeTimer))
-
-function isSelected(photoId) {
-  return card.photoIds.includes(photoId)
+  card.togglePhoto(photoId)
 }
 
 function goUpload() {
-  if (props.tripId) {
-    router.push({ name: 'trip-photos', params: { tripId: String(props.tripId) } })
-  }
+  if (props.tripId) router.push({ name: 'trip-photos', params: { tripId: String(props.tripId) } })
+}
+function goRecord() {
+  if (props.tripId) router.push({ name: 'trip-record', params: { tripId: String(props.tripId) } })
 }
 </script>
 
 <template>
   <div class="picker">
-    <p v-if="status === 'loading'" class="picker-msg">사진을 불러오는 중…</p>
+    <p v-if="loading" class="picker-msg">사진·일정을 불러오는 중…</p>
 
-    <Message v-else-if="status === 'error'" severity="error" :closable="false">
-      사진을 불러오지 못했습니다.
-      <Button label="다시 시도" link @click="loadPhotos" />
-    </Message>
+    <Message v-else-if="error" severity="error" :closable="false">{{ error }}</Message>
 
     <div v-else-if="!tripId" class="picker-empty">
       <p>여행 정보가 없습니다. 사진 화면에서 다시 시작해 주세요.</p>
@@ -99,20 +72,16 @@ function goUpload() {
     </div>
 
     <template v-else>
-      <!-- 상단: 안내 + 선택 카운트 -->
       <div class="picker-bar">
         <span class="hint">경로 순서대로 · 장소당 1장 권장</span>
+        <Button label="일정에 배치" icon="pi pi-map" size="small" text @click="goRecord" />
         <span class="grow" />
-        <span v-if="showLimitNotice" class="limit-notice" role="status">
-          최대 {{ MAX_CARD_PHOTOS }}장까지 선택할 수 있습니다.
-        </span>
         <span class="count" :class="{ full: atLimit }">{{ selectedCount }} / {{ MAX_CARD_PHOTOS }} 선택</span>
       </div>
 
-      <!-- 장소별 사진 매칭 -->
-      <section v-for="place in placeGroups" :key="place.key" class="place">
+      <section v-for="place in groups" :key="place.key" class="place">
         <div class="place-head">
-          <span class="num">{{ place.no }}</span>
+          <span v-if="place.no != null" class="num">{{ place.no }}</span>
           <span class="icon" aria-hidden="true">{{ place.icon }}</span>
           <b class="name">{{ place.name }}</b>
           <span class="meta">{{ place.meta }}</span>
@@ -122,12 +91,15 @@ function goUpload() {
             <button
               type="button"
               class="pcell"
-              :class="{ sel: isSelected(photo.id), dimmed: atLimit && !isSelected(photo.id) }"
-              :aria-pressed="isSelected(photo.id)"
+              :class="{
+                sel: card.photoIds.includes(photo.id),
+                dimmed: atLimit && !card.photoIds.includes(photo.id),
+              }"
+              :aria-pressed="card.photoIds.includes(photo.id)"
               @click="onPick(photo.id)"
             >
               <PhotoThumb :photo-id="photo.id" :alt="photo.originalFilename || '사진'" />
-              <span class="ck" :class="{ on: isSelected(photo.id) }" aria-hidden="true" />
+              <span class="ck" :class="{ on: card.photoIds.includes(photo.id) }" aria-hidden="true" />
             </button>
           </li>
         </ul>
@@ -155,7 +127,7 @@ function goUpload() {
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 10px 0;
   background: #fff;
   border-bottom: 1px solid #e5e8eb;
@@ -165,10 +137,6 @@ function goUpload() {
 }
 .hint {
   color: #8b95a1;
-  font-size: 0.85rem;
-}
-.limit-notice {
-  color: #f04452;
   font-size: 0.85rem;
 }
 .count {
