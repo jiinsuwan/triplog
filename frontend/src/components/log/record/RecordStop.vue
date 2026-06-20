@@ -10,6 +10,7 @@ const props = defineProps({
   stop: { type: Object, required: true },
   photos: { type: Array, default: () => [] },
 })
+const emit = defineEmits(['remove'])
 
 const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
 
@@ -28,7 +29,12 @@ const over = computed(() => drag.active && drag.overStopId === props.stop.id)
     </div>
     <ul v-if="photos.length" class="photos">
       <li v-for="p in photos" :key="p.id">
-        <RecordPhotoChip :photo-id="p.id" :alt="p.originalFilename || '사진'" />
+        <RecordPhotoChip
+          :photo-id="p.id"
+          :alt="p.originalFilename || '사진'"
+          removable
+          @remove="emit('remove', $event)"
+        />
       </li>
     </ul>
     <p v-else class="drop-hint">여기로 사진을 끌어다 놓으세요</p>
