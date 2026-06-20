@@ -34,6 +34,7 @@ const outlineStatus = ref({}) // photoId -> 'PENDING' | 'READY' | 'FAILED'
 let pollTimer = null
 let disposed = false
 let pollStart = 0
+let polling = false
 async function pollOutlines() {
   if (disposed) return
   if (!pollStart) pollStart = performance.now()
@@ -57,7 +58,11 @@ async function pollOutlines() {
 watch(
   photos,
   (list) => {
-    if (list.length && !pollTimer && !disposed) pollOutlines()
+    // 사진 로드되면 한 번만 폴링 시작(setTimeout id 는 발사 후에도 truthy 라 가드로 못 씀 → polling 플래그).
+    if (list.length && !polling && !disposed) {
+      polling = true
+      pollOutlines()
+    }
   },
   { immediate: true },
 )

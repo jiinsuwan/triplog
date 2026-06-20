@@ -57,8 +57,8 @@ watch(
     <header class="cc-head">
       <span class="eyebrow">카드 만들기</span>
       <h1>여행 카드 만들기</h1>
-      <p v-if="card.selectedTripId">여행 #{{ card.selectedTripId }} · 사진을 골라 카드를 만듭니다.</p>
-      <p v-else>여행을 선택하고 사진을 골라 카드를 만듭니다.</p>
+      <p v-if="card.selectedTripId">여행 #{{ card.selectedTripId }} · 사진을 일정에 배치해 카드를 만듭니다.</p>
+      <p v-else>여행을 선택하고 사진을 일정에 배치해 카드를 만듭니다.</p>
     </header>
 
     <Steps :model="stepItems" :activeStep="activeIndex" :readonly="true" class="cc-steps" />

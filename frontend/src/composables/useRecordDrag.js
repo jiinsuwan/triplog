@@ -37,11 +37,16 @@ function onMove(e) {
 function reset() {
   window.removeEventListener('pointermove', onMove)
   window.removeEventListener('pointerup', onUp)
+  window.removeEventListener('pointercancel', onCancel)
   drag.active = false
   drag.photoId = null
   drag.alt = ''
   drag.overStopId = null
   drag.overTray = false
+}
+// 포인터 취소(터치 가로채기·OS 제스처 등) — 드롭 없이 종료(끼임/리스너 누수 방지).
+function onCancel() {
+  reset()
 }
 
 function onUp(e) {
@@ -63,6 +68,7 @@ export function startPhotoDrag(photoId, alt, event) {
   drag.y = event.clientY
   window.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onCancel)
   event.preventDefault()
 }
 

@@ -15,12 +15,16 @@ export function usePhotoPlacement(tripId) {
   const error = ref('')
 
   const stopsFlat = computed(() =>
-    days.value.flatMap((day) => (day.stops ?? []).map((stop) => ({ ...stop, dayNumber: day.dayNumber }))),
+    days.value.flatMap((day) =>
+      (day.stops ?? []).map((stop) => ({ ...stop, dayNumber: day.dayNumber, date: day.date })),
+    ),
   )
   const unplaced = computed(() => photos.value.filter((p) => placement[p.id] == null))
-  // 장소에 배치된 사진 id — 카드가 되는 대상(미배치는 카드 안 만듦).
+  // 배치된 사진 id = 카드 대상(미배치 제외). 순서는 화면과 같게 일정(DAY/stop) 순서로.
   const placedPhotoIds = computed(() =>
-    photos.value.filter((p) => placement[p.id] != null).map((p) => p.id),
+    stopsFlat.value.flatMap((stop) =>
+      photos.value.filter((p) => placement[p.id] === stop.id).map((p) => p.id),
+    ),
   )
 
   function photosForStop(stopId) {
@@ -45,9 +49,13 @@ export function usePhotoPlacement(tripId) {
       if (placement[photo.id] != null || !photo.takenAt) continue
       const taken = new Date(photo.takenAt)
       const minutes = taken.getHours() * 60 + taken.getMinutes()
+      const takenDate = `${taken.getFullYear()}-${String(taken.getMonth() + 1).padStart(2, '0')}-${String(taken.getDate()).padStart(2, '0')}`
+      // 같은 날짜 stop 우선(다일자 여행에서 다른 날에 붙는 것 방지) — 없으면 전체에서 시각 근사.
+      const sameDay = stops.filter((s) => s.date === takenDate)
+      const candidates = sameDay.length ? sameDay : stops
       let bestId = null
       let bestDiff = Infinity
-      for (const stop of stops) {
+      for (const stop of candidates) {
         const [h, m] = String(stop.selectedTime).split(':').map(Number)
         const diff = Math.abs(h * 60 + m - minutes)
         if (diff < bestDiff) {
