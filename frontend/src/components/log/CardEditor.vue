@@ -190,7 +190,8 @@ function drawOutlines(ctx, img) {
     no += 1 // 레이어 목록과 같은 번호(숨겨도 번호 유지)
     if (!isObjectOn(item.id)) continue
     const sel = item.id === selectedItemId.value
-    const color = sel ? 'rgba(240,68,82,0.95)' : 'rgba(49,130,246,0.95)'
+    // 외곽선은 카드 최종처럼 흰색. 선택된 것만 빨강으로 구분(편집 피드백).
+    const color = sel ? 'rgba(240,68,82,0.95)' : 'rgba(255,255,255,0.96)'
 
     ctx.save()
     ctx.lineWidth = base * outlineWidth.value
@@ -216,7 +217,7 @@ function drawOutlines(ctx, img) {
       const r = Math.max(11, W * 0.016)
       ctx.save()
       ctx.setLineDash([])
-      ctx.fillStyle = color
+      ctx.fillStyle = sel ? '#f04452' : '#3182f6' // 번호 배지는 고정색(흰 외곽선이라 보이게)
       ctx.beginPath()
       ctx.arc(cx, cy, r, 0, Math.PI * 2)
       ctx.fill()
@@ -326,12 +327,13 @@ let textSeq = 0
 const texts = computed(() => textsByPhoto[currentId.value] ?? [])
 const selectedText = computed(() => texts.value.find((t) => t.id === selectedTextId.value) ?? null)
 
-function addText() {
+function addText(x = 0.5, y = 0.5) {
   const list = textsByPhoto[currentId.value] || (textsByPhoto[currentId.value] = [])
-  const t = { id: `t${++textSeq}`, text: '텍스트', x: 0.5, y: 0.5, size: 1, rotation: 0, color: '#ffffff', hidden: false }
+  const t = { id: `t${++textSeq}`, text: '텍스트', x, y, size: 1, rotation: 0, color: '#ffffff', hidden: false }
   list.push(t)
   selectItem(null)
   selectedTextId.value = t.id
+  return t
 }
 function updateTextValue(text) {
   if (selectedText.value) selectedText.value.text = text
@@ -635,6 +637,13 @@ function onCanvasPointerDown(e) {
     selectLine(l.id)
     drag = { kind: 'line-ep', id: l.id, ep: '2' }
     bindCanvasDrag(e)
+    return
+  }
+  // 5) 텍스트 도구 활성 + 빈 곳 → 클릭 위치에 텍스트 추가(끌어서 자리 잡기)
+  if (activeTool.value === 'text') {
+    const t = addText(nx, ny)
+    drag = { kind: 'text', id: t.id, dx: 0, dy: 0 }
+    bindCanvasDrag(e)
   }
 }
 function onCanvasPointerMove(e) {
@@ -912,7 +921,7 @@ watch(
 
       <!-- 우: 상세 설정 + 레이어 (구분선을 끌어 두 영역 높이 조절) -->
       <aside class="ed-right" ref="rightEl">
-        <div class="section detail" :style="{ flex: `0 0 ${detailH}px` }">
+        <div class="section detail">
           <h3>상세 설정</h3>
 
           <!-- (A) 선택한 객체/텍스트 정밀 편집 (오른쪽 패널의 "선택 대상" 영역) -->
@@ -924,15 +933,16 @@ watch(
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>
             <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
-            <label class="row">색 <input type="color" class="pad-color" :value="selectedText.color ?? '#ffffff'" @input="setTextProp('color', $event.target.value)" /></label>
-            <label class="row">크기 <input class="num" type="number" min="20" max="400" step="5" :value="Math.round((selectedText.size ?? 1) * 100)" @input="setTextProp('size', Number($event.target.value) / 100)" /> %</label>
-            <label class="row">기울기 <input class="num" type="number" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /> °</label>
-            <p class="muted small">캔버스 박스: 모서리=크기, 위 핸들=회전.</p>
-            <Button label="텍스트 삭제" size="small" severity="danger" text @click="removeText(selectedText.id)" />
+            <div class="row">
+              <span>크기</span>
+              <input class="num" type="number" min="8" max="200" step="1" :value="Math.round((selectedText.size ?? 1) * 40)" @input="setTextProp('size', Number($event.target.value) / 40)" /><span class="numv">pt</span>
+              <span>기울기</span>
+              <input class="num" type="number" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /><span class="numv">°</span>
+            </div>
+            <p class="muted small">박스 모서리=크기, 위 핸들=회전.</p>
           </template>
           <template v-else-if="selectedLine">
             <label class="lbl">선 (선택)</label>
-            <label class="row">색 <input type="color" class="pad-color" :value="selectedLine.color ?? '#ffffff'" @input="setLineProp('color', $event.target.value)" /></label>
             <label class="ctl-lbl">굵기</label>
             <div class="stepper">
               <button class="step" title="얇게" @click="setLineProp('width', Math.max(0.3, Math.round(((selectedLine.width ?? 1) - 0.1) * 10) / 10))">−</button>
@@ -951,7 +961,6 @@ watch(
               <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'end'" @change="setLineProp('arrow', 'end')" /> 끝</label>
               <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'both'" @change="setLineProp('arrow', 'both')" /> 양쪽</label>
             </div>
-            <Button label="선 삭제" size="small" severity="danger" text @click="removeLine(selectedLine.id)" />
           </template>
 
           <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
@@ -981,16 +990,13 @@ watch(
             <p class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
           </div>
           <div v-else-if="activeTool === 'text'" class="tool-block">
-            <Button label="＋ 텍스트 추가" size="small" class="full" @click="addText" />
-            <p class="muted small">추가 후 캔버스에서 끌어 배치하고, 레이어/위에서 내용을 편집합니다.</p>
+            <p class="muted small">캔버스를 클릭해 텍스트를 추가하세요.</p>
           </div>
           <div v-else-if="activeTool === 'line'" class="tool-block">
             <p class="muted small">캔버스에서 끌어 선을 그리세요. 그린 뒤 색·굵기·화살표를 조절합니다.</p>
           </div>
           <p v-else-if="!selectedCaption && !selectedText && !selectedLine" class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트·선부터 작업 중)</p>
         </div>
-
-        <div class="resizer" title="끌어서 크기 조절" @pointerdown="onResizeDown"><span class="grip" /></div>
 
         <div class="section layers">
           <div class="layers-head">
@@ -1017,6 +1023,7 @@ watch(
                 <span class="layer-name">{{ t.text || '(빈 텍스트)' }}</span>
               </button>
               <span class="chip text tag">텍스트</span>
+              <button class="del-one" title="삭제" @click="removeText(t.id)">🗑</button>
             </li>
             <li v-for="l in lines" :key="l.id" :class="{ off: l.hidden }">
               <button class="eye" :title="l.hidden ? '보이기' : '숨기기'" @click="toggleLine(l)">
@@ -1027,6 +1034,7 @@ watch(
                 <span class="layer-name">{{ l.arrow !== 'none' ? '화살표' : '선' }}</span>
               </button>
               <span class="chip line tag">선</span>
+              <button class="del-one" title="삭제" @click="removeLine(l.id)">🗑</button>
             </li>
             <li v-for="layer in layers" :key="layer.id" :class="{ off: !isObjectOn(layer.id) }">
               <button class="eye" :title="isObjectOn(layer.id) ? '숨기기' : '보이기'" @click="toggleObject(layer.id)">
@@ -1244,11 +1252,11 @@ watch(
   padding: 14px;
   border-bottom: 1px solid #eef1f4;
 }
-/* 상세 설정 = 사용자가 구분선으로 높이를 정하는 구역(인라인 flex-basis). 도구/선택이 바뀌어도
-   높이는 사용자가 정한 값으로 고정되고, 내용이 넘치면 이 구역 안에서만 스크롤. */
+/* 상세 설정 = 내용 높이(잘리지 않게). 너무 길면 절반쯤에서 내부 스크롤, 나머지는 레이어. */
 .section.detail {
+  flex: 0 0 auto;
+  max-height: 56%;
   overflow-y: auto;
-  border-bottom: 0; /* 구분선은 .resizer 가 담당 */
 }
 .section.layers {
   flex: 1;
@@ -1470,6 +1478,18 @@ watch(
 /* 태그(외곽선/문구/텍스트/마무리)는 오른쪽으로 — 레이어 버튼(flex:1)이 밀어낸다. */
 .chip.tag {
   margin-left: auto;
+}
+.del-one {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 0.74rem;
+  opacity: 0.5;
+  padding: 2px;
+}
+.del-one:hover {
+  opacity: 1;
 }
 .layer {
   flex: 1;
