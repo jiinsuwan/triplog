@@ -317,7 +317,7 @@ function generateCaption() {
 }
 
 // --- 추가 텍스트 요소(왼쪽 텍스트 도구) — 직접 추가/편집/드래그/저장 ---
-// 사진별 추가 텍스트 { id, text, x, y(0~1 중심), hidden }. 캔버스에 직접 그리고 export 에 합성한다.
+// 사진별 추가 텍스트 { id, text, x, y(0~1 중심), size(배율), rotation(도), color, hidden }.
 const textsByPhoto = reactive({})
 let textSeq = 0
 const texts = computed(() => textsByPhoto[currentId.value] ?? [])
@@ -325,13 +325,16 @@ const selectedText = computed(() => texts.value.find((t) => t.id === selectedTex
 
 function addText() {
   const list = textsByPhoto[currentId.value] || (textsByPhoto[currentId.value] = [])
-  const t = { id: `t${++textSeq}`, text: '텍스트', x: 0.5, y: 0.5, hidden: false }
+  const t = { id: `t${++textSeq}`, text: '텍스트', x: 0.5, y: 0.5, size: 1, rotation: 0, color: '#ffffff', hidden: false }
   list.push(t)
   selectItem(null)
   selectedTextId.value = t.id
 }
 function updateTextValue(text) {
   if (selectedText.value) selectedText.value.text = text
+}
+function setTextProp(prop, val) {
+  if (selectedText.value) selectedText.value[prop] = val
 }
 function removeText(id) {
   const list = textsByPhoto[currentId.value]
@@ -377,25 +380,28 @@ function bulkSetVisible(vis) {
   }
 }
 
-// 캔버스에 추가 텍스트를 그린다(편집 화면). 손글씨 폰트.
-function drawTexts(ctx, dims) {
-  const { W, H } = dims
+// 추가 텍스트를 그린다(편집·export 공용 로직). 손글씨 폰트 + 크기·회전·색.
+function paintText(ctx, t, W, H) {
+  const size = Math.round(W * 0.05 * (t.size ?? 1))
   ctx.save()
+  ctx.translate(t.x * W, t.y * H)
+  ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  ctx.font = `${size}px "Ownglyph ooa", sans-serif`
+  ctx.lineWidth = Math.max(2, W * 0.004)
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+  ctx.fillStyle = t.color ?? '#ffffff'
+  ctx.strokeText(t.text, 0, 0)
+  ctx.fillText(t.text, 0, 0)
+  ctx.restore()
+}
+function drawTexts(ctx, dims) {
+  const { W, H } = dims
   for (const t of texts.value) {
     if (t.hidden) continue
-    const size = Math.round(W * 0.05)
-    ctx.font = `${size}px "Ownglyph ooa", sans-serif`
-    ctx.lineWidth = Math.max(2, W * 0.004)
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)'
-    ctx.fillStyle = '#fff'
-    const px = t.x * W
-    const py = t.y * H
-    ctx.strokeText(t.text, px, py)
-    ctx.fillText(t.text, px, py)
+    paintText(ctx, t, W, H)
   }
-  ctx.restore()
 }
 
 // 캔버스 드래그로 텍스트 이동.
@@ -406,15 +412,16 @@ function onCanvasPointerDown(e) {
   const rect = el.getBoundingClientRect()
   const nx = (e.clientX - rect.left) / rect.width
   const ny = (e.clientY - rect.top) / rect.height
-  // 위에서부터 hit-test(나중 추가 = 위). 텍스트 박스 근사.
+  // 위에서부터 hit-test(나중 추가 = 위). 텍스트 박스 근사(회전은 무시한 축정렬 근사).
   const { W, H } = canvasDims.value
   const ctx = el.getContext('2d')
-  ctx.font = `${Math.round(W * 0.05)}px "Ownglyph ooa", sans-serif`
   for (let i = texts.value.length - 1; i >= 0; i--) {
     const t = texts.value[i]
     if (t.hidden) continue
+    const fs = W * 0.05 * (t.size ?? 1)
+    ctx.font = `${Math.round(fs)}px "Ownglyph ooa", sans-serif`
     const w = ctx.measureText(t.text).width / W
-    const h = (W * 0.05 * 1.4) / H
+    const h = (fs * 1.4) / H
     if (Math.abs(nx - t.x) <= w / 2 + 0.02 && Math.abs(ny - t.y) <= h / 2 + 0.01) {
       dragText = { id: t.id, dx: nx - t.x, dy: ny - t.y }
       selectText(t.id)
@@ -571,19 +578,7 @@ async function composeTexts(blob) {
     cv.height = bmp.height
     const ctx = cv.getContext('2d')
     ctx.drawImage(bmp, 0, 0)
-    const W = bmp.width
-    const H = bmp.height
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    for (const t of visible) {
-      const size = Math.round(W * 0.05)
-      ctx.font = `${size}px "Ownglyph ooa", sans-serif`
-      ctx.lineWidth = Math.max(2, W * 0.004)
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)'
-      ctx.fillStyle = '#fff'
-      ctx.strokeText(t.text, t.x * W, t.y * H)
-      ctx.fillText(t.text, t.x * W, t.y * H)
-    }
+    for (const t of visible) paintText(ctx, t, bmp.width, bmp.height) // 미리보기와 동일 로직(크기·회전·색)
     return await new Promise((res) => cv.toBlob(res, 'image/png'))
   } catch {
     return blob
@@ -678,6 +673,9 @@ watch(
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>
             <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
+            <label class="row">크기 <input type="range" min="0.3" max="4" step="0.1" :value="selectedText.size ?? 1" @input="setTextProp('size', Number($event.target.value))" /><span class="numv">{{ Math.round((selectedText.size ?? 1) * 100) }}%</span></label>
+            <label class="row">기울기 <input type="range" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /><span class="numv">{{ selectedText.rotation ?? 0 }}°</span></label>
+            <label class="row">색 <input type="color" class="pad-color" :value="selectedText.color ?? '#ffffff'" @input="setTextProp('color', $event.target.value)" /></label>
             <p class="muted small">캔버스에서 끌어 위치 이동.</p>
             <Button label="텍스트 삭제" size="small" severity="danger" text @click="removeText(selectedText.id)" />
           </template>
