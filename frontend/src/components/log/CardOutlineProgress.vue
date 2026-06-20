@@ -4,13 +4,14 @@
 // 수동으로 생성한다 — 문구 없이도 카드를 보고 외곽선을 확인할 수 있어야 한다.
 import { computed, watch } from 'vue'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
-import CardPreview from '@/components/log/CardPreview.vue'
+import CardEditor from '@/components/log/CardEditor.vue'
 import { useOutlinePolling } from '@/composables/useOutlinePolling'
 import { useCardStore } from '@/stores/card'
 
 const props = defineProps({
   photoIds: { type: Array, default: () => [] },
 })
+const emit = defineEmits(['back'])
 
 const card = useCardStore()
 const { outlines, summary, timedOut, finished } = useOutlinePolling(props.photoIds)
@@ -39,32 +40,25 @@ function statusLabel(id) {
 </script>
 
 <template>
-  <div class="proc">
-    <!-- 외곽선 처리 중: 사진별 상태 -->
-    <template v-if="!done">
-      <header class="proc-head">
-        <h2>AI가 사진을 처리하는 중…</h2>
-        <p class="muted">
-          사진에서 피사체 외곽선을 찾고 있습니다 · {{ summary.ready + summary.failed }}/{{ summary.total }} 완료
-          <span v-if="summary.failed"> · 실패 {{ summary.failed }}</span>
-        </p>
-      </header>
-      <ul class="grid">
-        <li v-for="id in photoIds" :key="id" class="cell">
-          <PhotoThumb :photo-id="id" />
-          <span class="badge" :class="statusOf(id).toLowerCase()">{{ statusLabel(id) }}</span>
-        </li>
-      </ul>
-    </template>
-
-    <!-- 외곽선 완료 → 에디터(미리보기 + 외곽선 표시 + 수동 문구 생성) -->
-    <template v-else>
-      <p v-if="summary.failed" class="note" role="status">
-        외곽선을 못 찾은 사진 {{ summary.failed }}장은 외곽선 없이 표시됩니다.
+  <!-- 외곽선 처리 중: 사진별 상태(좁은 칼럼) -->
+  <div v-if="!done" class="proc">
+    <header class="proc-head">
+      <h2>AI가 사진을 처리하는 중…</h2>
+      <p class="muted">
+        사진에서 피사체 외곽선을 찾고 있습니다 · {{ summary.ready + summary.failed }}/{{ summary.total }} 완료
+        <span v-if="summary.failed"> · 실패 {{ summary.failed }}</span>
       </p>
-      <CardPreview :photo-ids="photoIds" />
-    </template>
+    </header>
+    <ul class="grid">
+      <li v-for="id in photoIds" :key="id" class="cell">
+        <PhotoThumb :photo-id="id" />
+        <span class="badge" :class="statusOf(id).toLowerCase()">{{ statusLabel(id) }}</span>
+      </li>
+    </ul>
   </div>
+
+  <!-- 외곽선 완료 → 풀스크린 에디터 -->
+  <CardEditor v-else :photo-ids="photoIds" @back="emit('back')" />
 </template>
 
 <style scoped>

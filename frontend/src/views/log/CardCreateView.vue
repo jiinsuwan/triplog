@@ -64,7 +64,8 @@ watch(
 </script>
 
 <template>
-  <main class="card-create">
+  <!-- 고르기 단계: 위저드(좁은 칼럼) -->
+  <main v-if="currentStepKey === 'pick'" class="card-create">
     <header class="cc-head">
       <span class="eyebrow">카드 만들기</span>
       <h1>여행 카드 만들기</h1>
@@ -74,19 +75,10 @@ watch(
 
     <Steps :model="stepItems" :activeStep="activeIndex" :readonly="true" class="cc-steps" />
 
-    <!-- 1단계=골격, 2단계=고르기 본문. 에디터 본문은 이후 단계에서 채운다. -->
-    <CardPhotoPicker v-if="currentStepKey === 'pick'" :trip-id="card.selectedTripId" />
-
-    <CardOutlineProgress v-else :photo-ids="card.photoIds" />
+    <CardPhotoPicker :trip-id="card.selectedTripId" />
 
     <footer class="cc-nav">
-      <Button
-        label="이전"
-        icon="pi pi-chevron-left"
-        severity="secondary"
-        :disabled="!canPrev"
-        @click="goPrev"
-      />
+      <span />
       <Button
         :label="nextLabel"
         icon="pi pi-chevron-right"
@@ -96,6 +88,11 @@ watch(
       />
     </footer>
   </main>
+
+  <!-- 에디터 단계: 풀스크린(외곽선 처리 → 에디터). 위저드 칼럼/스텝/푸터 없음. -->
+  <div v-else class="cc-editor">
+    <CardOutlineProgress :photo-ids="card.photoIds" @back="goPrev" />
+  </div>
 </template>
 
 <style scoped>
@@ -103,6 +100,11 @@ watch(
   max-width: 880px;
   margin: 0 auto;
   padding: 24px 16px 48px;
+}
+/* 에디터 단계 = 풀폭(좁은 칼럼 제거) — 나중에 실제 화면으로 그대로 이식. */
+.cc-editor {
+  width: 100%;
+  min-height: 100vh;
 }
 .cc-head {
   margin-bottom: 20px;
