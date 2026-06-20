@@ -332,6 +332,33 @@ onScopeDispose(() => {
 // 텍스트 선택/내용/위치 변경 시 다시 그린다(여기서 — texts 선언 뒤라 TDZ 없음).
 watch([selectedTextId, texts], redraw, { deep: true, flush: 'post' })
 
+// --- 우측 패널 상세/레이어 분할 크기 조절 (구분선 드래그) ---
+// 상세 설정 영역 높이를 사용자가 끌어 조절한다. 두 영역(상세·레이어)은 각자 내부 스크롤.
+const rightEl = ref(null)
+const detailH = ref(248) // 상세 설정 영역 높이(px)
+let resizeStart = null
+function onResizeDown(e) {
+  resizeStart = { y: e.clientY, h: detailH.value }
+  window.addEventListener('pointermove', onResizeMove)
+  window.addEventListener('pointerup', onResizeUp)
+  e.preventDefault()
+}
+function onResizeMove(e) {
+  if (!resizeStart) return
+  const avail = rightEl.value?.clientHeight ?? 600
+  const max = Math.max(160, avail - 160) // 레이어에 최소 공간 확보
+  detailH.value = Math.min(max, Math.max(120, resizeStart.h + (e.clientY - resizeStart.y)))
+}
+function onResizeUp() {
+  resizeStart = null
+  window.removeEventListener('pointermove', onResizeMove)
+  window.removeEventListener('pointerup', onResizeUp)
+}
+onScopeDispose(() => {
+  window.removeEventListener('pointermove', onResizeMove)
+  window.removeEventListener('pointerup', onResizeUp)
+})
+
 // 완성 = 문구가 만들어진 카드.
 const isDone = (id) => !!card.captions[id]
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
@@ -471,9 +498,9 @@ watch(
         </div>
       </section>
 
-      <!-- 우: 상세 설정 + 레이어 -->
-      <aside class="ed-right">
-        <div class="section detail">
+      <!-- 우: 상세 설정 + 레이어 (구분선을 끌어 두 영역 높이 조절) -->
+      <aside class="ed-right" ref="rightEl">
+        <div class="section detail" :style="{ flex: `0 0 ${detailH}px` }">
           <h3>상세 설정</h3>
 
           <!-- (A) 선택한 객체/텍스트 정밀 편집 (오른쪽 패널의 "선택 대상" 영역) -->
@@ -512,6 +539,8 @@ watch(
           </div>
           <p v-else-if="!selectedCaption && !selectedText" class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트부터 작업 중)</p>
         </div>
+
+        <div class="resizer" title="끌어서 크기 조절" @pointerdown="onResizeDown"><span class="grip" /></div>
 
         <div class="section layers">
           <h3>레이어 <span class="muted">· {{ layers.length + texts.length + (closing ? 1 : 0) }}</span></h3>
@@ -685,17 +714,38 @@ watch(
   padding: 14px;
   border-bottom: 1px solid #eef1f4;
 }
-/* 상세 설정 = 고정 높이 구역 — 도구/선택이 바뀌어도 아래 레이어 패널 위치가 흔들리지 않게
-   (유동 배치 금지). 내용이 넘치면 이 구역 안에서만 스크롤. */
+/* 상세 설정 = 사용자가 구분선으로 높이를 정하는 구역(인라인 flex-basis). 도구/선택이 바뀌어도
+   높이는 사용자가 정한 값으로 고정되고, 내용이 넘치면 이 구역 안에서만 스크롤. */
 .section.detail {
-  flex: 0 0 248px;
   overflow-y: auto;
+  border-bottom: 0; /* 구분선은 .resizer 가 담당 */
 }
 .section.layers {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   border-bottom: 0;
+}
+/* 상세/레이어 사이 드래그 구분선 — 끌어서 두 영역 높이 조절. */
+.resizer {
+  flex: 0 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  background: #fff;
+  border-top: 1px solid #eef1f4;
+  border-bottom: 1px solid #eef1f4;
+  touch-action: none;
+}
+.resizer .grip {
+  width: 36px;
+  height: 3px;
+  border-radius: 99px;
+  background: #d6dbe1;
+}
+.resizer:hover .grip {
+  background: #8b95a1;
 }
 /* 도구 컨트롤 블록 — 선택 편집(A) 블록 아래에 올 때 구분선으로 역할을 분리한다. */
 .tool-block {
