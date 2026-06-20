@@ -473,7 +473,7 @@ watch(
 
       <!-- 우: 상세 설정 + 레이어 -->
       <aside class="ed-right">
-        <div class="section">
+        <div class="section detail">
           <h3>상세 설정</h3>
 
           <!-- (A) 선택한 객체/텍스트 정밀 편집 (오른쪽 패널의 "선택 대상" 영역) -->
@@ -684,6 +684,12 @@ watch(
 .section {
   padding: 14px;
   border-bottom: 1px solid #eef1f4;
+}
+/* 상세 설정 = 고정 높이 구역 — 도구/선택이 바뀌어도 아래 레이어 패널 위치가 흔들리지 않게
+   (유동 배치 금지). 내용이 넘치면 이 구역 안에서만 스크롤. */
+.section.detail {
+  flex: 0 0 248px;
+  overflow-y: auto;
 }
 .section.layers {
   flex: 1;
