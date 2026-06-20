@@ -4,7 +4,7 @@
 //   우: 상세 설정 + 레이어(외곽선+문구 = 한 객체 = 한 레이어)   /   하단: 카드 필름스트립 + 완성/남은.
 //   외곽선 = 객체 레이어의 일부(문구 없이 외곽선만 가능). 렌더는 검증 모듈 재사용.
 //   아직: 객체 드래그/z순서·요소 추가(텍스트/말풍선/장식)·서체·색·재분할 refine.
-import { ref, shallowRef, computed, watch, onMounted, onScopeDispose } from 'vue'
+import { ref, reactive, shallowRef, computed, watch, onMounted, onScopeDispose } from 'vue'
 import Button from 'primevue/button'
 import { usePhotoContent } from '@/composables/usePhotoContent'
 import { useCardCaptions } from '@/composables/useCardCaptions'
@@ -29,6 +29,7 @@ const TOOLS = [
   { key: 'deco', icon: '✦', label: '장식' },
 ]
 const activeTool = ref('ai')
+const activeToolLabel = computed(() => TOOLS.find((t) => t.key === activeTool.value)?.label ?? '')
 
 const FIXED = { W: 1080, H: 1920 }
 const current = ref(0)
@@ -41,6 +42,8 @@ const format = ref('native')
 const outlineWidth = ref(1)
 const outlineStyle = ref('solid') // 'solid' | 'dashed'
 const selectedItemId = ref(null)
+// 선택 상태(객체/텍스트)는 loadCurrent 가 사진 전환 때 초기화하므로 먼저 선언한다(TDZ 방지).
+const selectedTextId = ref(null)
 
 const canvasDims = computed(() => {
   const img = photoImg.value
@@ -115,6 +118,7 @@ async function loadCurrent() {
   const seq = ++reqSeq
   photoImg.value = null
   selectedItemId.value = null
+  selectedTextId.value = null
   try {
     const img = await decode(await load(id))
     if (!disposed && seq === reqSeq) photoImg.value = img
@@ -198,6 +202,7 @@ function redraw() {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   renderCard(ctx, sc, { photo: img })
   drawOutlines(ctx, img)
+  drawTexts(ctx, canvasDims.value)
 }
 
 watch(currentId, loadCurrent, { immediate: true })
@@ -219,6 +224,113 @@ function updateCaptionText(text) {
 function generateCaption() {
   if (card.outlines[currentId.value]?.status === 'READY') genCaption(currentId.value)
 }
+
+// --- 추가 텍스트 요소(왼쪽 텍스트 도구) — 직접 추가/편집/드래그/저장 ---
+// 사진별 추가 텍스트 { id, text, x, y(0~1 중심), hidden }. 캔버스에 직접 그리고 export 에 합성한다.
+const textsByPhoto = reactive({})
+let textSeq = 0
+const texts = computed(() => textsByPhoto[currentId.value] ?? [])
+const selectedText = computed(() => texts.value.find((t) => t.id === selectedTextId.value) ?? null)
+
+function addText() {
+  const list = textsByPhoto[currentId.value] || (textsByPhoto[currentId.value] = [])
+  const t = { id: `t${++textSeq}`, text: '텍스트', x: 0.5, y: 0.5, hidden: false }
+  list.push(t)
+  selectItem(null)
+  selectedTextId.value = t.id
+}
+function updateTextValue(text) {
+  if (selectedText.value) selectedText.value.text = text
+}
+function removeText(id) {
+  const list = textsByPhoto[currentId.value]
+  if (!list) return
+  const i = list.findIndex((t) => t.id === id)
+  if (i >= 0) list.splice(i, 1)
+  if (selectedTextId.value === id) selectedTextId.value = null
+}
+function toggleText(t) {
+  t.hidden = !t.hidden
+}
+// 객체/텍스트 선택은 상호 배타.
+function selectItem(id) {
+  selectedItemId.value = id
+  if (id != null) selectedTextId.value = null
+}
+function selectText(id) {
+  selectedTextId.value = id
+  if (id != null) selectedItemId.value = null
+}
+
+// 캔버스에 추가 텍스트를 그린다(편집 화면). 손글씨 폰트.
+function drawTexts(ctx, dims) {
+  const { W, H } = dims
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const t of texts.value) {
+    if (t.hidden) continue
+    const size = Math.round(W * 0.05)
+    ctx.font = `${size}px "Ownglyph ooa", sans-serif`
+    ctx.lineWidth = Math.max(2, W * 0.004)
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+    ctx.fillStyle = '#fff'
+    const px = t.x * W
+    const py = t.y * H
+    ctx.strokeText(t.text, px, py)
+    ctx.fillText(t.text, px, py)
+  }
+  ctx.restore()
+}
+
+// 캔버스 드래그로 텍스트 이동.
+let dragText = null
+function onCanvasPointerDown(e) {
+  const el = canvasEl.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const nx = (e.clientX - rect.left) / rect.width
+  const ny = (e.clientY - rect.top) / rect.height
+  // 위에서부터 hit-test(나중 추가 = 위). 텍스트 박스 근사.
+  const { W, H } = canvasDims.value
+  const ctx = el.getContext('2d')
+  ctx.font = `${Math.round(W * 0.05)}px "Ownglyph ooa", sans-serif`
+  for (let i = texts.value.length - 1; i >= 0; i--) {
+    const t = texts.value[i]
+    if (t.hidden) continue
+    const w = ctx.measureText(t.text).width / W
+    const h = (W * 0.05 * 1.4) / H
+    if (Math.abs(nx - t.x) <= w / 2 + 0.02 && Math.abs(ny - t.y) <= h / 2 + 0.01) {
+      dragText = { id: t.id, dx: nx - t.x, dy: ny - t.y }
+      selectText(t.id)
+      window.addEventListener('pointermove', onCanvasPointerMove)
+      window.addEventListener('pointerup', onCanvasPointerUp)
+      e.preventDefault()
+      return
+    }
+  }
+}
+function onCanvasPointerMove(e) {
+  if (!dragText) return
+  const el = canvasEl.value
+  const rect = el.getBoundingClientRect()
+  const t = texts.value.find((x) => x.id === dragText.id)
+  if (!t) return
+  t.x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width - dragText.dx))
+  t.y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height - dragText.dy))
+}
+function onCanvasPointerUp() {
+  dragText = null
+  window.removeEventListener('pointermove', onCanvasPointerMove)
+  window.removeEventListener('pointerup', onCanvasPointerUp)
+}
+onScopeDispose(() => {
+  window.removeEventListener('pointermove', onCanvasPointerMove)
+  window.removeEventListener('pointerup', onCanvasPointerUp)
+})
+
+// 텍스트 선택/내용/위치 변경 시 다시 그린다(여기서 — texts 선언 뒤라 TDZ 없음).
+watch([selectedTextId, texts], redraw, { deep: true, flush: 'post' })
 
 // 완성 = 문구가 만들어진 카드.
 const isDone = (id) => !!card.captions[id]
@@ -251,12 +363,43 @@ async function exportCurrent() {
       style: { toneDown: toneDown.value },
     }
     const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value })
-    triggerDownload(blob, `triplog-card-${currentId.value}.png`)
+    triggerDownload(await composeTexts(blob), `triplog-card-${currentId.value}.png`)
     exportNote.value = '저장 완료'
   } catch (e) {
     exportNote.value = `저장 실패: ${e.message}`
   } finally {
     exporting.value = false
+  }
+}
+
+// export 결과(PNG blob) 위에 추가 텍스트를 합성한다(렌더 모듈은 추가 텍스트를 모르므로 후처리).
+// 좌표는 native(원본 비율) 기준 정확. fixed(9:16)는 여백 때문에 근사.
+async function composeTexts(blob) {
+  const visible = texts.value.filter((t) => !t.hidden && t.text.trim())
+  if (!visible.length) return blob
+  try {
+    const bmp = await createImageBitmap(blob)
+    const cv = document.createElement('canvas')
+    cv.width = bmp.width
+    cv.height = bmp.height
+    const ctx = cv.getContext('2d')
+    ctx.drawImage(bmp, 0, 0)
+    const W = bmp.width
+    const H = bmp.height
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const t of visible) {
+      const size = Math.round(W * 0.05)
+      ctx.font = `${size}px "Ownglyph ooa", sans-serif`
+      ctx.lineWidth = Math.max(2, W * 0.004)
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+      ctx.fillStyle = '#fff'
+      ctx.strokeText(t.text, t.x * W, t.y * H)
+      ctx.fillText(t.text, t.x * W, t.y * H)
+    }
+    return await new Promise((res) => cv.toBlob(res, 'image/png'))
+  } catch {
+    return blob
   }
 }
 
@@ -306,9 +449,9 @@ watch(
           v-for="tool in TOOLS"
           :key="tool.key"
           class="rail-btn"
-          :class="{ on: activeTool === tool.key, soon: tool.key !== 'ai' }"
-          :title="tool.key === 'ai' ? tool.label : tool.label + ' (준비 중)'"
-          @click="tool.key === 'ai' && (activeTool = 'ai')"
+          :class="{ on: activeTool === tool.key }"
+          :title="tool.label"
+          @click="activeTool = tool.key"
         >
           <span class="rail-ic">{{ tool.icon }}</span>
           <span class="rail-lb">{{ tool.label }}</span>
@@ -318,7 +461,7 @@ watch(
       <!-- 중: 캔버스 -->
       <section class="ed-stage">
         <div class="stage-canvas">
-          <canvas ref="canvasEl" class="card-canvas" aria-label="카드 편집 캔버스" />
+          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
         </div>
       </section>
 
@@ -331,7 +474,17 @@ watch(
             <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
             <p class="muted small">줄바꿈으로 여러 줄. 서체·색·크기 = 다음.</p>
           </template>
-          <template v-else>
+          <template v-else-if="selectedText">
+            <label class="lbl">텍스트 (선택)</label>
+            <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
+            <p class="muted small">캔버스에서 끌어 위치 이동.</p>
+            <Button label="텍스트 삭제" size="small" severity="danger" text @click="removeText(selectedText.id)" />
+          </template>
+          <template v-else-if="activeTool === 'text'">
+            <Button label="＋ 텍스트 추가" size="small" class="full" @click="addText" />
+            <p class="muted small">추가 후 캔버스에서 끌어 배치하고, 여기서 내용을 편집합니다.</p>
+          </template>
+          <template v-else-if="activeTool === 'ai'">
             <label class="row">외곽선 두께 <input type="range" min="0.3" max="4" step="0.1" v-model.number="outlineWidth" /></label>
             <label class="row">선 스타일
               <select v-model="outlineStyle">
@@ -346,15 +499,25 @@ watch(
             <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
             <p class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
           </template>
+          <template v-else>
+            <p class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트부터 작업 중)</p>
+          </template>
         </div>
 
         <div class="section layers">
-          <h3>레이어 <span class="muted">· {{ layers.length + (closing ? 1 : 0) }}</span></h3>
-          <p v-if="!layers.length" class="muted small">외곽선이 없습니다.</p>
+          <h3>레이어 <span class="muted">· {{ layers.length + texts.length + (closing ? 1 : 0) }}</span></h3>
+          <p v-if="!layers.length && !texts.length" class="muted small">레이어가 없습니다.</p>
           <ul class="layer-list">
+            <li v-for="t in texts" :key="t.id">
+              <button class="eye" :class="{ off: t.hidden }" :title="t.hidden ? '표시' : '숨기기'" @click="toggleText(t)">●</button>
+              <button class="layer" :class="{ active: t.id === selectedTextId }" @click="selectText(t.id)">
+                <span class="chip text">텍스트</span>
+                <span class="layer-name">{{ t.text || '(빈 텍스트)' }}</span>
+              </button>
+            </li>
             <li v-for="layer in layers" :key="layer.id">
               <button class="eye" :class="{ off: !isObjectOn(layer.id) }" :title="isObjectOn(layer.id) ? '숨기기' : '표시'" @click="toggleObject(layer.id)">●</button>
-              <button class="layer" :class="{ active: layer.id === selectedItemId }" @click="selectedItemId = layer.id">
+              <button class="layer" :class="{ active: layer.id === selectedItemId }" @click="selectItem(layer.id)">
                 <span class="lno">{{ layer.no }}</span>
                 <span class="chip" :class="layer.kind">{{ layer.hasCaption ? '문구' : '외곽선' }}</span>
                 <span class="layer-name">{{ layer.label }}</span>
@@ -631,6 +794,16 @@ watch(
 .chip.closing {
   background: #eee7fb;
   color: #6d40d6;
+}
+.chip.text {
+  background: #e7f7ee;
+  color: #16a866;
+}
+.card-canvas.grab {
+  cursor: grab;
+}
+.card-canvas.grab:active {
+  cursor: grabbing;
 }
 .layer-name {
   font-size: 0.8rem;
