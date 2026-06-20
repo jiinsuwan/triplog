@@ -1,12 +1,11 @@
 <script setup>
-// 카드 에디터 (S3-LOG-06, 목업 ⑤) — 풀스크린 배치.
-//   상단 바 · 좌(아이콘 레일 + 도구 패널: 외곽선 개별 토글·두께·문구) · 중(큰 캔버스) · 우(선택 객체·레이어) · 하단(필름스트립).
-//   풀스크린이라 나중에 실제 화면으로 그대로 이식 가능. 렌더는 검증된 모듈(buildScene/renderCard/exportCardPng) 재사용.
-//   외곽선 = 인식된 피사체별 개별 토글(이 화면에서 그림). 문구 없이 외곽선만 가능.
-//   아직: 객체 드래그 핸들·z순서·요소 추가(텍스트/말풍선/장식)·서체·재분할 refine = 다음.
+// 카드 에디터 (S3-LOG-06, 목업 ⑤) — 이미지 편집툴(클립스튜디오)식 풀스크린.
+//   상단: 출력 형식(라디오) + 저장/완료   /   좌: 도구 아이콘(선택)   /   중: 캔버스(카드)
+//   우: 상세 설정 + 레이어(외곽선+문구 = 한 객체 = 한 레이어)   /   하단: 카드 필름스트립 + 완성/남은.
+//   외곽선 = 객체 레이어의 일부(문구 없이 외곽선만 가능). 렌더는 검증 모듈 재사용.
+//   아직: 객체 드래그/z순서·요소 추가(텍스트/말풍선/장식)·서체·색·재분할 refine.
 import { ref, shallowRef, computed, watch, onMounted, onScopeDispose } from 'vue'
 import Button from 'primevue/button'
-import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import { usePhotoContent } from '@/composables/usePhotoContent'
 import { useCardCaptions } from '@/composables/useCardCaptions'
 import { buildScene } from '@/card/render/buildScene'
@@ -22,7 +21,6 @@ const card = useCardStore()
 const { load } = usePhotoContent()
 const { generate: genCaption, generating: captionGenerating, failed: captionFailed } = useCardCaptions()
 
-// 좌 아이콘 레일 도구. 지금은 AI(외곽선)만 동작, 나머지는 준비 중.
 const TOOLS = [
   { key: 'ai', icon: '✨', label: 'AI' },
   { key: 'text', icon: 'T', label: '텍스트' },
@@ -41,6 +39,7 @@ const fontReady = ref(false)
 const toneDown = ref(0.35)
 const format = ref('native')
 const outlineWidth = ref(1)
+const outlineStyle = ref('solid') // 'solid' | 'dashed'
 const selectedItemId = ref(null)
 
 const canvasDims = computed(() => {
@@ -53,19 +52,37 @@ const items = computed(() => {
   const o = card.outlines[currentId.value]
   return o?.status === 'READY' && Array.isArray(o.items) ? o.items : []
 })
-const captionObjects = computed(() => card.captions[currentId.value]?.response?.objects ?? [])
+const captionByItem = computed(() => {
+  const map = {}
+  for (const o of card.captions[currentId.value]?.response?.objects ?? []) map[o.itemId] = o
+  return map
+})
+const closing = computed(() => card.captions[currentId.value]?.response?.closing ?? null)
 
-const hiddenOutline = ref(new Set())
-const hiddenCaption = ref(new Set())
-const keyOf = (itemId) => `${currentId.value}:${itemId}`
-const isOutlineOn = (itemId) => !hiddenOutline.value.has(keyOf(itemId))
-const isCaptionOn = (itemId) => !hiddenCaption.value.has(keyOf(itemId))
-function toggleSet(refSet, itemId) {
-  const k = keyOf(itemId)
-  const s = new Set(refSet.value)
+// 레이어 = 객체(외곽선 + 그 객체의 문구). 표시/숨김은 객체 단위(외곽선·문구 통째).
+const hiddenObject = ref(new Set())
+const keyOf = (id) => `${currentId.value}:${id}`
+const isObjectOn = (id) => !hiddenObject.value.has(keyOf(id))
+function toggleObject(id) {
+  const k = keyOf(id)
+  const s = new Set(hiddenObject.value)
   s.has(k) ? s.delete(k) : s.add(k)
-  refSet.value = s
+  hiddenObject.value = s
 }
+// 레이어 목록: 객체(외곽선+문구) + 마무리.
+const layers = computed(() => {
+  const list = items.value.map((item, i) => {
+    const cap = captionByItem.value[item.id]
+    return {
+      id: item.id,
+      no: i + 1,
+      kind: cap ? 'object-caption' : 'object',
+      label: cap ? (cap.note || []).join(' ') : item.label || `객체 ${i + 1}`,
+      hasCaption: !!cap,
+    }
+  })
+  return list
+})
 
 let disposed = false
 onScopeDispose(() => {
@@ -109,14 +126,12 @@ async function loadCurrent() {
 const scene = computed(() => {
   const img = photoImg.value
   if (!img) return null
-  const visibleObjects = captionObjects.value.filter((o) => isCaptionOn(o.itemId))
-  const captions = {
-    objects: visibleObjects,
-    closing: card.captions[currentId.value]?.response?.closing ?? null,
-  }
+  const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? []).filter((o) =>
+    isObjectOn(o.itemId),
+  )
   return buildScene({
     items: items.value,
-    captions,
+    captions: { objects: visibleObjects, closing: closing.value },
     canvas: canvasDims.value,
     photo: { w: img.naturalWidth, h: img.naturalHeight },
     style: { toneDown: toneDown.value },
@@ -126,14 +141,20 @@ const scene = computed(() => {
 function drawOutlines(ctx, img) {
   const { W } = canvasDims.value
   const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, W, canvasDims.value.H)
-  ctx.save()
-  ctx.lineWidth = Math.max(2, W * 0.0035) * outlineWidth.value
-  ctx.shadowColor = 'rgba(0,0,0,0.5)'
-  ctx.shadowBlur = Math.max(1, W * 0.002)
+  const base = Math.max(1, W * 0.002)
+  let no = 0
   for (const item of items.value) {
-    if (!isOutlineOn(item.id)) continue
-    ctx.strokeStyle =
-      item.id === selectedItemId.value ? 'rgba(240,68,82,0.95)' : 'rgba(49,130,246,0.95)'
+    no += 1 // 레이어 목록과 같은 번호(숨겨도 번호 유지)
+    if (!isObjectOn(item.id)) continue
+    const sel = item.id === selectedItemId.value
+    const color = sel ? 'rgba(240,68,82,0.95)' : 'rgba(49,130,246,0.95)'
+
+    ctx.save()
+    ctx.lineWidth = base * outlineWidth.value
+    ctx.strokeStyle = color
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'
+    ctx.shadowBlur = base
+    ctx.setLineDash(outlineStyle.value === 'dashed' ? [W * 0.012, W * 0.009] : [])
     for (const loop of Array.isArray(item.polygons) ? item.polygons : []) {
       if (!Array.isArray(loop) || loop.length < 3) continue
       ctx.beginPath()
@@ -144,8 +165,26 @@ function drawOutlines(ctx, img) {
       ctx.closePath()
       ctx.stroke()
     }
+    ctx.restore()
+
+    // 번호 배지(객체 중심) — 레이어와 매칭. 편집 보조라 export 에는 안 들어간다.
+    if (Array.isArray(item.center)) {
+      const [cx, cy] = cf.ptPx(item.center[0], item.center[1])
+      const r = Math.max(11, W * 0.016)
+      ctx.save()
+      ctx.setLineDash([])
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.font = `700 ${Math.round(r * 1.2)}px sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(no), cx, cy)
+      ctx.restore()
+    }
   }
-  ctx.restore()
 }
 
 function redraw() {
@@ -162,13 +201,13 @@ function redraw() {
 }
 
 watch(currentId, loadCurrent, { immediate: true })
-watch([scene, photoImg, fontReady, hiddenOutline, outlineWidth, selectedItemId], redraw, {
-  flush: 'post',
-})
-
-const selectedCaption = computed(
-  () => captionObjects.value.find((o) => o.itemId === selectedItemId.value) ?? null,
+watch(
+  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, selectedItemId],
+  redraw,
+  { flush: 'post' },
 )
+
+const selectedCaption = computed(() => captionByItem.value[selectedItemId.value] ?? null)
 function updateCaptionText(text) {
   const existing = card.captions[currentId.value]
   if (!existing) return
@@ -180,6 +219,10 @@ function updateCaptionText(text) {
 function generateCaption() {
   if (card.outlines[currentId.value]?.status === 'READY') genCaption(currentId.value)
 }
+
+// 완성 = 문구가 만들어진 카드.
+const isDone = (id) => !!card.captions[id]
+const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
 
 const exporting = ref(false)
 const exportNote = ref('')
@@ -198,13 +241,12 @@ async function exportCurrent() {
   exporting.value = true
   exportNote.value = ''
   try {
-    const visibleObjects = captionObjects.value.filter((o) => isCaptionOn(o.itemId))
+    const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? []).filter((o) =>
+      isObjectOn(o.itemId),
+    )
     const inputs = {
       items: items.value,
-      captions: {
-        objects: visibleObjects,
-        closing: card.captions[currentId.value]?.response?.closing ?? null,
-      },
+      captions: { objects: visibleObjects, closing: closing.value },
       photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
       style: { toneDown: toneDown.value },
     }
@@ -217,22 +259,48 @@ async function exportCurrent() {
     exporting.value = false
   }
 }
+
+// 필름스트립 썸네일(9:16 cover-fit) objectURL.
+const thumbUrls = ref({})
+async function loadThumb(id) {
+  if (thumbUrls.value[id]) return
+  try {
+    const url = await load(id)
+    if (!disposed) thumbUrls.value = { ...thumbUrls.value, [id]: url }
+  } catch {
+    /* 무시 */
+  }
+}
+watch(
+  () => props.photoIds.slice(),
+  (ids) => ids.forEach(loadThumb),
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="ed">
-    <!-- 상단 바 -->
+    <!-- 상단: 출력 형식 + 저장/완료 -->
     <header class="ed-top">
       <button class="back" @click="emit('back')">‹ 고르기</button>
       <span class="title">카드 {{ current + 1 }} / {{ photoIds.length }}</span>
       <span class="grow" />
+      <fieldset class="fmt">
+        <legend>출력 형식</legend>
+        <label><input type="radio" value="native" v-model="format" /> 원본 비율</label>
+        <label><input type="radio" value="fixed" v-model="format" /> 9:16</label>
+      </fieldset>
+      <fieldset class="fmt">
+        <legend>전체 보정</legend>
+        <label class="tone-lbl">톤 낮춤 <input type="range" min="0" max="50" :value="Math.round(toneDown * 100)" @input="toneDown = Number($event.target.value) / 100" /></label>
+      </fieldset>
       <span v-if="exportNote" class="ok">{{ exportNote }}</span>
       <Button label="PNG 저장" icon="pi pi-download" size="small" severity="secondary" :disabled="exporting || !photoImg" @click="exportCurrent" />
       <Button label="완료" size="small" @click="emit('back')" />
     </header>
 
     <div class="ed-mid">
-      <!-- 좌: 아이콘 레일 -->
+      <!-- 좌: 도구 선택 -->
       <nav class="ed-rail">
         <button
           v-for="tool in TOOLS"
@@ -247,76 +315,71 @@ async function exportCurrent() {
         </button>
       </nav>
 
-      <!-- 좌 패널: 선택 도구(AI = 외곽선) -->
-      <aside class="ed-leftpanel">
-        <h3>피사체 외곽선 <span class="muted">· {{ items.length }}개</span></h3>
-        <p v-if="!items.length" class="muted small">외곽선을 못 찾았습니다.</p>
-        <ul v-else class="obj-list">
-          <li v-for="(item, i) in items" :key="item.id">
-            <button class="obj" :class="{ active: item.id === selectedItemId }" @click="selectedItemId = item.id">
-              {{ item.label || `객체 ${i + 1}` }}
-            </button>
-            <input type="checkbox" :checked="isOutlineOn(item.id)" title="외곽선 표시" @change="toggleSet(hiddenOutline, item.id)" />
-          </li>
-        </ul>
-        <label class="row">두께 <input type="range" min="1" max="4" step="0.5" v-model.number="outlineWidth" /></label>
-        <Button
-          label="✨ 문구 생성"
-          size="small"
-          severity="secondary"
-          class="full"
-          :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !!card.captions[currentId]"
-          @click="generateCaption"
-        />
-        <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
-        <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
-      </aside>
-
-      <!-- 중: 큰 캔버스 -->
+      <!-- 중: 캔버스 -->
       <section class="ed-stage">
-        <div class="stage-tools">
-          <label class="row">톤 <input type="range" min="0" max="50" :value="Math.round(toneDown * 100)" @input="toneDown = Number($event.target.value) / 100" /></label>
-          <label class="row">포맷
-            <select v-model="format">
-              <option value="native">원본 비율</option>
-              <option value="fixed">9:16</option>
-            </select>
-          </label>
-        </div>
         <div class="stage-canvas">
           <canvas ref="canvasEl" class="card-canvas" aria-label="카드 편집 캔버스" />
         </div>
       </section>
 
-      <!-- 우: 선택 객체 / 레이어 -->
+      <!-- 우: 상세 설정 + 레이어 -->
       <aside class="ed-right">
-        <template v-if="selectedCaption">
-          <h3>선택한 문구</h3>
-          <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
-          <p class="muted small">줄바꿈으로 여러 줄. (서체·색·크기 = 다음 단계)</p>
-        </template>
-        <h3 v-else>레이어</h3>
+        <div class="section">
+          <h3>상세 설정</h3>
+          <template v-if="selectedCaption">
+            <label class="lbl">문구 (선택 객체)</label>
+            <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
+            <p class="muted small">줄바꿈으로 여러 줄. 서체·색·크기 = 다음.</p>
+          </template>
+          <template v-else>
+            <label class="row">외곽선 두께 <input type="range" min="0.3" max="4" step="0.1" v-model.number="outlineWidth" /></label>
+            <label class="row">선 스타일
+              <select v-model="outlineStyle">
+                <option value="solid">실선</option>
+                <option value="dashed">점선</option>
+              </select>
+            </label>
+            <Button label="✨ 문구 생성" size="small" severity="secondary" class="full"
+              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !!card.captions[currentId]"
+              @click="generateCaption" />
+            <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
+            <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
+            <p class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
+          </template>
+        </div>
 
-        <h4 v-if="captionObjects.length" class="lh">문구 · {{ captionObjects.length }}</h4>
-        <ul v-if="captionObjects.length" class="layer-list">
-          <li v-for="obj in captionObjects" :key="obj.itemId">
-            <button class="layer" :class="{ active: obj.itemId === selectedItemId }" @click="selectedItemId = obj.itemId">
-              {{ (obj.note || []).join(' ') || '(빈 문구)' }}
-            </button>
-            <input type="checkbox" :checked="isCaptionOn(obj.itemId)" title="문구 표시" @change="toggleSet(hiddenCaption, obj.itemId)" />
-          </li>
-        </ul>
-        <p v-else class="muted small">문구가 없습니다. 좌측 "문구 생성".</p>
+        <div class="section layers">
+          <h3>레이어 <span class="muted">· {{ layers.length + (closing ? 1 : 0) }}</span></h3>
+          <p v-if="!layers.length" class="muted small">외곽선이 없습니다.</p>
+          <ul class="layer-list">
+            <li v-for="layer in layers" :key="layer.id">
+              <button class="eye" :class="{ off: !isObjectOn(layer.id) }" :title="isObjectOn(layer.id) ? '숨기기' : '표시'" @click="toggleObject(layer.id)">●</button>
+              <button class="layer" :class="{ active: layer.id === selectedItemId }" @click="selectedItemId = layer.id">
+                <span class="lno">{{ layer.no }}</span>
+                <span class="chip" :class="layer.kind">{{ layer.hasCaption ? '문구' : '외곽선' }}</span>
+                <span class="layer-name">{{ layer.label }}</span>
+              </button>
+            </li>
+            <li v-if="closing">
+              <span class="eye" />
+              <div class="layer static"><span class="chip closing">마무리</span><span class="layer-name">{{ closing.text }}</span></div>
+            </li>
+          </ul>
+        </div>
       </aside>
     </div>
 
-    <!-- 하단: 필름스트립 -->
+    <!-- 하단: 카드 필름스트립 + 정보 -->
     <footer class="ed-bottom">
       <ul class="filmstrip">
         <li v-for="(id, i) in photoIds" :key="id">
-          <button class="film" :class="{ on: i === current }" @click="current = i"><PhotoThumb :photo-id="id" /></button>
+          <button class="film" :class="{ on: i === current }" @click="current = i">
+            <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
+            <span v-if="isDone(id)" class="film-done" title="문구 완성">✓</span>
+          </button>
         </li>
       </ul>
+      <span class="film-info">완성 {{ doneCount }} · 남은 {{ photoIds.length - doneCount }}</span>
     </footer>
   </div>
 </template>
@@ -332,7 +395,7 @@ async function exportCurrent() {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 10px 16px;
   background: #fff;
   border-bottom: 1px solid #e5e8eb;
@@ -350,6 +413,26 @@ async function exportCurrent() {
 }
 .grow {
   flex: 1;
+}
+.fmt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  padding: 2px 10px 4px;
+}
+.fmt legend {
+  font-size: 0.7rem;
+  color: #8b95a1;
+  padding: 0 4px;
+}
+.fmt label {
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
 }
 .ok {
   color: #16c47e;
@@ -397,23 +480,52 @@ async function exportCurrent() {
 .rail-lb {
   font-size: 0.65rem;
 }
-.ed-leftpanel,
-.ed-right {
-  flex: 0 0 230px;
-  overflow-y: auto;
-  padding: 14px;
+.ed-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background:
+    radial-gradient(circle, #d6dbe1 1px, transparent 1px) 0 0 / 18px 18px,
+    #eef1f4;
+}
+.stage-canvas {
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+}
+.card-canvas {
+  max-height: calc(100vh - 220px);
+  max-width: 100%;
+  height: auto;
+  width: auto;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   background: #fff;
 }
-.ed-leftpanel {
-  border-right: 1px solid #e5e8eb;
-}
 .ed-right {
+  flex: 0 0 268px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
   border-left: 1px solid #e5e8eb;
+  overflow: hidden;
 }
-.ed-leftpanel h3,
+.section {
+  padding: 14px;
+  border-bottom: 1px solid #eef1f4;
+}
+.section.layers {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-bottom: 0;
+}
 .ed-right h3 {
   margin: 0 0 10px;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 .muted {
   color: #8b95a1;
@@ -425,39 +537,11 @@ async function exportCurrent() {
 .warn {
   color: #f04452;
 }
-.obj-list,
-.layer-list {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-}
-.obj-list li,
-.layer-list li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-.obj,
-.layer {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  border: 0;
-  background: #f7f8fa;
-  border-radius: 8px;
-  padding: 6px 8px;
+.lbl {
+  display: block;
   font-size: 0.82rem;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.obj.active,
-.layer.active {
-  background: #eaf1ff;
-  color: #3182f6;
-  font-weight: 600;
+  color: #4b5563;
+  margin-bottom: 4px;
 }
 .row {
   display: flex;
@@ -469,43 +553,7 @@ async function exportCurrent() {
 }
 .full {
   width: 100%;
-}
-.ed-stage {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px;
-  background:
-    radial-gradient(circle, #d6dbe1 1px, transparent 1px) 0 0 / 18px 18px,
-    #eef1f4;
-}
-.stage-tools {
-  display: flex;
-  gap: 14px;
-  align-self: stretch;
-  justify-content: center;
-  padding-bottom: 10px;
-}
-.stage-tools .row {
-  margin: 0;
-}
-.stage-canvas {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.card-canvas {
-  max-height: 100%;
-  max-width: 100%;
-  height: auto;
-  width: auto;
-  border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
-  background: #fff;
+  margin-bottom: 6px;
 }
 .cap-edit {
   width: 100%;
@@ -515,13 +563,86 @@ async function exportCurrent() {
   font: inherit;
   resize: vertical;
 }
-.lh {
-  margin: 12px 0 6px;
-  font-size: 0.85rem;
-  color: #4b5563;
+.layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.layer-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.eye {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none;
+  color: #3182f6;
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+.eye.off {
+  color: #c9d2db;
+}
+.layer {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  border: 0;
+  background: #f7f8fa;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.layer.static {
+  cursor: default;
+}
+.layer.active {
+  background: #eaf1ff;
+}
+.lno {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #3182f6;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+.chip {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  font-weight: 700;
+  border-radius: 5px;
+  padding: 1px 5px;
+  background: #e3ecff;
+  color: #3182f6;
+}
+.chip.object-caption,
+.chip.closing {
+  background: #eee7fb;
+  color: #6d40d6;
+}
+.layer-name {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ed-bottom {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   padding: 10px 16px;
   background: #fff;
   border-top: 1px solid #e5e8eb;
@@ -533,19 +654,45 @@ async function exportCurrent() {
   margin: 0;
   padding: 0;
   overflow-x: auto;
+  flex: 1;
 }
 .film {
-  width: 48px;
-  height: 48px;
+  position: relative;
+  width: 40px;
+  height: 71px;
   padding: 0;
-  border: 0;
-  background: none;
-  border-radius: 8px;
+  border: 1px solid #e5e8eb;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f2f4f6;
   cursor: pointer;
 }
 .film.on {
   outline: 3px solid #3182f6;
-  outline-offset: -3px;
-  border-radius: 8px;
+  outline-offset: -1px;
+}
+.film img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.film-done {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #16c47e;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+.film-info {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  color: #8b95a1;
 }
 </style>
