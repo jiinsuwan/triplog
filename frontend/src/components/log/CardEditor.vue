@@ -22,13 +22,21 @@ const { load } = usePhotoContent()
 const { generate: genCaption, generating: captionGenerating, failed: captionFailed } = useCardCaptions()
 
 const TOOLS = [
-  { key: 'select', icon: '↖', label: '선택' },
   { key: 'ai', icon: '✨', label: 'AI' },
   { key: 'text', icon: 'T', label: '텍스트' },
   { key: 'line', icon: '／', label: '선' },
   { key: 'deco', icon: '✦', label: '장식' },
 ]
-const activeTool = ref('select')
+const activeTool = ref('select') // 'select'(선택 모드) | 도구 키(생성 모드)
+// 선택/생성 모드 = 캔버스 위 플로팅 토글. 생성 모드는 마지막에 쓰던 도구로 복귀.
+const isSelectMode = computed(() => activeTool.value === 'select')
+let lastCreateTool = 'text'
+watch(activeTool, (v) => {
+  if (v !== 'select') lastCreateTool = v
+})
+function setMode(m) {
+  activeTool.value = m === 'select' ? 'select' : lastCreateTool
+}
 const activeToolLabel = computed(() => TOOLS.find((t) => t.key === activeTool.value)?.label ?? '')
 
 const FIXED = { W: 1080, H: 1920 }
@@ -958,6 +966,11 @@ watch(
 
       <!-- 중: 캔버스 (줌) -->
       <section class="ed-stage">
+        <!-- 사진 위 플로팅 모드 토글 -->
+        <div class="stage-modes">
+          <button :class="{ on: isSelectMode }" @click="setMode('select')">↖ 선택</button>
+          <button :class="{ on: !isSelectMode }" @click="setMode('create')">＋ 생성</button>
+        </div>
         <div class="stage-canvas">
           <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
         </div>
@@ -1250,6 +1263,35 @@ watch(
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   background: #fff;
+}
+/* 사진 위 플로팅 모드 토글(선택/생성) */
+.stage-modes {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #e5e8eb;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+.stage-modes button {
+  border: 0;
+  background: none;
+  border-radius: 8px;
+  padding: 5px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+}
+.stage-modes button.on {
+  background: #3182f6;
+  color: #fff;
 }
 /* 줌 컨트롤(스테이지 우하단) */
 .zoom-bar {
