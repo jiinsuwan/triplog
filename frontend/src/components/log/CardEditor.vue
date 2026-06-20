@@ -24,7 +24,6 @@ const { generate: genCaption, generating: captionGenerating, failed: captionFail
 const TOOLS = [
   { key: 'ai', icon: '✨', label: 'AI' },
   { key: 'text', icon: 'T', label: '텍스트' },
-  { key: 'bubble', icon: '💬', label: '말풍선' },
   { key: 'line', icon: '／', label: '선' },
   { key: 'deco', icon: '✦', label: '장식' },
 ]
@@ -230,20 +229,32 @@ function drawOutlines(ctx, img) {
   ctx.restore() // translate 해제
 }
 
-// 9:16 여백 채움(자르지 않고 contain 후 남는 공간) — 블러(사진 확대+어둡게) 또는 단색.
+// 블러 여백 배경은 사진·프레임 크기에만 의존 → 캐시(매 redraw 마다 blur 필터 재계산 방지).
+let blurCache = null
+function blurBg(img, W, H) {
+  const key = `${img.src}|${W}x${H}`
+  if (blurCache?.key === key) return blurCache.canvas
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const cx = c.getContext('2d')
+  const { dw, dh, ox, oy } = makeCoverFit(img.naturalWidth, img.naturalHeight, W, H)
+  cx.filter = `blur(${Math.round(W * 0.03)}px)`
+  cx.drawImage(img, ox, oy, dw, dh)
+  cx.filter = 'none'
+  cx.fillStyle = 'rgba(20,14,8,0.18)'
+  cx.fillRect(0, 0, W, H)
+  blurCache = { key, canvas: c }
+  return c
+}
+// 9:16 여백 채움(자르지 않고 contain 후 남는 공간) — 블러(캐시) 또는 단색.
 function drawPadding(ctx, img, W, H) {
   if (padFill.value === 'solid') {
     ctx.fillStyle = padColor.value
     ctx.fillRect(0, 0, W, H)
     return
   }
-  const { dw, dh, ox, oy } = makeCoverFit(img.naturalWidth, img.naturalHeight, W, H)
-  ctx.save()
-  ctx.filter = `blur(${Math.round(W * 0.03)}px)`
-  ctx.drawImage(img, ox, oy, dw, dh)
-  ctx.restore()
-  ctx.fillStyle = 'rgba(20,14,8,0.18)'
-  ctx.fillRect(0, 0, W, H)
+  ctx.drawImage(blurBg(img, W, H), 0, 0)
 }
 
 function redraw() {
@@ -272,10 +283,23 @@ function redraw() {
   drawTexts(ctx, { W: fw, H: fh })
 }
 
+// 리드로 코얼레스 — 슬라이더 드래그 등 빠른 변경은 프레임당 1회만 그린다(이벤트마다 X).
+let rafId = null
+function scheduleRedraw() {
+  if (rafId != null) return
+  rafId = requestAnimationFrame(() => {
+    rafId = null
+    redraw()
+  })
+}
+onScopeDispose(() => {
+  if (rafId != null) cancelAnimationFrame(rafId)
+})
+
 watch(currentId, loadCurrent, { immediate: true })
 watch(
   [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor],
-  redraw,
+  scheduleRedraw,
   { flush: 'post' },
 )
 
@@ -421,7 +445,7 @@ onScopeDispose(() => {
 })
 
 // 텍스트 선택/내용/위치 변경 시 다시 그린다(여기서 — texts 선언 뒤라 TDZ 없음).
-watch([selectedTextId, texts], redraw, { deep: true, flush: 'post' })
+watch([selectedTextId, texts], scheduleRedraw, { deep: true, flush: 'post' })
 
 // --- 우측 패널 상세/레이어 분할 크기 조절 (구분선 드래그) ---
 // 상세 설정 영역 높이를 사용자가 끌어 조절한다. 두 영역(상세·레이어)은 각자 내부 스크롤.
@@ -668,12 +692,11 @@ watch(
               <button class="step" title="굵게" @click="bumpWidth(0.1)">＋</button>
               <input class="num" type="number" min="0.3" max="8" step="0.1" v-model.number="outlineWidth" />
             </div>
-            <label class="row">선 스타일
-              <select v-model="outlineStyle">
-                <option value="solid">실선</option>
-                <option value="dashed">점선</option>
-              </select>
-            </label>
+            <div class="row">
+              <span>선 스타일</span>
+              <label class="rd"><input type="radio" value="solid" v-model="outlineStyle" /> 실선</label>
+              <label class="rd"><input type="radio" value="dashed" v-model="outlineStyle" /> 점선</label>
+            </div>
             <template v-if="outlineStyle === 'dashed'">
               <label class="row">선 길이 <input type="range" min="2" max="30" step="1" v-model.number="dashLen" /><span class="numv">{{ dashLen }}</span></label>
               <label class="row">간격 <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span></label>
@@ -1006,6 +1029,12 @@ watch(
 .full {
   width: 100%;
   margin-bottom: 6px;
+}
+.rd {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
 }
 .ctl-lbl {
   display: block;
