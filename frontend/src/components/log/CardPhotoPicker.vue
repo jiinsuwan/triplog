@@ -7,6 +7,7 @@ import { computed, ref, watch, onScopeDispose } from 'vue'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
+import RecordRouteMap from '@/components/log/record/RecordRouteMap.vue'
 import RecordStop from '@/components/log/record/RecordStop.vue'
 import RecordPhotoTray from '@/components/log/record/RecordPhotoTray.vue'
 import { useRecordDrag, cancelPhotoDrag } from '@/composables/useRecordDrag'
@@ -80,6 +81,9 @@ const outlineSummary = computed(() => {
 const placedCount = computed(() => placedPhotoIds.value.length)
 const isEmpty = computed(() => !loading.value && !error.value && photos.value.length === 0)
 
+// 경로 지도(스키매틱)는 기본 표시하되 ✕로 접을 수 있다(공간이 필요하면 숨김).
+const showMap = ref(true)
+
 function proceed() {
   if (!placedCount.value) return
   card.setPhotoIds(placedPhotoIds.value)
@@ -114,6 +118,7 @@ function proceed() {
         </span>
         <span class="grow" />
         <span v-if="!placedCount" class="nudge">사진을 장소에 끌어다 놓으면 카드를 만들 수 있어요</span>
+        <button v-if="!showMap" class="map-toggle" @click="showMap = true">🗺 지도 보기</button>
         <Button
           :label="`에디터로 (${placedCount}장)`"
           icon="pi pi-chevron-right"
@@ -123,19 +128,27 @@ function proceed() {
         />
       </div>
 
-      <!-- 일정 장소 목록(드롭 타깃) -->
-      <section v-for="day in days" :key="day.dayNumber" class="day">
-        <h2 class="day-head">
-          DAY {{ day.dayNumber }}
-          <span v-if="day.date" class="date">{{ day.date }}</span>
-        </h2>
-        <RecordStop
-          v-for="stop in day.stops"
-          :key="stop.id"
-          :stop="stop"
-          :photos="photosForStop(stop.id)"
-        />
-      </section>
+      <!-- 좌: 경로 지도(✕로 접기) / 우: 일정 장소 목록(드롭 타깃) -->
+      <div class="cols">
+        <div v-if="showMap" class="map-wrap">
+          <button class="map-x" title="지도 숨기기" @click="showMap = false">✕</button>
+          <RecordRouteMap :stops="stopsFlat" />
+        </div>
+        <div class="list">
+          <section v-for="day in days" :key="day.dayNumber" class="day">
+            <h2 class="day-head">
+              DAY {{ day.dayNumber }}
+              <span v-if="day.date" class="date">{{ day.date }}</span>
+            </h2>
+            <RecordStop
+              v-for="stop in day.stops"
+              :key="stop.id"
+              :stop="stop"
+              :photos="photosForStop(stop.id)"
+            />
+          </section>
+        </div>
+      </div>
 
       <!-- 미배치 트레이 — 카드로 만들어지지 않음을 명시 -->
       <p class="tray-note">📷 미배치 사진은 <b>카드로 만들어지지 않습니다.</b> 장소에 끌어다 놓으세요.</p>
@@ -197,6 +210,70 @@ function proceed() {
 .nudge {
   color: #8b95a1;
   font-size: 0.82rem;
+}
+/* 좌(지도) / 우(배치 목록) 2열. 지도를 ✕로 접으면 목록이 전폭. */
+.cols {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-top: 12px;
+}
+.list {
+  flex: 1;
+  min-width: 0;
+}
+.map-wrap {
+  position: sticky;
+  top: 56px;
+  flex: 0 0 360px;
+}
+/* 지도(정사각형 SVG)는 칼럼 높이로 고정 캡 — 안 그러면 너비만큼 세로로 커진다. */
+.map-wrap :deep(.map),
+.map-wrap :deep(.canvas) {
+  min-height: 0;
+  height: 380px;
+}
+@media (max-width: 760px) {
+  .cols {
+    flex-direction: column;
+  }
+  .map-wrap {
+    position: relative;
+    top: 0;
+    flex: 1 1 auto;
+    width: 100%;
+  }
+}
+.map-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: #4b5563;
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.map-x:hover {
+  background: #fff;
+  color: #191f28;
+}
+.map-toggle {
+  border: 1px solid #e5e8eb;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  color: #4b5563;
+  cursor: pointer;
+}
+.map-toggle:hover {
+  background: #f7f8fa;
 }
 .day {
   margin-top: 8px;
