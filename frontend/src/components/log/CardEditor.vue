@@ -47,8 +47,9 @@ function bumpWidth(d) {
   outlineWidth.value = Math.min(8, Math.max(0.3, v))
 }
 const selectedItemId = ref(null)
-// 선택 상태(객체/텍스트)는 loadCurrent 가 사진 전환 때 초기화하므로 먼저 선언한다(TDZ 방지).
+// 선택 상태(객체/텍스트/선)는 loadCurrent 가 사진 전환 때 초기화하므로 먼저 선언한다(TDZ 방지).
 const selectedTextId = ref(null)
+const selectedLineId = ref(null)
 // 레이어 다중 선택(체크박스) — 전체/일부 선택 후 일괄 숨기기/보이기. 사진 전환 때 초기화(loadCurrent).
 const bulkSelected = ref(new Set())
 function toggleBulk(key) {
@@ -151,6 +152,7 @@ async function loadCurrent() {
   photoImg.value = null
   selectedItemId.value = null
   selectedTextId.value = null
+  selectedLineId.value = null
   bulkSelected.value = new Set()
   try {
     const img = await decode(await load(id))
@@ -280,6 +282,7 @@ function redraw() {
     renderCard(ctx, sc, { photo: img }) // native: 프레임 전체가 콘텐츠
   }
   drawOutlines(ctx, img)
+  drawLines(ctx, { W: fw, H: fh })
   drawTexts(ctx, { W: fw, H: fh })
 }
 
@@ -349,17 +352,24 @@ function toggleText(t) {
 // 객체/텍스트 선택은 상호 배타.
 function selectItem(id) {
   selectedItemId.value = id
-  if (id != null) selectedTextId.value = null
+  if (id != null) {
+    selectedTextId.value = null
+    selectedLineId.value = null
+  }
 }
 function selectText(id) {
   selectedTextId.value = id
-  if (id != null) selectedItemId.value = null
+  if (id != null) {
+    selectedItemId.value = null
+    selectedLineId.value = null
+  }
 }
 
 // --- 레이어 선택 + 표시/숨김(클립스튜디오식). 삭제는 없다(외곽선은 숨길 뿐). ---
 // 전체/일부 선택(체크박스) 후 일괄 숨기기/보이기. 눈 아이콘은 행별 즉시 토글.
 const layerKeys = computed(() => [
   ...texts.value.map((t) => `txt:${t.id}`),
+  ...lines.value.map((l) => `line:${l.id}`),
   ...items.value.map((it) => `obj:${it.id}`),
 ])
 const allSelected = computed(
@@ -376,6 +386,9 @@ function bulkSetVisible(vis) {
     if (type === 'txt') {
       const t = texts.value.find((x) => x.id === idRaw)
       if (t) t.hidden = !vis
+    } else if (type === 'line') {
+      const l = lines.value.find((x) => x.id === idRaw)
+      if (l) l.hidden = !vis
     } else if (type === 'obj') setObjectVisible(Number(idRaw), vis)
   }
 }
@@ -404,17 +417,130 @@ function drawTexts(ctx, dims) {
   }
 }
 
-// 캔버스 드래그로 텍스트 이동.
-let dragText = null
+// --- 선 요소(직선/화살표) — 선 도구로 캔버스에 끌어 그린다 ---
+// 사진별 선 { id, x1,y1,x2,y2 (0~1), color, width(배율), style, arrow, hidden }.
+const linesByPhoto = reactive({})
+let lineSeq = 0
+const lines = computed(() => linesByPhoto[currentId.value] ?? [])
+const selectedLine = computed(() => lines.value.find((l) => l.id === selectedLineId.value) ?? null)
+function addLine(x1, y1, x2, y2) {
+  const list = linesByPhoto[currentId.value] || (linesByPhoto[currentId.value] = [])
+  const l = { id: `l${++lineSeq}`, x1, y1, x2, y2, color: '#ffffff', width: 1, style: 'solid', arrow: 'none', hidden: false }
+  list.push(l)
+  return l
+}
+function removeLine(id) {
+  const list = linesByPhoto[currentId.value]
+  if (!list) return
+  const i = list.findIndex((l) => l.id === id)
+  if (i >= 0) list.splice(i, 1)
+  if (selectedLineId.value === id) selectedLineId.value = null
+}
+function toggleLine(l) {
+  l.hidden = !l.hidden
+}
+function setLineProp(prop, val) {
+  if (selectedLine.value) selectedLine.value[prop] = val
+}
+function selectLine(id) {
+  selectedLineId.value = id
+  if (id != null) {
+    selectedItemId.value = null
+    selectedTextId.value = null
+  }
+}
+// 화살촉.
+function arrowHead(ctx, tipX, tipY, fromX, fromY, size) {
+  const a = Math.atan2(tipY - fromY, tipX - fromX)
+  ctx.beginPath()
+  ctx.moveTo(tipX, tipY)
+  ctx.lineTo(tipX - size * Math.cos(a - 0.42), tipY - size * Math.sin(a - 0.42))
+  ctx.lineTo(tipX - size * Math.cos(a + 0.42), tipY - size * Math.sin(a + 0.42))
+  ctx.closePath()
+  ctx.fill()
+}
+function paintLine(ctx, l, W, H) {
+  const x1 = l.x1 * W, y1 = l.y1 * H, x2 = l.x2 * W, y2 = l.y2 * H
+  const lw = Math.max(2, W * 0.006 * (l.width ?? 1))
+  ctx.save()
+  ctx.strokeStyle = l.color ?? '#ffffff'
+  ctx.fillStyle = l.color ?? '#ffffff'
+  ctx.lineWidth = lw
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'
+  ctx.shadowBlur = lw * 0.6
+  ctx.setLineDash(l.style === 'dashed' ? [lw * 2.5, lw * 1.8] : [])
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x2, y2)
+  ctx.stroke()
+  ctx.setLineDash([])
+  const head = lw * 3.4
+  if (l.arrow === 'end' || l.arrow === 'both') arrowHead(ctx, x2, y2, x1, y1, head)
+  if (l.arrow === 'both') arrowHead(ctx, x1, y1, x2, y2, head)
+  ctx.restore()
+}
+function drawLines(ctx, dims) {
+  const { W, H } = dims
+  for (const l of lines.value) if (!l.hidden) paintLine(ctx, l, W, H)
+  // 선택된 선의 끝점 핸들(편집 보조 — export 엔 안 들어감).
+  const sl = selectedLine.value
+  if (sl && !sl.hidden) {
+    for (const [hx, hy] of [[sl.x1, sl.y1], [sl.x2, sl.y2]]) {
+      ctx.save()
+      ctx.fillStyle = '#fff'
+      ctx.strokeStyle = '#3182f6'
+      ctx.lineWidth = Math.max(2, W * 0.003)
+      ctx.beginPath()
+      ctx.arc(hx * W, hy * H, Math.max(7, W * 0.012), 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+    }
+  }
+}
+// 점(nx,ny 0~1)이 선분에 충분히 가까운지(본체 hit). 화면 비율 보정 없이 정규화 거리 근사.
+function nearLine(l, nx, ny) {
+  const dx = l.x2 - l.x1, dy = l.y2 - l.y1
+  const len2 = dx * dx + dy * dy || 1e-6
+  let tt = ((nx - l.x1) * dx + (ny - l.y1) * dy) / len2
+  tt = Math.max(0, Math.min(1, tt))
+  const px = l.x1 + tt * dx, py = l.y1 + tt * dy
+  return Math.hypot(nx - px, ny - py) < 0.02
+}
+function lineEndpointAt(l, nx, ny) {
+  if (Math.hypot(nx - l.x1, ny - l.y1) < 0.03) return '1'
+  if (Math.hypot(nx - l.x2, ny - l.y2) < 0.03) return '2'
+  return null
+}
+
+// 캔버스 드래그로 텍스트/선 이동·그리기. drag = { kind, ... }.
+let drag = null
+function bindCanvasDrag(e) {
+  window.addEventListener('pointermove', onCanvasPointerMove)
+  window.addEventListener('pointerup', onCanvasPointerUp)
+  e.preventDefault()
+}
 function onCanvasPointerDown(e) {
   const el = canvasEl.value
   if (!el) return
   const rect = el.getBoundingClientRect()
   const nx = (e.clientX - rect.left) / rect.width
   const ny = (e.clientY - rect.top) / rect.height
-  // 위에서부터 hit-test(나중 추가 = 위). 텍스트 박스 근사(회전은 무시한 축정렬 근사).
   const { W, H } = canvasDims.value
   const ctx = el.getContext('2d')
+
+  // 1) 선택된 선의 끝점 핸들 드래그(방향·길이 변경)
+  if (selectedLine.value && !selectedLine.value.hidden) {
+    const ep = lineEndpointAt(selectedLine.value, nx, ny)
+    if (ep) {
+      drag = { kind: 'line-ep', id: selectedLine.value.id, ep }
+      bindCanvasDrag(e)
+      return
+    }
+  }
+  // 2) 텍스트(위에서부터) — 박스 근사(회전 무시 축정렬)
   for (let i = texts.value.length - 1; i >= 0; i--) {
     const t = texts.value[i]
     if (t.hidden) continue
@@ -423,26 +549,65 @@ function onCanvasPointerDown(e) {
     const w = ctx.measureText(t.text).width / W
     const h = (fs * 1.4) / H
     if (Math.abs(nx - t.x) <= w / 2 + 0.02 && Math.abs(ny - t.y) <= h / 2 + 0.01) {
-      dragText = { id: t.id, dx: nx - t.x, dy: ny - t.y }
+      drag = { kind: 'text', id: t.id, dx: nx - t.x, dy: ny - t.y }
       selectText(t.id)
-      window.addEventListener('pointermove', onCanvasPointerMove)
-      window.addEventListener('pointerup', onCanvasPointerUp)
-      e.preventDefault()
+      bindCanvasDrag(e)
       return
     }
   }
+  // 3) 선 본체(위에서부터) → 선택 + 본체 이동
+  for (let i = lines.value.length - 1; i >= 0; i--) {
+    const l = lines.value[i]
+    if (l.hidden) continue
+    if (nearLine(l, nx, ny)) {
+      drag = { kind: 'line-body', id: l.id, dx: nx - l.x1, dy: ny - l.y1, lx2: l.x2 - l.x1, ly2: l.y2 - l.y1 }
+      selectLine(l.id)
+      bindCanvasDrag(e)
+      return
+    }
+  }
+  // 4) 선 도구 활성 + 빈 곳 → 새 선 그리기(끝점을 끌어 완성)
+  if (activeTool.value === 'line') {
+    const l = addLine(nx, ny, nx, ny)
+    selectLine(l.id)
+    drag = { kind: 'line-ep', id: l.id, ep: '2' }
+    bindCanvasDrag(e)
+  }
 }
 function onCanvasPointerMove(e) {
-  if (!dragText) return
+  if (!drag) return
   const el = canvasEl.value
+  if (!el) return
   const rect = el.getBoundingClientRect()
-  const t = texts.value.find((x) => x.id === dragText.id)
-  if (!t) return
-  t.x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width - dragText.dx))
-  t.y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height - dragText.dy))
+  const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+  const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
+  if (drag.kind === 'text') {
+    const t = texts.value.find((x) => x.id === drag.id)
+    if (t) {
+      t.x = Math.min(1, Math.max(0, nx - drag.dx))
+      t.y = Math.min(1, Math.max(0, ny - drag.dy))
+    }
+  } else if (drag.kind === 'line-ep') {
+    const l = lines.value.find((x) => x.id === drag.id)
+    if (l) {
+      if (drag.ep === '1') { l.x1 = nx; l.y1 = ny } else { l.x2 = nx; l.y2 = ny }
+    }
+  } else if (drag.kind === 'line-body') {
+    const l = lines.value.find((x) => x.id === drag.id)
+    if (l) {
+      const x1 = Math.min(1, Math.max(0, nx - drag.dx))
+      const y1 = Math.min(1, Math.max(0, ny - drag.dy))
+      l.x1 = x1; l.y1 = y1; l.x2 = x1 + drag.lx2; l.y2 = y1 + drag.ly2
+    }
+  }
 }
 function onCanvasPointerUp() {
-  dragText = null
+  // 클릭만 한(거의 점) 새 선은 버린다.
+  if (drag?.kind === 'line-ep') {
+    const l = lines.value.find((x) => x.id === drag.id)
+    if (l && Math.hypot(l.x2 - l.x1, l.y2 - l.y1) < 0.02) removeLine(l.id)
+  }
+  drag = null
   window.removeEventListener('pointermove', onCanvasPointerMove)
   window.removeEventListener('pointerup', onCanvasPointerUp)
 }
@@ -451,8 +616,9 @@ onScopeDispose(() => {
   window.removeEventListener('pointerup', onCanvasPointerUp)
 })
 
-// 텍스트 선택/내용/위치 변경 시 다시 그린다(여기서 — texts 선언 뒤라 TDZ 없음).
+// 텍스트/선 선택·내용·위치 변경 시 다시 그린다(여기서 — texts/lines 선언 뒤라 TDZ 없음).
 watch([selectedTextId, texts], scheduleRedraw, { deep: true, flush: 'post' })
+watch([selectedLineId, lines], scheduleRedraw, { deep: true, flush: 'post' })
 
 // --- 우측 패널 상세/레이어 분할 크기 조절 (구분선 드래그) ---
 // 상세 설정 영역 높이를 사용자가 끌어 조절한다. 두 영역(상세·레이어)은 각자 내부 스크롤.
@@ -560,11 +726,12 @@ async function exportCurrent() {
   }
 }
 
-// export 결과(PNG blob) 위에 추가 텍스트를 합성한다(렌더 모듈은 추가 텍스트를 모르므로 후처리).
+// export 결과(PNG blob) 위에 선·텍스트를 합성한다(렌더 모듈은 이 요소들을 모르므로 후처리).
 // 좌표는 프레임(출력 크기) 기준 정규화 — 미리보기와 export 프레임이 같아 native·fixed 모두 정확.
 async function composeTexts(blob) {
-  const visible = texts.value.filter((t) => !t.hidden && t.text.trim())
-  if (!visible.length) return blob
+  const vText = texts.value.filter((t) => !t.hidden && t.text.trim())
+  const vLine = lines.value.filter((l) => !l.hidden)
+  if (!vText.length && !vLine.length) return blob
   try {
     // 폰트가 아직 안 굳었으면 폴백(sans-serif)으로 구워지므로, 합성 전에 손글씨 폰트를 보장한다.
     try {
@@ -578,7 +745,8 @@ async function composeTexts(blob) {
     cv.height = bmp.height
     const ctx = cv.getContext('2d')
     ctx.drawImage(bmp, 0, 0)
-    for (const t of visible) paintText(ctx, t, bmp.width, bmp.height) // 미리보기와 동일 로직(크기·회전·색)
+    for (const l of vLine) paintLine(ctx, l, bmp.width, bmp.height) // 선 먼저
+    for (const t of vText) paintText(ctx, t, bmp.width, bmp.height) // 텍스트는 위에
     return await new Promise((res) => cv.toBlob(res, 'image/png'))
   } catch {
     return blob
@@ -649,7 +817,7 @@ watch(
       <!-- 중: 캔버스 (줌) -->
       <section class="ed-stage">
         <div class="stage-canvas">
-          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
+          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
         </div>
         <div class="zoom-bar">
           <button title="축소" @click="zoomBy(-0.25)">−</button>
@@ -678,6 +846,24 @@ watch(
             <label class="row">색 <input type="color" class="pad-color" :value="selectedText.color ?? '#ffffff'" @input="setTextProp('color', $event.target.value)" /></label>
             <p class="muted small">캔버스에서 끌어 위치 이동.</p>
             <Button label="텍스트 삭제" size="small" severity="danger" text @click="removeText(selectedText.id)" />
+          </template>
+          <template v-else-if="selectedLine">
+            <label class="lbl">선 (선택)</label>
+            <label class="row">색 <input type="color" class="pad-color" :value="selectedLine.color ?? '#ffffff'" @input="setLineProp('color', $event.target.value)" /></label>
+            <label class="row">굵기 <input type="range" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" /></label>
+            <div class="row">
+              <span>스타일</span>
+              <label class="rd"><input type="radio" :checked="selectedLine.style === 'solid'" @change="setLineProp('style', 'solid')" /> 실선</label>
+              <label class="rd"><input type="radio" :checked="selectedLine.style === 'dashed'" @change="setLineProp('style', 'dashed')" /> 점선</label>
+            </div>
+            <div class="row">
+              <span>화살표</span>
+              <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'none'" @change="setLineProp('arrow', 'none')" /> 없음</label>
+              <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'end'" @change="setLineProp('arrow', 'end')" /> 끝</label>
+              <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'both'" @change="setLineProp('arrow', 'both')" /> 양쪽</label>
+            </div>
+            <p class="muted small">끝점을 끌어 방향·길이, 본체를 끌어 이동.</p>
+            <Button label="선 삭제" size="small" severity="danger" text @click="removeLine(selectedLine.id)" />
           </template>
 
           <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
@@ -710,14 +896,17 @@ watch(
             <Button label="＋ 텍스트 추가" size="small" class="full" @click="addText" />
             <p class="muted small">추가 후 캔버스에서 끌어 배치하고, 레이어/위에서 내용을 편집합니다.</p>
           </div>
-          <p v-else-if="!selectedCaption && !selectedText" class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트부터 작업 중)</p>
+          <div v-else-if="activeTool === 'line'" class="tool-block">
+            <p class="muted small">캔버스에서 끌어 선을 그리세요. 그린 뒤 색·굵기·화살표를 조절합니다.</p>
+          </div>
+          <p v-else-if="!selectedCaption && !selectedText && !selectedLine" class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트·선부터 작업 중)</p>
         </div>
 
         <div class="resizer" title="끌어서 크기 조절" @pointerdown="onResizeDown"><span class="grip" /></div>
 
         <div class="section layers">
           <div class="layers-head">
-            <h3>레이어 <span class="muted">· {{ layers.length + texts.length + (closing ? 1 : 0) }}</span></h3>
+            <h3>레이어 <span class="muted">· {{ layers.length + texts.length + lines.length + (closing ? 1 : 0) }}</span></h3>
             <span class="grow" />
             <label class="all-vis" title="전체 선택">
               <input type="checkbox" :checked="allSelected" @change="setAllSelected($event.target.checked)" /> 전체 선택
@@ -729,7 +918,7 @@ watch(
             <span class="bulk-n">{{ bulkSelected.size ? bulkSelected.size + '개 선택' : '선택 후 숨기기/보이기' }}</span>
           </div>
 
-          <p v-if="!layers.length && !texts.length" class="muted small">레이어가 없습니다.</p>
+          <p v-if="!layers.length && !texts.length && !lines.length" class="muted small">레이어가 없습니다.</p>
           <ul class="layer-list">
             <li v-for="t in texts" :key="t.id" :class="{ off: t.hidden }">
               <button class="eye" :title="t.hidden ? '보이기' : '숨기기'" @click="toggleText(t)">
@@ -740,6 +929,16 @@ watch(
                 <span class="layer-name">{{ t.text || '(빈 텍스트)' }}</span>
               </button>
               <span class="chip text tag">텍스트</span>
+            </li>
+            <li v-for="l in lines" :key="l.id" :class="{ off: l.hidden }">
+              <button class="eye" :title="l.hidden ? '보이기' : '숨기기'" @click="toggleLine(l)">
+                <i :class="l.hidden ? 'pi pi-eye-slash' : 'pi pi-eye'" />
+              </button>
+              <input class="sel-ck" type="checkbox" title="선택" :checked="bulkSelected.has('line:' + l.id)" @change="toggleBulk('line:' + l.id)" />
+              <button class="layer" :class="{ active: l.id === selectedLineId }" @click="selectLine(l.id)">
+                <span class="layer-name">{{ l.arrow !== 'none' ? '화살표' : '선' }}</span>
+              </button>
+              <span class="chip line tag">선</span>
             </li>
             <li v-for="layer in layers" :key="layer.id" :class="{ off: !isObjectOn(layer.id) }">
               <button class="eye" :title="isObjectOn(layer.id) ? '숨기기' : '보이기'" @click="toggleObject(layer.id)">
@@ -1233,11 +1432,18 @@ watch(
   background: #e7f7ee;
   color: #16a866;
 }
+.chip.line {
+  background: #fdeede;
+  color: #d97706;
+}
 .card-canvas.grab {
   cursor: grab;
 }
 .card-canvas.grab:active {
   cursor: grabbing;
+}
+.card-canvas.draw {
+  cursor: crosshair;
 }
 .layer-name {
   font-size: 0.8rem;
