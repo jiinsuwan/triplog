@@ -82,6 +82,13 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {
+    // 여행 기록 뷰 — 사진을 일정 장소에 배치 (log 트랙, S4-LOG-01). 목업 ③.
+    path: '/trips/:tripId/record',
+    name: 'trip-record',
+    component: () => import('@/views/log/TripRecordView.vue'),
+    meta: { requiresAuth: true, workspace: 'record' },
+  },
+  {
     // 카드 생성 위저드 (log 트랙, S3-LOG-06). 단일 라우트 + ?step= 쿼리.
     // tripId 는 path 가 아닌 query 로 받으므로 workspace 가드는 여기선 동작하지 않는다
     // (가드는 params.tripId 가 있을 때만 작동) — 'record' 는 워크스페이스 분류 라벨.
