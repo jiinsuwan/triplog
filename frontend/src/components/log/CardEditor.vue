@@ -421,7 +421,30 @@ function zoomBy(d) {
 function zoomFit() {
   zoom.value = 1
 }
-const thumbSize = ref(1)
+
+// 하단 필름스트립 높이 = 위쪽 핸들을 끌어 조절(레이어 창처럼). 썸네일은 높이에 맞춰 자동 확대.
+const filmH = ref(104)
+let filmResizeStart = null
+function onFilmResizeDown(e) {
+  filmResizeStart = { y: e.clientY, h: filmH.value }
+  window.addEventListener('pointermove', onFilmResizeMove)
+  window.addEventListener('pointerup', onFilmResizeUp)
+  e.preventDefault()
+}
+function onFilmResizeMove(e) {
+  if (!filmResizeStart) return
+  // 위로 끌면 커지고 아래로 끌면 작아진다.
+  filmH.value = Math.min(440, Math.max(78, filmResizeStart.h - (e.clientY - filmResizeStart.y)))
+}
+function onFilmResizeUp() {
+  filmResizeStart = null
+  window.removeEventListener('pointermove', onFilmResizeMove)
+  window.removeEventListener('pointerup', onFilmResizeUp)
+}
+onScopeDispose(() => {
+  window.removeEventListener('pointermove', onFilmResizeMove)
+  window.removeEventListener('pointerup', onFilmResizeUp)
+})
 
 const exporting = ref(false)
 const exportNote = ref('')
@@ -665,13 +688,12 @@ watch(
       </aside>
     </div>
 
-    <!-- 하단: 카드 필름스트립 (사진마다 완성 토글) + 썸네일 크기 조절 -->
-    <footer class="ed-bottom">
-      <label class="thumb-size" title="썸네일 크기">
-        <i class="pi pi-images" />
-        <input type="range" min="0.7" max="2.4" step="0.1" v-model.number="thumbSize" />
-      </label>
-      <ul class="filmstrip" :style="{ '--thumb': thumbSize }">
+    <!-- 위쪽 핸들을 끌어 필름스트립 높이 조절(썸네일 자동 확대) -->
+    <div class="film-resizer" title="끌어서 사진 크기 조절" @pointerdown="onFilmResizeDown"><span class="grip" /></div>
+
+    <!-- 하단: 카드 필름스트립 (사진마다 완성 토글) -->
+    <footer class="ed-bottom" :style="{ flex: `0 0 ${filmH}px`, '--filmH': filmH + 'px' }">
+      <ul class="filmstrip">
         <li v-for="(id, i) in photoIds" :key="id">
           <button class="film" :class="{ on: i === current }" @click="current = i">
             <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
@@ -1136,46 +1158,60 @@ watch(
   white-space: nowrap;
 }
 .ed-bottom {
-  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 8px 16px;
+  background: #fff;
+  overflow: hidden;
+  min-height: 0;
+}
+/* 필름스트립 높이 조절 핸들(상단) — 끌면 썸네일이 높이에 맞춰 커진다. */
+.film-resizer {
+  flex: 0 0 9px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 16px;
+  justify-content: center;
+  cursor: ns-resize;
   background: #fff;
   border-top: 1px solid #e5e8eb;
+  touch-action: none;
 }
-/* 썸네일 크기 슬라이더 */
-.thumb-size {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #8b95a1;
+.film-resizer .grip {
+  width: 44px;
+  height: 3px;
+  border-radius: 99px;
+  background: #d6dbe1;
 }
-.thumb-size input[type='range'] {
-  width: 90px;
+.film-resizer:hover .grip {
+  background: #8b95a1;
 }
 .filmstrip {
   list-style: none;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 8px;
   margin: 0;
   padding: 0;
-  overflow-x: auto;
+  overflow-x: auto; /* 좌우 스크롤 */
+  overflow-y: hidden;
   flex: 1;
+  height: 100%;
 }
 .filmstrip li {
   flex: 0 0 auto;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   gap: 3px;
 }
 .film {
   position: relative;
-  width: calc(40px * var(--thumb, 1));
-  height: calc(71px * var(--thumb, 1));
+  height: calc(100% - 22px); /* 22px = 완성 배지 + 여백 */
+  aspect-ratio: 40 / 71;
+  width: auto;
   padding: 0;
   border: 1px solid #e5e8eb;
   border-radius: 6px;
