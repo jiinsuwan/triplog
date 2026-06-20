@@ -32,6 +32,10 @@ export function usePhotoPlacement(tripId) {
   function unplacePhoto(photoId) {
     delete placement[photoId]
   }
+  // 배치된 사진 전부를 미배치로(전체 빼기).
+  function unplaceAll() {
+    for (const key of Object.keys(placement)) delete placement[key]
+  }
 
   // EXIF 시각 기준 근사 자동배치 — 같은 stop 시간에 가장 가까운 사진을 그 장소로.
   function autoPlaceByTime() {
@@ -86,6 +90,7 @@ export function usePhotoPlacement(tripId) {
     photosForStop,
     placePhoto,
     unplacePhoto,
+    unplaceAll,
     autoPlaceByTime,
     reload: load,
   }

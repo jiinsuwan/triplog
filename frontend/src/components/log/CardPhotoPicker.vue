@@ -22,7 +22,7 @@ const props = defineProps({
 const emit = defineEmits(['proceed'])
 
 const card = useCardStore()
-const { days, loading, error, photos, stopsFlat, unplaced, placedPhotoIds, photosForStop, placePhoto, unplacePhoto } =
+const { days, loading, error, photos, stopsFlat, unplaced, placedPhotoIds, photosForStop, placePhoto, unplacePhoto, unplaceAll } =
   usePhotoPlacement(props.tripId)
 
 // 드래그(포인터 기반) — 배치/해제 처리 등록 + 고스트 상태 구독.
@@ -115,6 +115,15 @@ function proceed() {
         </span>
         <span class="grow" />
         <span v-if="!placedCount" class="nudge">사진을 장소에 끌어다 놓으면 카드를 만들 수 있어요</span>
+        <Button
+          v-if="placedCount"
+          label="전체 빼기"
+          icon="pi pi-times"
+          size="small"
+          severity="secondary"
+          text
+          @click="unplaceAll"
+        />
         <Button
           :label="`에디터로 (${placedCount}장)`"
           icon="pi pi-chevron-right"

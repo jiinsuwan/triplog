@@ -41,9 +41,22 @@ const toneDown = ref(0.35)
 const format = ref('native')
 const outlineWidth = ref(1)
 const outlineStyle = ref('solid') // 'solid' | 'dashed'
+const dashLen = ref(12) // 점선 길이·간격(× W*0.001)
+const dashGap = ref(9)
+function bumpWidth(d) {
+  const v = Math.round((outlineWidth.value + d) * 10) / 10
+  outlineWidth.value = Math.min(8, Math.max(0.3, v))
+}
 const selectedItemId = ref(null)
 // 선택 상태(객체/텍스트)는 loadCurrent 가 사진 전환 때 초기화하므로 먼저 선언한다(TDZ 방지).
 const selectedTextId = ref(null)
+// 레이어 다중 선택(체크박스) — 전체/일부 선택 후 일괄 숨기기/보이기. 사진 전환 때 초기화(loadCurrent).
+const bulkSelected = ref(new Set())
+function toggleBulk(key) {
+  const s = new Set(bulkSelected.value)
+  s.has(key) ? s.delete(key) : s.add(key)
+  bulkSelected.value = s
+}
 
 const canvasDims = computed(() => {
   const img = photoImg.value
@@ -70,6 +83,12 @@ function toggleObject(id) {
   const k = keyOf(id)
   const s = new Set(hiddenObject.value)
   s.has(k) ? s.delete(k) : s.add(k)
+  hiddenObject.value = s
+}
+function setObjectVisible(id, vis) {
+  const k = keyOf(id)
+  const s = new Set(hiddenObject.value)
+  vis ? s.delete(k) : s.add(k)
   hiddenObject.value = s
 }
 // 레이어 목록: 객체(외곽선+문구) + 마무리.
@@ -119,6 +138,7 @@ async function loadCurrent() {
   photoImg.value = null
   selectedItemId.value = null
   selectedTextId.value = null
+  bulkSelected.value = new Set()
   try {
     const img = await decode(await load(id))
     if (!disposed && seq === reqSeq) photoImg.value = img
@@ -158,7 +178,7 @@ function drawOutlines(ctx, img) {
     ctx.strokeStyle = color
     ctx.shadowColor = 'rgba(0,0,0,0.45)'
     ctx.shadowBlur = base
-    ctx.setLineDash(outlineStyle.value === 'dashed' ? [W * 0.012, W * 0.009] : [])
+    ctx.setLineDash(outlineStyle.value === 'dashed' ? [W * 0.001 * dashLen.value, W * 0.001 * dashGap.value] : [])
     for (const loop of Array.isArray(item.polygons) ? item.polygons : []) {
       if (!Array.isArray(loop) || loop.length < 3) continue
       ctx.beginPath()
@@ -207,7 +227,7 @@ function redraw() {
 
 watch(currentId, loadCurrent, { immediate: true })
 watch(
-  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, selectedItemId],
+  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId],
   redraw,
   { flush: 'post' },
 )
@@ -260,6 +280,30 @@ function selectItem(id) {
 function selectText(id) {
   selectedTextId.value = id
   if (id != null) selectedItemId.value = null
+}
+
+// --- 레이어 선택 + 표시/숨김(클립스튜디오식). 삭제는 없다(외곽선은 숨길 뿐). ---
+// 전체/일부 선택(체크박스) 후 일괄 숨기기/보이기. 눈 아이콘은 행별 즉시 토글.
+const layerKeys = computed(() => [
+  ...texts.value.map((t) => `txt:${t.id}`),
+  ...items.value.map((it) => `obj:${it.id}`),
+])
+const allSelected = computed(
+  () => layerKeys.value.length > 0 && layerKeys.value.every((k) => bulkSelected.value.has(k)),
+)
+function setAllSelected(on) {
+  bulkSelected.value = on ? new Set(layerKeys.value) : new Set()
+}
+function bulkSetVisible(vis) {
+  for (const key of bulkSelected.value) {
+    const i = key.indexOf(':')
+    const type = key.slice(0, i)
+    const idRaw = key.slice(i + 1)
+    if (type === 'txt') {
+      const t = texts.value.find((x) => x.id === idRaw)
+      if (t) t.hidden = !vis
+    } else if (type === 'obj') setObjectVisible(Number(idRaw), vis)
+  }
 }
 
 // 캔버스에 추가 텍스트를 그린다(편집 화면). 손글씨 폰트.
@@ -519,13 +563,23 @@ watch(
           <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
                객체를 선택해도 사라지지 않아야 한다). 선택 편집(A)과 도구 컨트롤(B)은 별개 블록. -->
           <div v-if="activeTool === 'ai'" class="tool-block">
-            <label class="row">외곽선 두께 <input type="range" min="0.3" max="4" step="0.1" v-model.number="outlineWidth" /></label>
+            <label class="ctl-lbl">외곽선 두께</label>
+            <div class="stepper">
+              <button class="step" title="얇게" @click="bumpWidth(-0.1)">−</button>
+              <input type="range" min="0.3" max="8" step="0.1" v-model.number="outlineWidth" />
+              <button class="step" title="굵게" @click="bumpWidth(0.1)">＋</button>
+              <input class="num" type="number" min="0.3" max="8" step="0.1" v-model.number="outlineWidth" />
+            </div>
             <label class="row">선 스타일
               <select v-model="outlineStyle">
                 <option value="solid">실선</option>
                 <option value="dashed">점선</option>
               </select>
             </label>
+            <template v-if="outlineStyle === 'dashed'">
+              <label class="row">선 길이 <input type="range" min="2" max="30" step="1" v-model.number="dashLen" /><span class="numv">{{ dashLen }}</span></label>
+              <label class="row">간격 <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span></label>
+            </template>
             <Button label="✨ 문구 생성" size="small" severity="secondary" class="full"
               :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !!card.captions[currentId]"
               @click="generateCaption" />
@@ -543,27 +597,46 @@ watch(
         <div class="resizer" title="끌어서 크기 조절" @pointerdown="onResizeDown"><span class="grip" /></div>
 
         <div class="section layers">
-          <h3>레이어 <span class="muted">· {{ layers.length + texts.length + (closing ? 1 : 0) }}</span></h3>
+          <div class="layers-head">
+            <h3>레이어 <span class="muted">· {{ layers.length + texts.length + (closing ? 1 : 0) }}</span></h3>
+            <span class="grow" />
+            <label class="all-vis" title="전체 선택">
+              <input type="checkbox" :checked="allSelected" @change="setAllSelected($event.target.checked)" /> 전체 선택
+            </label>
+          </div>
+          <div class="bulk-bar">
+            <button :disabled="!bulkSelected.size" @click="bulkSetVisible(false)">숨기기</button>
+            <button :disabled="!bulkSelected.size" @click="bulkSetVisible(true)">보이기</button>
+            <span class="bulk-n">{{ bulkSelected.size ? bulkSelected.size + '개 선택' : '선택 후 숨기기/보이기' }}</span>
+          </div>
+
           <p v-if="!layers.length && !texts.length" class="muted small">레이어가 없습니다.</p>
           <ul class="layer-list">
-            <li v-for="t in texts" :key="t.id">
-              <button class="eye" :class="{ off: t.hidden }" :title="t.hidden ? '표시' : '숨기기'" @click="toggleText(t)">●</button>
+            <li v-for="t in texts" :key="t.id" :class="{ off: t.hidden }">
+              <button class="eye" :title="t.hidden ? '보이기' : '숨기기'" @click="toggleText(t)">
+                <i :class="t.hidden ? 'pi pi-eye-slash' : 'pi pi-eye'" />
+              </button>
+              <input class="sel-ck" type="checkbox" title="선택" :checked="bulkSelected.has('txt:' + t.id)" @change="toggleBulk('txt:' + t.id)" />
               <button class="layer" :class="{ active: t.id === selectedTextId }" @click="selectText(t.id)">
-                <span class="chip text">텍스트</span>
                 <span class="layer-name">{{ t.text || '(빈 텍스트)' }}</span>
               </button>
+              <span class="chip text tag">텍스트</span>
             </li>
-            <li v-for="layer in layers" :key="layer.id">
-              <button class="eye" :class="{ off: !isObjectOn(layer.id) }" :title="isObjectOn(layer.id) ? '숨기기' : '표시'" @click="toggleObject(layer.id)">●</button>
+            <li v-for="layer in layers" :key="layer.id" :class="{ off: !isObjectOn(layer.id) }">
+              <button class="eye" :title="isObjectOn(layer.id) ? '숨기기' : '보이기'" @click="toggleObject(layer.id)">
+                <i :class="isObjectOn(layer.id) ? 'pi pi-eye' : 'pi pi-eye-slash'" />
+              </button>
+              <input class="sel-ck" type="checkbox" title="선택" :checked="bulkSelected.has('obj:' + layer.id)" @change="toggleBulk('obj:' + layer.id)" />
               <button class="layer" :class="{ active: layer.id === selectedItemId }" @click="selectItem(layer.id)">
                 <span class="lno">{{ layer.no }}</span>
-                <span class="chip" :class="layer.kind">{{ layer.hasCaption ? '문구' : '외곽선' }}</span>
                 <span class="layer-name">{{ layer.label }}</span>
               </button>
+              <span class="chip tag" :class="layer.kind">{{ layer.hasCaption ? '문구' : '외곽선' }}</span>
             </li>
-            <li v-if="closing">
-              <span class="eye" />
-              <div class="layer static"><span class="chip closing">마무리</span><span class="layer-name">{{ closing.text }}</span></div>
+            <li v-if="closing" class="closing-row">
+              <span class="eye-sp" /><span class="ck-sp" />
+              <div class="layer static"><span class="layer-name">{{ closing.text }}</span></div>
+              <span class="chip closing tag">마무리</span>
             </li>
           </ul>
         </div>
@@ -785,6 +858,55 @@ watch(
   width: 100%;
   margin-bottom: 6px;
 }
+.ctl-lbl {
+  display: block;
+  font-size: 0.82rem;
+  color: #4b5563;
+  margin-bottom: 6px;
+}
+/* 외곽선 두께 = 슬라이더 + −/+ + 숫자 직접 입력 */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.stepper input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+.step {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d6dbe1;
+  background: #fff;
+  border-radius: 7px;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #4b5563;
+}
+.step:hover {
+  background: #f7f8fa;
+}
+.num {
+  flex: 0 0 48px;
+  width: 48px;
+  border: 1px solid #d6dbe1;
+  border-radius: 7px;
+  padding: 3px 4px;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: right;
+}
+.numv {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: #8b95a1;
+  min-width: 16px;
+  text-align: right;
+}
 .cap-edit {
   width: 100%;
   border: 1px solid #d6dbe1;
@@ -804,18 +926,87 @@ watch(
   gap: 6px;
   margin-bottom: 4px;
 }
+.layers-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.layers-head h3 {
+  margin: 0;
+}
+.layers-head .grow {
+  flex: 1;
+}
+.all-vis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: #4b5563;
+  cursor: pointer;
+}
+/* 선택 후 일괄 숨기기/보이기 바 */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.bulk-bar button {
+  border: 1px solid #e5e8eb;
+  background: #fff;
+  border-radius: 7px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+  color: #4b5563;
+}
+.bulk-bar button:disabled {
+  color: #c9d2db;
+  cursor: default;
+}
+.bulk-n {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #8b95a1;
+}
+/* 행별 가시성 눈 아이콘(클릭 토글) */
 .eye {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
+  display: grid;
+  place-items: center;
   border: 0;
   background: none;
   color: #3182f6;
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
 }
-.eye.off {
+.eye-sp {
+  flex: 0 0 22px;
+}
+.sel-ck {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  margin: 0;
+}
+.ck-sp {
+  flex: 0 0 15px;
+}
+/* 숨긴 레이어 = 흐리게 + 눈 아이콘 회색 */
+.layer-list li.off .layer {
+  opacity: 0.45;
+}
+.layer-list li.off .eye {
   color: #c9d2db;
+}
+/* 태그(외곽선/문구/텍스트/마무리)는 오른쪽으로 — 레이어 버튼(flex:1)이 밀어낸다. */
+.chip.tag {
+  margin-left: auto;
 }
 .layer {
   flex: 1;
