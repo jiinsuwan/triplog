@@ -409,12 +409,53 @@ function paintText(ctx, t, W, H) {
   ctx.fillText(t.text, 0, 0)
   ctx.restore()
 }
+// 텍스트 박스 메트릭(중심 기준 반폭/반높이, px). 회전 핸들 거리 포함.
+function textMetrics(ctx, t, W) {
+  const size = W * 0.05 * (t.size ?? 1)
+  ctx.font = `${Math.round(size)}px "Ownglyph ooa", sans-serif`
+  const tw = ctx.measureText(t.text || ' ').width
+  return { size, hw: tw / 2 + size * 0.3, hh: size * 0.72, rotOff: Math.max(20, W * 0.032) }
+}
+// 선택된 텍스트의 변형 박스(모서리=크기, 위 핸들=회전) — 캔버스에서 직접 조절.
+function drawTextBox(ctx, t, W, H) {
+  const m = textMetrics(ctx, t, W)
+  const r = Math.max(6, W * 0.011)
+  ctx.save()
+  ctx.translate(t.x * W, t.y * H)
+  ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
+  ctx.strokeStyle = '#3182f6'
+  ctx.lineWidth = Math.max(1.5, W * 0.002)
+  ctx.setLineDash([W * 0.006, W * 0.004])
+  ctx.strokeRect(-m.hw, -m.hh, m.hw * 2, m.hh * 2)
+  ctx.setLineDash([])
+  const rotY = -m.hh - m.rotOff
+  ctx.beginPath()
+  ctx.moveTo(0, -m.hh)
+  ctx.lineTo(0, rotY)
+  ctx.stroke()
+  ctx.fillStyle = '#fff'
+  for (const [hx, hy] of [[-m.hw, -m.hh], [m.hw, -m.hh], [m.hw, m.hh], [-m.hw, m.hh]]) {
+    ctx.beginPath()
+    ctx.arc(hx, hy, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+  ctx.beginPath()
+  ctx.arc(0, rotY, r, 0, Math.PI * 2)
+  ctx.fillStyle = '#3182f6'
+  ctx.fill()
+  ctx.strokeStyle = '#fff'
+  ctx.stroke()
+  ctx.restore()
+}
 function drawTexts(ctx, dims) {
   const { W, H } = dims
   for (const t of texts.value) {
     if (t.hidden) continue
     paintText(ctx, t, W, H)
   }
+  const st = selectedText.value
+  if (st && !st.hidden) drawTextBox(ctx, st, W, H)
 }
 
 // --- 선 요소(직선/화살표) — 선 도구로 캔버스에 끌어 그린다 ---
@@ -531,6 +572,28 @@ function onCanvasPointerDown(e) {
   const { W, H } = canvasDims.value
   const ctx = el.getContext('2d')
 
+  // 0) 선택된 텍스트의 변형 핸들(회전/크기) — 박스가 텍스트 위라 최우선.
+  const stx = selectedText.value
+  if (stx && !stx.hidden) {
+    const m = textMetrics(ctx, stx, W)
+    const cx = stx.x * W, cy = stx.y * H
+    const rad = ((stx.rotation ?? 0) * Math.PI) / 180
+    const dx = nx * W - cx, dy = ny * H - cy
+    const lx = dx * Math.cos(-rad) - dy * Math.sin(-rad)
+    const ly = dx * Math.sin(-rad) + dy * Math.cos(-rad)
+    const hr = Math.max(11, W * 0.02)
+    if (Math.hypot(lx, ly - (-m.hh - m.rotOff)) < hr) {
+      drag = { kind: 'text-rotate', id: stx.id }
+      bindCanvasDrag(e)
+      return
+    }
+    if ([[-m.hw, -m.hh], [m.hw, -m.hh], [m.hw, m.hh], [-m.hw, m.hh]].some(([hx, hy]) => Math.hypot(lx - hx, ly - hy) < hr)) {
+      drag = { kind: 'text-resize', id: stx.id, d0: Math.hypot(dx, dy) || 1, s0: stx.size ?? 1 }
+      bindCanvasDrag(e)
+      return
+    }
+  }
+
   // 1) 선택된 선의 끝점 핸들 드래그(방향·길이 변경)
   if (selectedLine.value && !selectedLine.value.hidden) {
     const ep = lineEndpointAt(selectedLine.value, nx, ny)
@@ -587,6 +650,19 @@ function onCanvasPointerMove(e) {
       t.x = Math.min(1, Math.max(0, nx - drag.dx))
       t.y = Math.min(1, Math.max(0, ny - drag.dy))
     }
+  } else if (drag.kind === 'text-rotate') {
+    const t = texts.value.find((x) => x.id === drag.id)
+    if (t) {
+      const { W, H } = canvasDims.value
+      t.rotation = Math.round((Math.atan2((ny - t.y) * H, (nx - t.x) * W) * 180) / Math.PI + 90)
+    }
+  } else if (drag.kind === 'text-resize') {
+    const t = texts.value.find((x) => x.id === drag.id)
+    if (t) {
+      const { W, H } = canvasDims.value
+      const dpx = Math.hypot((nx - t.x) * W, (ny - t.y) * H)
+      t.size = Math.min(6, Math.max(0.2, drag.s0 * (dpx / drag.d0)))
+    }
   } else if (drag.kind === 'line-ep') {
     const l = lines.value.find((x) => x.id === drag.id)
     if (l) {
@@ -619,6 +695,12 @@ onScopeDispose(() => {
 // 텍스트/선 선택·내용·위치 변경 시 다시 그린다(여기서 — texts/lines 선언 뒤라 TDZ 없음).
 watch([selectedTextId, texts], scheduleRedraw, { deep: true, flush: 'post' })
 watch([selectedLineId, lines], scheduleRedraw, { deep: true, flush: 'post' })
+// 도구를 바꾸면 선택을 해제한다 — 선/텍스트가 선택된 채로 다른 도구가 막히던 문제 해소.
+watch(activeTool, () => {
+  selectedItemId.value = null
+  selectedTextId.value = null
+  selectedLineId.value = null
+})
 
 // --- 우측 패널 상세/레이어 분할 크기 조절 (구분선 드래그) ---
 // 상세 설정 영역 높이를 사용자가 끌어 조절한다. 두 영역(상세·레이어)은 각자 내부 스크롤.
@@ -634,8 +716,9 @@ function onResizeDown(e) {
 function onResizeMove(e) {
   if (!resizeStart) return
   const avail = rightEl.value?.clientHeight ?? 600
-  const max = Math.max(160, avail - 160) // 레이어에 최소 공간 확보
-  detailH.value = Math.min(max, Math.max(120, resizeStart.h + (e.clientY - resizeStart.y)))
+  const max = Math.max(220, avail - 150) // 레이어에 최소 공간 확보
+  // 상세 설정 최소 220px — 그 이하로 줄여 레이어창이 잠식하지 못하게(컨트롤 잘림 방지).
+  detailH.value = Math.min(max, Math.max(220, resizeStart.h + (e.clientY - resizeStart.y)))
 }
 function onResizeUp() {
   resizeStart = null
@@ -841,16 +924,22 @@ watch(
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>
             <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
-            <label class="row">크기 <input type="range" min="0.3" max="4" step="0.1" :value="selectedText.size ?? 1" @input="setTextProp('size', Number($event.target.value))" /><span class="numv">{{ Math.round((selectedText.size ?? 1) * 100) }}%</span></label>
-            <label class="row">기울기 <input type="range" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /><span class="numv">{{ selectedText.rotation ?? 0 }}°</span></label>
             <label class="row">색 <input type="color" class="pad-color" :value="selectedText.color ?? '#ffffff'" @input="setTextProp('color', $event.target.value)" /></label>
-            <p class="muted small">캔버스에서 끌어 위치 이동.</p>
+            <label class="row">크기 <input class="num" type="number" min="20" max="400" step="5" :value="Math.round((selectedText.size ?? 1) * 100)" @input="setTextProp('size', Number($event.target.value) / 100)" /> %</label>
+            <label class="row">기울기 <input class="num" type="number" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /> °</label>
+            <p class="muted small">캔버스 박스: 모서리=크기, 위 핸들=회전.</p>
             <Button label="텍스트 삭제" size="small" severity="danger" text @click="removeText(selectedText.id)" />
           </template>
           <template v-else-if="selectedLine">
             <label class="lbl">선 (선택)</label>
             <label class="row">색 <input type="color" class="pad-color" :value="selectedLine.color ?? '#ffffff'" @input="setLineProp('color', $event.target.value)" /></label>
-            <label class="row">굵기 <input type="range" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" /></label>
+            <label class="ctl-lbl">굵기</label>
+            <div class="stepper">
+              <button class="step" title="얇게" @click="setLineProp('width', Math.max(0.3, Math.round(((selectedLine.width ?? 1) - 0.1) * 10) / 10))">−</button>
+              <input type="range" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" />
+              <button class="step" title="굵게" @click="setLineProp('width', Math.min(5, Math.round(((selectedLine.width ?? 1) + 0.1) * 10) / 10))">＋</button>
+              <input class="num" type="number" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" />
+            </div>
             <div class="row">
               <span>스타일</span>
               <label class="rd"><input type="radio" :checked="selectedLine.style === 'solid'" @change="setLineProp('style', 'solid')" /> 실선</label>
@@ -862,7 +951,6 @@ watch(
               <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'end'" @change="setLineProp('arrow', 'end')" /> 끝</label>
               <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'both'" @change="setLineProp('arrow', 'both')" /> 양쪽</label>
             </div>
-            <p class="muted small">끝점을 끌어 방향·길이, 본체를 끌어 이동.</p>
             <Button label="선 삭제" size="small" severity="danger" text @click="removeLine(selectedLine.id)" />
           </template>
 
