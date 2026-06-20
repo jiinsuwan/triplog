@@ -22,12 +22,13 @@ const { load } = usePhotoContent()
 const { generate: genCaption, generating: captionGenerating, failed: captionFailed } = useCardCaptions()
 
 const TOOLS = [
+  { key: 'select', icon: '↖', label: '선택' },
   { key: 'ai', icon: '✨', label: 'AI' },
   { key: 'text', icon: 'T', label: '텍스트' },
   { key: 'line', icon: '／', label: '선' },
   { key: 'deco', icon: '✦', label: '장식' },
 ]
-const activeTool = ref('ai')
+const activeTool = ref('select')
 const activeToolLabel = computed(() => TOOLS.find((t) => t.key === activeTool.value)?.label ?? '')
 
 const FIXED = { W: 1080, H: 1920 }
@@ -541,7 +542,32 @@ function drawLines(ctx, dims) {
       ctx.stroke()
       ctx.restore()
     }
+    // 회전 핸들(중점에서 수직으로) — 길이 유지하며 회전.
+    const [rhx, rhy] = lineRotHandle(sl, W, H)
+    const mx = ((sl.x1 + sl.x2) / 2) * W, my = ((sl.y1 + sl.y2) / 2) * H
+    ctx.save()
+    ctx.strokeStyle = '#3182f6'
+    ctx.lineWidth = Math.max(1.5, W * 0.002)
+    ctx.beginPath()
+    ctx.moveTo(mx, my)
+    ctx.lineTo(rhx, rhy)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(rhx, rhy, Math.max(6, W * 0.011), 0, Math.PI * 2)
+    ctx.fillStyle = '#3182f6'
+    ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.stroke()
+    ctx.restore()
   }
+}
+// 선 회전 핸들 위치(px) = 중점 + 수직 오프셋.
+function lineRotHandle(l, W, H) {
+  const mx = ((l.x1 + l.x2) / 2) * W, my = ((l.y1 + l.y2) / 2) * H
+  const dxp = (l.x2 - l.x1) * W, dyp = (l.y2 - l.y1) * H
+  const len = Math.hypot(dxp, dyp) || 1
+  const off = Math.max(22, W * 0.035)
+  return [mx + (-dyp / len) * off, my + (dxp / len) * off]
 }
 // 점(nx,ny 0~1)이 선분에 충분히 가까운지(본체 hit). 화면 비율 보정 없이 정규화 거리 근사.
 function nearLine(l, nx, ny) {
@@ -596,11 +622,19 @@ function onCanvasPointerDown(e) {
     }
   }
 
-  // 1) 선택된 선의 끝점 핸들 드래그(방향·길이 변경)
+  // 1) 선택된 선: 회전 핸들(길이 유지 회전) → 끝점 핸들(방향·길이)
   if (selectedLine.value && !selectedLine.value.hidden) {
-    const ep = lineEndpointAt(selectedLine.value, nx, ny)
+    const sl = selectedLine.value
+    const [rhx, rhy] = lineRotHandle(sl, W, H)
+    if (Math.hypot(nx * W - rhx, ny * H - rhy) < Math.max(11, W * 0.02)) {
+      const dxp = (sl.x2 - sl.x1) * W, dyp = (sl.y2 - sl.y1) * H
+      drag = { kind: 'line-rotate', id: sl.id, halfLen: Math.hypot(dxp, dyp) / 2 }
+      bindCanvasDrag(e)
+      return
+    }
+    const ep = lineEndpointAt(sl, nx, ny)
     if (ep) {
-      drag = { kind: 'line-ep', id: selectedLine.value.id, ep }
+      drag = { kind: 'line-ep', id: sl.id, ep }
       bindCanvasDrag(e)
       return
     }
@@ -644,7 +678,12 @@ function onCanvasPointerDown(e) {
     const t = addText(nx, ny)
     drag = { kind: 'text', id: t.id, dx: 0, dy: 0 }
     bindCanvasDrag(e)
+    return
   }
+  // 6) 빈 곳 클릭(선택 모드 등) → 선택 해제
+  selectedItemId.value = null
+  selectedTextId.value = null
+  selectedLineId.value = null
 }
 function onCanvasPointerMove(e) {
   if (!drag) return
@@ -683,6 +722,17 @@ function onCanvasPointerMove(e) {
       const x1 = Math.min(1, Math.max(0, nx - drag.dx))
       const y1 = Math.min(1, Math.max(0, ny - drag.dy))
       l.x1 = x1; l.y1 = y1; l.x2 = x1 + drag.lx2; l.y2 = y1 + drag.ly2
+    }
+  } else if (drag.kind === 'line-rotate') {
+    const l = lines.value.find((x) => x.id === drag.id)
+    if (l) {
+      const { W, H } = canvasDims.value
+      const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2
+      // 핸들은 선과 수직 → 선 각도 = (중점→포인터) - 90°. 길이는 유지.
+      const ang = Math.atan2((ny - my) * H, (nx - mx) * W) - Math.PI / 2
+      const hx = (drag.halfLen * Math.cos(ang)) / W
+      const hy = (drag.halfLen * Math.sin(ang)) / H
+      l.x1 = mx - hx; l.y1 = my - hy; l.x2 = mx + hx; l.y2 = my + hy
     }
   }
 }
@@ -939,7 +989,6 @@ watch(
               <span>기울기</span>
               <input class="num" type="number" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /><span class="numv">°</span>
             </div>
-            <p class="muted small">박스 모서리=크기, 위 핸들=회전.</p>
           </template>
           <template v-else-if="selectedLine">
             <label class="lbl">선 (선택)</label>
@@ -992,10 +1041,7 @@ watch(
           <div v-else-if="activeTool === 'text'" class="tool-block">
             <p class="muted small">캔버스를 클릭해 텍스트를 추가하세요.</p>
           </div>
-          <div v-else-if="activeTool === 'line'" class="tool-block">
-            <p class="muted small">캔버스에서 끌어 선을 그리세요. 그린 뒤 색·굵기·화살표를 조절합니다.</p>
-          </div>
-          <p v-else-if="!selectedCaption && !selectedText && !selectedLine" class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트·선부터 작업 중)</p>
+          <p v-else-if="activeTool === 'deco' && !selectedCaption && !selectedText && !selectedLine" class="muted small">"장식" 추가는 곧 제공됩니다.</p>
         </div>
 
         <div class="section layers">
@@ -1023,7 +1069,7 @@ watch(
                 <span class="layer-name">{{ t.text || '(빈 텍스트)' }}</span>
               </button>
               <span class="chip text tag">텍스트</span>
-              <button class="del-one" title="삭제" @click="removeText(t.id)">🗑</button>
+              <button class="del-one" title="삭제" @click="removeText(t.id)">✕</button>
             </li>
             <li v-for="l in lines" :key="l.id" :class="{ off: l.hidden }">
               <button class="eye" :title="l.hidden ? '보이기' : '숨기기'" @click="toggleLine(l)">
@@ -1034,7 +1080,7 @@ watch(
                 <span class="layer-name">{{ l.arrow !== 'none' ? '화살표' : '선' }}</span>
               </button>
               <span class="chip line tag">선</span>
-              <button class="del-one" title="삭제" @click="removeLine(l.id)">🗑</button>
+              <button class="del-one" title="삭제" @click="removeLine(l.id)">✕</button>
             </li>
             <li v-for="layer in layers" :key="layer.id" :class="{ off: !isObjectOn(layer.id) }">
               <button class="eye" :title="isObjectOn(layer.id) ? '숨기기' : '보이기'" @click="toggleObject(layer.id)">
@@ -1481,12 +1527,17 @@ watch(
 }
 .del-one {
   flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
   border: 0;
   background: none;
   cursor: pointer;
-  font-size: 0.74rem;
-  opacity: 0.5;
-  padding: 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #f04452;
+  opacity: 0.7;
 }
 .del-one:hover {
   opacity: 1;
