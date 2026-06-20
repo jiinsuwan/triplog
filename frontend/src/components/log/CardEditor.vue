@@ -378,6 +378,12 @@ async function composeTexts(blob) {
   const visible = texts.value.filter((t) => !t.hidden && t.text.trim())
   if (!visible.length) return blob
   try {
+    // 폰트가 아직 안 굳었으면 폴백(sans-serif)으로 구워지므로, 합성 전에 손글씨 폰트를 보장한다.
+    try {
+      await document.fonts.load('64px "Ownglyph ooa"')
+    } catch {
+      /* 폰트 로드 실패 — 폴백 폰트로 진행 */
+    }
     const bmp = await createImageBitmap(blob)
     const cv = document.createElement('canvas')
     cv.width = bmp.width
@@ -469,6 +475,8 @@ watch(
       <aside class="ed-right">
         <div class="section">
           <h3>상세 설정</h3>
+
+          <!-- (A) 선택한 객체/텍스트 정밀 편집 (오른쪽 패널의 "선택 대상" 영역) -->
           <template v-if="selectedCaption">
             <label class="lbl">문구 (선택 객체)</label>
             <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
@@ -480,11 +488,10 @@ watch(
             <p class="muted small">캔버스에서 끌어 위치 이동.</p>
             <Button label="텍스트 삭제" size="small" severity="danger" text @click="removeText(selectedText.id)" />
           </template>
-          <template v-else-if="activeTool === 'text'">
-            <Button label="＋ 텍스트 추가" size="small" class="full" @click="addText" />
-            <p class="muted small">추가 후 캔버스에서 끌어 배치하고, 여기서 내용을 편집합니다.</p>
-          </template>
-          <template v-else-if="activeTool === 'ai'">
+
+          <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
+               객체를 선택해도 사라지지 않아야 한다). 선택 편집(A)과 도구 컨트롤(B)은 별개 블록. -->
+          <div v-if="activeTool === 'ai'" class="tool-block">
             <label class="row">외곽선 두께 <input type="range" min="0.3" max="4" step="0.1" v-model.number="outlineWidth" /></label>
             <label class="row">선 스타일
               <select v-model="outlineStyle">
@@ -498,10 +505,12 @@ watch(
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
             <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
             <p class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
-          </template>
-          <template v-else>
-            <p class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트부터 작업 중)</p>
-          </template>
+          </div>
+          <div v-else-if="activeTool === 'text'" class="tool-block">
+            <Button label="＋ 텍스트 추가" size="small" class="full" @click="addText" />
+            <p class="muted small">추가 후 캔버스에서 끌어 배치하고, 레이어/위에서 내용을 편집합니다.</p>
+          </div>
+          <p v-else-if="!selectedCaption && !selectedText" class="muted small">"{{ activeToolLabel }}" 추가는 곧 제공됩니다. (텍스트부터 작업 중)</p>
         </div>
 
         <div class="section layers">
@@ -632,10 +641,6 @@ watch(
   background: #f1ecfb;
   color: #6d40d6;
 }
-.rail-btn.soon {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 .rail-ic {
   font-size: 1.1rem;
   font-weight: 800;
@@ -685,6 +690,12 @@ watch(
   min-height: 0;
   overflow-y: auto;
   border-bottom: 0;
+}
+/* 도구 컨트롤 블록 — 선택 편집(A) 블록 아래에 올 때 구분선으로 역할을 분리한다. */
+.tool-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eef1f4;
 }
 .ed-right h3 {
   margin: 0 0 10px;
