@@ -13,7 +13,9 @@ import { usePhotoContent } from '@/composables/usePhotoContent'
 import { buildScene } from '@/card/render/buildScene'
 import { renderCard } from '@/card/render/renderCore'
 import { exportCardPng } from '@/card/render/exportCard'
+import { makeCoverFit } from '@/card/render/coverFit'
 import { useCardStore } from '@/stores/card'
+import { useCardCaptions } from '@/composables/useCardCaptions'
 
 const props = defineProps({
   photoIds: { type: Array, default: () => [] },
@@ -21,6 +23,11 @@ const props = defineProps({
 
 const card = useCardStore()
 const { load } = usePhotoContent()
+// 문구 생성은 수동(사용자 트리거)이다 — 자동으로 GMS 크레딧을 쓰지 않는다.
+const { generate: genCaption, generating: captionGenerating, failed: captionFailed } = useCardCaptions()
+
+// 감지된 외곽선 표시(편집 보조). 문구가 없어도 AI가 찾은 피사체 외곽선을 볼 수 있다.
+const showOutlines = ref(true)
 
 const current = ref(0)
 const currentId = computed(() => props.photoIds[current.value] ?? null)
@@ -105,10 +112,45 @@ function redraw() {
   const ctx = el.getContext('2d', { willReadFrequently: true })
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   renderCard(ctx, sc, { photo: img })
+  if (showOutlines.value) drawDetectedOutlines(ctx, img)
+}
+
+// AI가 감지한 피사체 외곽선(items[].polygons)을 카드 위에 직접 그린다(편집 보조).
+// buildScene 은 외곽선을 "문구 달린 객체"에만 그리므로, 문구 전이라도 전체 외곽선을 보이게 한다.
+function drawDetectedOutlines(ctx, img) {
+  const outline = card.outlines[currentId.value]
+  if (outline?.status !== 'READY' || !Array.isArray(outline.items)) return
+  const { W } = canvasDims.value
+  const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, W, canvasDims.value.H)
+  ctx.save()
+  ctx.lineWidth = Math.max(2, W * 0.0035)
+  ctx.strokeStyle = 'rgba(49, 130, 246, 0.95)'
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+  ctx.shadowBlur = Math.max(1, W * 0.002)
+  for (const item of outline.items) {
+    const polys = Array.isArray(item.polygons) ? item.polygons : []
+    for (const loop of polys) {
+      if (!Array.isArray(loop) || loop.length < 3) continue
+      ctx.beginPath()
+      loop.forEach(([x, y], i) => {
+        const [px, py] = cf.ptPx(x, y)
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      })
+      ctx.closePath()
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
+}
+
+// 현재 카드 문구 생성(수동·크레딧). READY 외곽선이 있을 때만.
+function generateCaption() {
+  if (card.outlines[currentId.value]?.status === 'READY') genCaption(currentId.value)
 }
 
 watch(currentId, loadCurrent, { immediate: true })
-watch([scene, photoImg, fontReady], redraw, { flush: 'post' })
+watch([scene, photoImg, fontReady, showOutlines], redraw, { flush: 'post' })
 
 // --- PNG 내보내기 (#73 exportCardPng 호출만, 신규 렌더 테스트 금지) ---
 // 디코드 완료 후에만 활성. 연타 가드. (format/canvasDims 는 위 미리보기와 공유.)
@@ -217,9 +259,28 @@ onScopeDispose(() => {
 
 <template>
   <div class="preview">
-    <p class="hint">자동 초안 미리보기 · 문구 위치/외곽선 보정은 다음 단계에서.</p>
+    <p class="hint">자동 초안 미리보기 · 파란 선 = AI가 감지한 외곽선. 문구는 아래 "문구 생성"으로.</p>
 
     <div class="controls">
+      <label class="outline-toggle">
+        <input type="checkbox" v-model="showOutlines" />
+        외곽선 표시
+      </label>
+      <Button
+        label="✨ 문구 생성"
+        size="small"
+        severity="secondary"
+        :disabled="
+          captionGenerating ||
+          card.outlines[currentId]?.status !== 'READY' ||
+          !!card.captions[currentId]
+        "
+        @click="generateCaption"
+      />
+      <span v-if="captionGenerating" class="muted-note">문구 생성 중…</span>
+      <span v-else-if="captionFailed[currentId]" class="warn-note">문구 생성 실패</span>
+      <span v-else-if="card.captions[currentId]" class="ok-note">문구 적용됨</span>
+      <span class="spacer" />
       <label class="tone">
         톤 낮춤
         <input
@@ -304,6 +365,25 @@ onScopeDispose(() => {
   color: #4b5563;
 }
 .export-note {
+  color: #16c47e;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.outline-toggle {
+  cursor: pointer;
+}
+.spacer {
+  flex: 1;
+}
+.muted-note {
+  color: #8b95a1;
+  font-size: 0.85rem;
+}
+.warn-note {
+  color: #f04452;
+  font-size: 0.85rem;
+}
+.ok-note {
   color: #16c47e;
   font-size: 0.85rem;
   font-weight: 600;
