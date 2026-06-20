@@ -403,9 +403,25 @@ onScopeDispose(() => {
   window.removeEventListener('pointerup', onResizeUp)
 })
 
-// 완성 = 문구가 만들어진 카드.
-const isDone = (id) => !!card.captions[id]
+// 완성 = 사용자가 카드별로 직접 표시(자동 판단 아님). 필름스트립에서 사진마다 토글.
+const doneSet = ref(new Set())
+const isDone = (id) => doneSet.value.has(id)
+function toggleDone(id) {
+  const s = new Set(doneSet.value)
+  s.has(id) ? s.delete(id) : s.add(id)
+  doneSet.value = s
+}
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
+
+// 캔버스 줌(확대/축소/맞춤). 하단 필름스트립 썸네일 크기 배율.
+const zoom = ref(1)
+function zoomBy(d) {
+  zoom.value = Math.min(4, Math.max(0.25, Math.round((zoom.value + d) * 20) / 20))
+}
+function zoomFit() {
+  zoom.value = 1
+}
+const thumbSize = ref(1)
 
 const exporting = ref(false)
 const exportNote = ref('')
@@ -535,10 +551,16 @@ watch(
         </button>
       </nav>
 
-      <!-- 중: 캔버스 -->
+      <!-- 중: 캔버스 (줌) -->
       <section class="ed-stage">
         <div class="stage-canvas">
-          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
+          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
+        </div>
+        <div class="zoom-bar">
+          <button title="축소" @click="zoomBy(-0.25)">−</button>
+          <span class="zoom-v">{{ Math.round(zoom * 100) }}%</span>
+          <button title="확대" @click="zoomBy(0.25)">＋</button>
+          <button class="fit" title="맞춤" @click="zoomFit">맞춤</button>
         </div>
       </section>
 
@@ -643,17 +665,23 @@ watch(
       </aside>
     </div>
 
-    <!-- 하단: 카드 필름스트립 + 정보 -->
+    <!-- 하단: 카드 필름스트립 (사진마다 완성 토글) + 썸네일 크기 조절 -->
     <footer class="ed-bottom">
-      <ul class="filmstrip">
+      <label class="thumb-size" title="썸네일 크기">
+        <i class="pi pi-images" />
+        <input type="range" min="0.7" max="2.4" step="0.1" v-model.number="thumbSize" />
+      </label>
+      <ul class="filmstrip" :style="{ '--thumb': thumbSize }">
         <li v-for="(id, i) in photoIds" :key="id">
           <button class="film" :class="{ on: i === current }" @click="current = i">
             <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
-            <span v-if="isDone(id)" class="film-done" title="문구 완성">✓</span>
+          </button>
+          <button class="film-status" :class="{ done: isDone(id) }" :title="isDone(id) ? '완성 해제' : '완성으로 표시'" @click="toggleDone(id)">
+            {{ isDone(id) ? '✓ 완성' : '미완성' }}
           </button>
         </li>
       </ul>
-      <span class="film-info">완성 {{ doneCount }} · 남은 {{ photoIds.length - doneCount }}</span>
+      <span class="film-info">{{ doneCount }} / {{ photoIds.length }} 완성</span>
     </footer>
   </div>
 </template>
@@ -751,29 +779,67 @@ watch(
   font-size: 0.65rem;
 }
 .ed-stage {
+  position: relative;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
+  overflow: auto; /* 줌 확대 시 스크롤 */
   background:
     radial-gradient(circle, #d6dbe1 1px, transparent 1px) 0 0 / 18px 18px,
     #eef1f4;
 }
 .stage-canvas {
-  max-height: 100%;
+  margin: auto; /* 작을 때 가운데, 클 때 스크롤 */
   display: flex;
   align-items: center;
 }
 .card-canvas {
-  max-height: calc(100vh - 220px);
+  max-height: 100%;
   max-width: 100%;
   height: auto;
   width: auto;
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   background: #fff;
+}
+/* 줌 컨트롤(스테이지 우하단) */
+.zoom-bar {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #fff;
+  border: 1px solid #e5e8eb;
+  border-radius: 9px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.zoom-bar button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #4b5563;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.zoom-bar button:hover {
+  background: #f2f4f6;
+}
+.zoom-bar .fit {
+  font-size: 0.76rem;
+}
+.zoom-v {
+  font-size: 0.76rem;
+  color: #4b5563;
+  min-width: 38px;
+  text-align: center;
 }
 .ed-right {
   flex: 0 0 268px;
@@ -1078,19 +1144,38 @@ watch(
   background: #fff;
   border-top: 1px solid #e5e8eb;
 }
+/* 썸네일 크기 슬라이더 */
+.thumb-size {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8b95a1;
+}
+.thumb-size input[type='range'] {
+  width: 90px;
+}
 .filmstrip {
   list-style: none;
   display: flex;
+  align-items: flex-start;
   gap: 8px;
   margin: 0;
   padding: 0;
   overflow-x: auto;
   flex: 1;
 }
+.filmstrip li {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
 .film {
   position: relative;
-  width: 40px;
-  height: 71px;
+  width: calc(40px * var(--thumb, 1));
+  height: calc(71px * var(--thumb, 1));
   padding: 0;
   border: 1px solid #e5e8eb;
   border-radius: 6px;
@@ -1107,19 +1192,21 @@ watch(
   height: 100%;
   object-fit: cover;
 }
-.film-done {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 14px;
-  height: 14px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #16c47e;
-  color: #fff;
-  font-size: 0.6rem;
-  font-weight: 800;
+/* 사진별 완성 토글 배지(썸네일 아래) */
+.film-status {
+  border: 0;
+  border-radius: 99px;
+  padding: 1px 7px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: #eef1f4;
+  color: #8b95a1;
+  white-space: nowrap;
+}
+.film-status.done {
+  background: #e7f7ee;
+  color: #16a866;
 }
 .film-info {
   flex: 0 0 auto;
