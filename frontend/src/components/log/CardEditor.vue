@@ -10,7 +10,7 @@ import { usePhotoContent } from '@/composables/usePhotoContent'
 import { useCardCaptions } from '@/composables/useCardCaptions'
 import { buildScene } from '@/card/render/buildScene'
 import { renderCard } from '@/card/render/renderCore'
-import { exportCardPng } from '@/card/render/exportCard'
+import { exportCardPng, computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
 import { useCardStore } from '@/stores/card'
 
@@ -58,10 +58,24 @@ function toggleBulk(key) {
   bulkSelected.value = s
 }
 
+// 9:16 고정 포맷의 여백 채움(사진을 자르지 않고 contain 후 남는 공간을 채운다).
+const padFill = ref('blur') // 'blur' | 'solid'
+const padColor = ref('#fdf8ee')
+
+// 캔버스(프레임) 크기 = 출력 크기. native=사진비율, fixed=1080×1920.
 const canvasDims = computed(() => {
   const img = photoImg.value
   if (format.value === 'fixed' || !img) return FIXED
   return { W: img.naturalWidth, H: img.naturalHeight }
+})
+// 프레임 안에서 사진(카드 콘텐츠)이 놓이는 사각형. fixed 는 contain 레터박스(자르지 않음),
+// native 는 프레임 전체. export(computeFitRect)와 동일 기하 → 미리보기=저장 결과.
+const contentRect = computed(() => {
+  const img = photoImg.value
+  const { W, H } = canvasDims.value
+  if (!img) return { cw: W, ch: H, dx: 0, dy: 0 }
+  if (format.value === 'fixed') return computeFitRect(img.naturalWidth, img.naturalHeight, W, H)
+  return { cw: img.naturalWidth, ch: img.naturalHeight, dx: 0, dy: 0 }
 })
 
 const items = computed(() => {
@@ -156,16 +170,20 @@ const scene = computed(() => {
   return buildScene({
     items: items.value,
     captions: { objects: visibleObjects, closing: closing.value },
-    canvas: canvasDims.value,
+    canvas: { W: contentRect.value.cw, H: contentRect.value.ch },
     photo: { w: img.naturalWidth, h: img.naturalHeight },
     style: { toneDown: toneDown.value },
   })
 })
 
 function drawOutlines(ctx, img) {
-  const { W } = canvasDims.value
-  const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, W, canvasDims.value.H)
+  // 외곽선은 프레임 전체가 아니라 사진 콘텐츠 사각형(레터박스 안쪽)에 맞춘다.
+  const { cw, ch, dx, dy } = contentRect.value
+  const W = cw
+  const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, cw, ch)
   const base = Math.max(1, W * 0.002)
+  ctx.save()
+  ctx.translate(dx, dy) // 콘텐츠 사각형 기준으로 그린다(레터박스 오프셋)
   let no = 0
   for (const item of items.value) {
     no += 1 // 레이어 목록과 같은 번호(숨겨도 번호 유지)
@@ -209,6 +227,23 @@ function drawOutlines(ctx, img) {
       ctx.restore()
     }
   }
+  ctx.restore() // translate 해제
+}
+
+// 9:16 여백 채움(자르지 않고 contain 후 남는 공간) — 블러(사진 확대+어둡게) 또는 단색.
+function drawPadding(ctx, img, W, H) {
+  if (padFill.value === 'solid') {
+    ctx.fillStyle = padColor.value
+    ctx.fillRect(0, 0, W, H)
+    return
+  }
+  const { dw, dh, ox, oy } = makeCoverFit(img.naturalWidth, img.naturalHeight, W, H)
+  ctx.save()
+  ctx.filter = `blur(${Math.round(W * 0.03)}px)`
+  ctx.drawImage(img, ox, oy, dw, dh)
+  ctx.restore()
+  ctx.fillStyle = 'rgba(20,14,8,0.18)'
+  ctx.fillRect(0, 0, W, H)
 }
 
 function redraw() {
@@ -216,18 +251,30 @@ function redraw() {
   const sc = scene.value
   const img = photoImg.value
   if (!el || !sc || !img || !fontReady.value) return
-  el.width = canvasDims.value.W
-  el.height = canvasDims.value.H
+  const { W: fw, H: fh } = canvasDims.value // 프레임(출력) 크기
+  const { cw, ch, dx, dy } = contentRect.value
+  el.width = fw
+  el.height = fh
   const ctx = el.getContext('2d', { willReadFrequently: true })
   ctx.setTransform(1, 0, 0, 1, 0, 0)
-  renderCard(ctx, sc, { photo: img })
+  if (dx > 0 || dy > 0) {
+    // fixed: 여백 채움 → 콘텐츠를 별도 캔버스에 그려 가운데 얹는다(export 와 동일).
+    drawPadding(ctx, img, fw, fh)
+    const content = document.createElement('canvas')
+    content.width = cw
+    content.height = ch
+    renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img })
+    ctx.drawImage(content, dx, dy)
+  } else {
+    renderCard(ctx, sc, { photo: img }) // native: 프레임 전체가 콘텐츠
+  }
   drawOutlines(ctx, img)
-  drawTexts(ctx, canvasDims.value)
+  drawTexts(ctx, { W: fw, H: fh })
 }
 
 watch(currentId, loadCurrent, { immediate: true })
 watch(
-  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId],
+  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor],
   redraw,
   { flush: 'post' },
 )
@@ -472,7 +519,7 @@ async function exportCurrent() {
       photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
       style: { toneDown: toneDown.value },
     }
-    const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value })
+    const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value })
     triggerDownload(await composeTexts(blob), `triplog-card-${currentId.value}.png`)
     exportNote.value = '저장 완료'
   } catch (e) {
@@ -483,7 +530,7 @@ async function exportCurrent() {
 }
 
 // export 결과(PNG blob) 위에 추가 텍스트를 합성한다(렌더 모듈은 추가 텍스트를 모르므로 후처리).
-// 좌표는 native(원본 비율) 기준 정확. fixed(9:16)는 여백 때문에 근사.
+// 좌표는 프레임(출력 크기) 기준 정규화 — 미리보기와 export 프레임이 같아 native·fixed 모두 정확.
 async function composeTexts(blob) {
   const visible = texts.value.filter((t) => !t.hidden && t.text.trim())
   if (!visible.length) return blob
@@ -548,6 +595,12 @@ watch(
         <legend>출력 형식</legend>
         <label><input type="radio" value="native" v-model="format" /> 원본 비율</label>
         <label><input type="radio" value="fixed" v-model="format" /> 9:16</label>
+      </fieldset>
+      <fieldset v-if="format === 'fixed'" class="fmt">
+        <legend>9:16 여백</legend>
+        <label><input type="radio" value="blur" v-model="padFill" /> 블러</label>
+        <label><input type="radio" value="solid" v-model="padFill" /> 단색</label>
+        <input v-if="padFill === 'solid'" type="color" v-model="padColor" class="pad-color" title="여백 색" />
       </fieldset>
       <fieldset class="fmt">
         <legend>전체 보정</legend>
@@ -762,6 +815,14 @@ watch(
   color: #16c47e;
   font-weight: 600;
   font-size: 0.85rem;
+}
+.pad-color {
+  width: 24px;
+  height: 22px;
+  border: 1px solid #d6dbe1;
+  border-radius: 5px;
+  padding: 0;
+  cursor: pointer;
 }
 .ed-mid {
   flex: 1;
