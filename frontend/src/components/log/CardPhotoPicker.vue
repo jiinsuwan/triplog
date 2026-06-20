@@ -1,119 +1,166 @@
 <script setup>
-// 카드 위저드 "고르기" 단계 본문 (S3-LOG-06 2단계).
-// 배치 정본 = 목업 ④: 경로 순서대로 장소(여행지/숙소)를 나열하고 장소마다 그 장소 사진을 고른다.
-// 일정·사진↔장소 배치는 기록 뷰와 동일하게 usePhotoPlacement(실제 일정 stop + EXIF 자동배치)를
-// 재사용한다 — 가짜 장소 목업을 버리고 실제 장소로 묶는다. 배치 안 된 사진은 "미배치" 묶음.
-// 선택(≤10)은 useCardStore.photoIds(단계 이동 간 유지).
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+// 카드 만들기 1단계 = "사진을 일정에 배치" 화면 (S3-LOG-06).
+// 사진을 일정 장소(stop)로 끌어 배치한다(포인터 드래그, useRecordDrag). 배치한 사진만 카드가 된다
+// (미배치 = 제외). 사진은 이미 업로드돼 있고, 백엔드가 외곽선을 백그라운드 전처리하므로 여기서
+// 상태를 폴링해 보여주고 card.outlines 에 저장한다 — 에디터 진입 시 대기를 줄인다.
+import { computed, ref, watch, onScopeDispose } from 'vue'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
-import { MAX_CARD_PHOTOS, useCardStore } from '@/stores/card'
+import RecordStop from '@/components/log/record/RecordStop.vue'
+import RecordPhotoTray from '@/components/log/record/RecordPhotoTray.vue'
+import { useRecordDrag, cancelPhotoDrag } from '@/composables/useRecordDrag'
 import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
+import { isOutlineTerminal } from '@/composables/useOutlinePolling'
+import { fetchPhotoOutline } from '@/api/outlineApi'
+import { useCardStore } from '@/stores/card'
 
 const props = defineProps({
   tripId: { type: Number, default: null },
 })
+const emit = defineEmits(['proceed'])
 
-const router = useRouter()
 const card = useCardStore()
-const { loading, error, stopsFlat, unplaced, photosForStop, photos } = usePhotoPlacement(props.tripId)
+const { days, loading, error, photos, stopsFlat, unplaced, placedPhotoIds, photosForStop, placePhoto, unplacePhoto } =
+  usePhotoPlacement(props.tripId)
 
-const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
+// 드래그(포인터 기반) — 배치/해제 처리 등록 + 고스트 상태 구독.
+const { drag } = useRecordDrag({ place: placePhoto, unplace: unplacePhoto })
+onScopeDispose(cancelPhotoDrag)
 
-// 실제 일정 장소(사진 있는 곳)별 + 미배치 묶음. 가짜 장소 없음.
-const groups = computed(() => {
-  const result = stopsFlat.value
-    .map((stop) => ({
-      key: `stop-${stop.id}`,
-      no: stop.sortOrder,
-      name: stop.place?.name ?? '장소',
-      icon: TYPE_ICON[stop.place?.placeType] ?? '📍',
-      meta: `DAY${stop.dayNumber}${stop.selectedTime ? ' ' + stop.selectedTime : ''} · 사진 ${photosForStop(stop.id).length}`,
-      photos: photosForStop(stop.id),
-    }))
-    .filter((group) => group.photos.length > 0)
-  if (unplaced.value.length > 0) {
-    result.push({ key: 'unplaced', no: null, name: '미배치', icon: '📷', meta: `사진 ${unplaced.value.length}`, photos: unplaced.value })
-  }
-  return result
+// 외곽선 전처리 상태 폴링(백엔드가 업로드 후 백그라운드 처리). 보여주기 + card.outlines 시드.
+const outlineStatus = ref({}) // photoId -> 'PENDING' | 'READY' | 'FAILED'
+let pollTimer = null
+let disposed = false
+let pollStart = 0
+async function pollOutlines() {
+  if (disposed) return
+  if (!pollStart) pollStart = performance.now()
+  const pending = photos.value.map((p) => p.id).filter((id) => !isOutlineTerminal(outlineStatus.value[id]))
+  await Promise.all(
+    pending.map(async (id) => {
+      try {
+        const res = await fetchPhotoOutline(id)
+        outlineStatus.value = { ...outlineStatus.value, [id]: res.status }
+        if (isOutlineTerminal(res.status)) card.setOutline(id, { status: res.status, items: res.items })
+      } catch {
+        /* 일시 실패 → 다음 틱 재시도 */
+      }
+    }),
+  )
+  if (disposed) return
+  const stillPending = photos.value.some((p) => !isOutlineTerminal(outlineStatus.value[p.id]))
+  // 무한 대기 방지(워커 다운 시 영영 PENDING) — 90s deadline 후 중단(에디터가 이어서 폴링).
+  if (stillPending && performance.now() - pollStart < 90000) pollTimer = setTimeout(pollOutlines, 2500)
+}
+watch(
+  photos,
+  (list) => {
+    if (list.length && !pollTimer && !disposed) pollOutlines()
+  },
+  { immediate: true },
+)
+onScopeDispose(() => {
+  disposed = true
+  if (pollTimer) clearTimeout(pollTimer)
 })
 
+const outlineSummary = computed(() => {
+  const ids = photos.value.map((p) => p.id)
+  const ready = ids.filter((id) => outlineStatus.value[id] === 'READY').length
+  const failed = ids.filter((id) => outlineStatus.value[id] === 'FAILED').length
+  return {
+    ready,
+    failed,
+    total: ids.length,
+    done: ids.length > 0 && ids.every((id) => isOutlineTerminal(outlineStatus.value[id])),
+  }
+})
+
+const placedCount = computed(() => placedPhotoIds.value.length)
 const isEmpty = computed(() => !loading.value && !error.value && photos.value.length === 0)
-const selectedCount = computed(() => card.photoIds.length)
-const atLimit = computed(() => selectedCount.value >= MAX_CARD_PHOTOS)
 
-function onPick(photoId) {
-  card.togglePhoto(photoId)
-}
-
-function goUpload() {
-  if (props.tripId) router.push({ name: 'trip-photos', params: { tripId: String(props.tripId) } })
-}
-function goRecord() {
-  if (props.tripId) router.push({ name: 'trip-record', params: { tripId: String(props.tripId) } })
+function proceed() {
+  if (!placedCount.value) return
+  card.setPhotoIds(placedPhotoIds.value)
+  emit('proceed')
 }
 </script>
 
 <template>
-  <div class="picker">
-    <p v-if="loading" class="picker-msg">사진·일정을 불러오는 중…</p>
-
+  <div class="place">
+    <p v-if="loading" class="msg">사진·일정을 불러오는 중…</p>
     <Message v-else-if="error" severity="error" :closable="false">{{ error }}</Message>
 
-    <div v-else-if="!tripId" class="picker-empty">
+    <div v-else-if="!tripId" class="empty">
       <p>여행 정보가 없습니다. 사진 화면에서 다시 시작해 주세요.</p>
     </div>
 
-    <div v-else-if="isEmpty" class="picker-empty">
+    <div v-else-if="isEmpty" class="empty">
       <p>이 여행에 사진이 없습니다. 먼저 사진을 올려 주세요.</p>
-      <Button label="사진 올리러 가기" icon="pi pi-upload" @click="goUpload" />
+    </div>
+
+    <div v-else-if="!stopsFlat.length" class="empty">
+      <p>이 여행의 일정이 없습니다. 일정을 먼저 만들어 주세요(사진을 배치할 장소가 필요합니다).</p>
     </div>
 
     <template v-else>
-      <div class="picker-bar">
-        <span class="hint">경로 순서대로 · 장소당 1장 권장</span>
-        <Button label="일정에 배치" icon="pi pi-map" size="small" text @click="goRecord" />
+      <!-- 상단 바: 전처리 상태 + 에디터로 -->
+      <div class="bar">
+        <span class="prep" :class="{ done: outlineSummary.done }">
+          <template v-if="outlineSummary.done">✓ 사진 준비 완료</template>
+          <template v-else>AI가 사진을 준비하고 있어요 · {{ outlineSummary.ready }}/{{ outlineSummary.total }}</template>
+          <template v-if="outlineSummary.failed"> · 실패 {{ outlineSummary.failed }}</template>
+        </span>
         <span class="grow" />
-        <span class="count" :class="{ full: atLimit }">{{ selectedCount }} / {{ MAX_CARD_PHOTOS }} 선택</span>
+        <span v-if="!placedCount" class="nudge">사진을 장소에 끌어다 놓으면 카드를 만들 수 있어요</span>
+        <Button
+          :label="`에디터로 (${placedCount}장)`"
+          icon="pi pi-chevron-right"
+          icon-pos="right"
+          :disabled="!placedCount"
+          @click="proceed"
+        />
       </div>
 
-      <section v-for="place in groups" :key="place.key" class="place">
-        <div class="place-head">
-          <span v-if="place.no != null" class="num">{{ place.no }}</span>
-          <span class="icon" aria-hidden="true">{{ place.icon }}</span>
-          <b class="name">{{ place.name }}</b>
-          <span class="meta">{{ place.meta }}</span>
-        </div>
-        <ul class="prow">
-          <li v-for="photo in place.photos" :key="photo.id">
-            <button
-              type="button"
-              class="pcell"
-              :class="{
-                sel: card.photoIds.includes(photo.id),
-                dimmed: atLimit && !card.photoIds.includes(photo.id),
-              }"
-              :aria-pressed="card.photoIds.includes(photo.id)"
-              @click="onPick(photo.id)"
-            >
-              <PhotoThumb :photo-id="photo.id" :alt="photo.originalFilename || '사진'" />
-              <span class="ck" :class="{ on: card.photoIds.includes(photo.id) }" aria-hidden="true" />
-            </button>
-          </li>
-        </ul>
+      <!-- 일정 장소 목록(드롭 타깃) -->
+      <section v-for="day in days" :key="day.dayNumber" class="day">
+        <h2 class="day-head">
+          DAY {{ day.dayNumber }}
+          <span v-if="day.date" class="date">{{ day.date }}</span>
+        </h2>
+        <RecordStop
+          v-for="stop in day.stops"
+          :key="stop.id"
+          :stop="stop"
+          :photos="photosForStop(stop.id)"
+        />
       </section>
+
+      <!-- 미배치 트레이 — 카드로 만들어지지 않음을 명시 -->
+      <p class="tray-note">📷 미배치 사진은 <b>카드로 만들어지지 않습니다.</b> 장소에 끌어다 놓으세요.</p>
+      <RecordPhotoTray :photos="unplaced" />
     </template>
+
+    <!-- 드래그 고스트(커서 따라다님, 드롭 판정 막지 않게 pointer-events:none) -->
+    <Teleport to="body">
+      <div
+        v-if="drag.active && drag.photoId != null"
+        class="drag-ghost"
+        :style="{ left: drag.x + 'px', top: drag.y + 'px' }"
+      >
+        <PhotoThumb :photo-id="drag.photoId" :alt="drag.alt" />
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.picker-msg {
+.msg {
   color: #8b95a1;
   padding: 24px 0;
 }
-.picker-empty {
+.empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -121,10 +168,10 @@ function goRecord() {
   padding: 48px 0;
   color: #8b95a1;
 }
-.picker-bar {
+.bar {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -132,108 +179,55 @@ function goRecord() {
   background: #fff;
   border-bottom: 1px solid #e5e8eb;
 }
-.picker-bar .grow {
+.bar .grow {
   flex: 1;
 }
-.hint {
-  color: #8b95a1;
+.prep {
   font-size: 0.85rem;
-}
-.count {
-  font-weight: 700;
-  font-size: 0.85rem;
+  font-weight: 600;
   color: #6d40d6;
   background: #f1ecfb;
   border-radius: 99px;
   padding: 4px 12px;
 }
-.count.full {
-  color: #fff;
-  background: #6d40d6;
+.prep.done {
+  color: #16a866;
+  background: #e7f7ee;
 }
-.place {
-  margin-top: 18px;
+.nudge {
+  color: #8b95a1;
+  font-size: 0.82rem;
 }
-.place-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
+.day {
+  margin-top: 8px;
 }
-.place-head .num {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border-radius: 99px;
-  background: #3182f6;
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-.place-head .name {
+.day-head {
   font-size: 0.95rem;
+  margin: 14px 0 8px;
 }
-.place-head .meta {
+.day-head .date {
   color: #8b95a1;
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: 400;
 }
-.prow {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.tray-note {
+  margin: 18px 0 8px;
+  color: #6b7684;
+  font-size: 0.85rem;
 }
-.pcell {
-  position: relative;
-  width: 96px;
-  height: 96px;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  border-radius: 11px;
+.tray-note b {
+  color: #f04452;
 }
-.pcell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 11px;
-  box-shadow: inset 0 0 0 0 #16c47e;
-  transition: box-shadow 0.12s ease;
+.drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  width: 64px;
+  height: 64px;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  opacity: 0.92;
   pointer-events: none;
-}
-.pcell.sel::after {
-  box-shadow: inset 0 0 0 3px #16c47e;
-}
-.pcell.dimmed {
-  opacity: 0.45;
-}
-.ck {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 20px;
-  height: 20px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1.5px solid #8b95a1;
-}
-.ck.on {
-  background: #16c47e;
-  border-color: #16c47e;
-}
-.ck.on::after {
-  content: '✓';
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 800;
 }
 </style>

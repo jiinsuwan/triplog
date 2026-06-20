@@ -82,11 +82,12 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {
-    // 여행 기록 뷰 — 사진을 일정 장소에 배치 (log 트랙, S4-LOG-01). 목업 ③.
+    // 사진을 일정에 배치하는 화면은 카드 만들기 1단계로 통합됨(log 트랙).
+    // 옛 경로(/trips/:id/record)는 카드 만들기 흐름으로 리다이렉트한다.
     path: '/trips/:tripId/record',
     name: 'trip-record',
-    component: () => import('@/views/log/TripRecordView.vue'),
-    meta: { requiresAuth: true, workspace: 'record' },
+    redirect: (to) => ({ name: 'card-create', query: { tripId: to.params.tripId } }),
+    meta: { requiresAuth: true },
   },
   {
     // 카드 생성 위저드 (log 트랙, S3-LOG-06). 단일 라우트 + ?step= 쿼리.

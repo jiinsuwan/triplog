@@ -18,6 +18,10 @@ export function usePhotoPlacement(tripId) {
     days.value.flatMap((day) => (day.stops ?? []).map((stop) => ({ ...stop, dayNumber: day.dayNumber }))),
   )
   const unplaced = computed(() => photos.value.filter((p) => placement[p.id] == null))
+  // 장소에 배치된 사진 id — 카드가 되는 대상(미배치는 카드 안 만듦).
+  const placedPhotoIds = computed(() =>
+    photos.value.filter((p) => placement[p.id] != null).map((p) => p.id),
+  )
 
   function photosForStop(stopId) {
     return photos.value.filter((p) => placement[p.id] === stopId)
@@ -78,6 +82,7 @@ export function usePhotoPlacement(tripId) {
     error,
     stopsFlat,
     unplaced,
+    placedPhotoIds,
     photosForStop,
     placePhoto,
     unplacePhoto,

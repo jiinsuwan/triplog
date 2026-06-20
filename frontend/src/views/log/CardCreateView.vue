@@ -4,7 +4,6 @@
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Steps from 'primevue/steps'
-import Button from 'primevue/button'
 import CardPhotoPicker from '@/components/log/CardPhotoPicker.vue'
 import CardOutlineProgress from '@/components/log/CardOutlineProgress.vue'
 import {
@@ -28,19 +27,8 @@ card.startForTrip(route.query.tripId)
 const currentStepKey = computed(() => normalizeStepKey(route.query.step))
 const activeIndex = computed(() => stepIndexOf(currentStepKey.value))
 
-// 단계 표시줄 모델(읽기 전용 인디케이터). 이동은 아래 이전/다음 버튼.
+// 단계 표시줄 모델(읽기 전용 인디케이터). 이동: 고르기 = 배치 화면의 "에디터로", 에디터 = 뒤로가기.
 const stepItems = CARD_STEPS.map((step) => ({ label: step.label }))
-
-const canPrev = computed(() => activeIndex.value > 0)
-// 다음: 마지막 단계가 아니어야 하고, 고르기 단계에선 사진을 1장 이상 골라야 활성.
-const canNext = computed(() => {
-  if (activeIndex.value >= CARD_STEPS.length - 1) return false
-  if (currentStepKey.value === 'pick') return card.photoIds.length >= 1
-  return true
-})
-const nextLabel = computed(() =>
-  currentStepKey.value === 'pick' ? `✨ AI 초안 생성 (${card.photoIds.length}장)` : '다음',
-)
 
 function goToStep(key) {
   router.push({ query: { ...route.query, step: key } })
@@ -75,18 +63,7 @@ watch(
 
     <Steps :model="stepItems" :activeStep="activeIndex" :readonly="true" class="cc-steps" />
 
-    <CardPhotoPicker :trip-id="card.selectedTripId" />
-
-    <footer class="cc-nav">
-      <span />
-      <Button
-        :label="nextLabel"
-        icon="pi pi-chevron-right"
-        icon-pos="right"
-        :disabled="!canNext"
-        @click="goNext"
-      />
-    </footer>
+    <CardPhotoPicker :trip-id="card.selectedTripId" @proceed="goNext" />
   </main>
 
   <!-- 에디터 단계: 풀스크린(외곽선 처리 → 에디터). 위저드 칼럼/스텝/푸터 없음. -->

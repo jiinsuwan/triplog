@@ -3,11 +3,9 @@ import { setActivePinia, createPinia } from 'pinia'
 
 import {
   CARD_STEPS,
-  MAX_CARD_PHOTOS,
   normalizeStepKey,
   nextStepKey,
   prevStepKey,
-  togglePhotoSelection,
   useCardStore,
 } from '@/stores/card'
 
@@ -48,31 +46,6 @@ describe('카드 위저드 step 모델', () => {
   })
 })
 
-describe('togglePhotoSelection — 사진 선택 토글(순수함수)', () => {
-  it('선택 안 된 사진은 추가한다', () => {
-    expect(togglePhotoSelection([1, 2], 3, 10)).toEqual({ ids: [1, 2, 3], blocked: false })
-  })
-
-  it('이미 선택된 사진은 해제한다', () => {
-    expect(togglePhotoSelection([1, 2, 3], 2, 10)).toEqual({ ids: [1, 3], blocked: false })
-  })
-
-  it('한도에 도달하면 새 추가를 막고 blocked 를 돌려준다', () => {
-    const full = [1, 2, 3]
-    expect(togglePhotoSelection(full, 4, 3)).toEqual({ ids: [1, 2, 3], blocked: true })
-  })
-
-  it('한도에 도달해도 이미 선택된 사진의 해제는 허용한다', () => {
-    expect(togglePhotoSelection([1, 2, 3], 2, 3)).toEqual({ ids: [1, 3], blocked: false })
-  })
-
-  it('원본 배열을 변형하지 않는다', () => {
-    const original = [1, 2]
-    togglePhotoSelection(original, 3, 10)
-    expect(original).toEqual([1, 2])
-  })
-})
-
 describe('useCardStore', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
@@ -94,23 +67,20 @@ describe('useCardStore', () => {
     })
   })
 
-  describe('togglePhoto', () => {
-    it('추가/해제하며 카운트·한도 게터가 따라온다', () => {
+  describe('setPhotoIds', () => {
+    it('배치된 사진 id 를 카드 대상으로 설정한다(복사본)', () => {
       const card = useCardStore()
-      expect(card.togglePhoto(1)).toBe(false)
-      expect(card.togglePhoto(2)).toBe(false)
-      expect(card.selectedCount).toBe(2)
-      expect(card.atPhotoLimit).toBe(false)
-      expect(card.togglePhoto(1)).toBe(false) // 해제
-      expect(card.photoIds).toEqual([2])
+      const ids = [3, 7, 9]
+      card.setPhotoIds(ids)
+      expect(card.photoIds).toEqual([3, 7, 9])
+      ids.push(99)
+      expect(card.photoIds).toEqual([3, 7, 9]) // 원본 변형이 새도 영향 없음(복사)
     })
 
-    it('한도(10장)에 도달하면 새 추가를 막고 true 를 돌려준다', () => {
+    it('배열이 아니면 빈 배열로 둔다', () => {
       const card = useCardStore()
-      for (let i = 1; i <= MAX_CARD_PHOTOS; i += 1) card.togglePhoto(i)
-      expect(card.atPhotoLimit).toBe(true)
-      expect(card.togglePhoto(99)).toBe(true)
-      expect(card.selectedCount).toBe(MAX_CARD_PHOTOS)
+      card.setPhotoIds(null)
+      expect(card.photoIds).toEqual([])
     })
   })
 })

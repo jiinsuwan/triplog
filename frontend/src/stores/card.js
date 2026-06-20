@@ -10,9 +10,6 @@ export const CARD_STEPS = [
 
 const STEP_KEYS = CARD_STEPS.map((step) => step.key)
 
-// 카드 한 장에 쓸 수 있는 최대 사진 수.
-export const MAX_CARD_PHOTOS = 10
-
 // 외부 입력(URL ?step= 쿼리)을 유효한 단계 키로 정규화한다.
 // 위저드 단계는 URL을 정본으로 삼고, 컴포넌트가 이 함수로 검증한다(라우터 가드 아님).
 // 미지정·미지의 값·비문자열은 모두 첫 단계로 떨어진다.
@@ -35,41 +32,29 @@ export function prevStepKey(key) {
   return STEP_KEYS[prev]
 }
 
-// 사진 선택 토글(순수함수). 이미 선택돼 있으면 해제, 아니면 max 한도 내에서 추가.
-// 반환 { ids, blocked }: blocked=true 면 한도 초과로 "추가"가 거부된 것(피드백용).
-export function togglePhotoSelection(currentIds, photoId, max = MAX_CARD_PHOTOS) {
-  if (currentIds.includes(photoId)) {
-    return { ids: currentIds.filter((id) => id !== photoId), blocked: false }
-  }
-  if (currentIds.length >= max) {
-    return { ids: currentIds, blocked: true }
-  }
-  return { ids: [...currentIds, photoId], blocked: false }
-}
-
-// 위저드의 직렬화 도메인 상태. 단계 이동(SPA) 동안 선택을 유지한다.
-// (S4에서 items/captions, S6에서 visibility 가 추가될 예정.)
+// 위저드의 직렬화 도메인 상태. 단계 이동(SPA) 동안 유지한다.
+// 카드가 될 사진 = 일정에 "배치한" 사진(고르기 단계에서 정해 photoIds 로 넘긴다). 별도 선택·개수 제한 없음.
 export const useCardStore = defineStore('card', {
   state: () => ({
     selectedTripId: null,
     photoIds: [],
-    // 외곽선 결과: photoId -> { status, items }. 3단계 폴링이 채우고, 이후 렌더 단계가 쓴다.
+    // 외곽선 결과: photoId -> { status, items }. 배치 화면 폴링이 채우고(전처리), 렌더 단계가 쓴다.
     outlines: {},
     // 문구 결과: photoId -> { response, warnings }. 4단계가 채우고, 렌더(buildScene)는 response 만 쓴다.
     captions: {},
   }),
-  getters: {
-    selectedCount: (state) => state.photoIds.length,
-    atPhotoLimit: (state) => state.photoIds.length >= MAX_CARD_PHOTOS,
-  },
   actions: {
-    // 진입 시 여행 컨텍스트 세팅 + 선택 초기화. 무효 tripId 는 null.
+    // 진입 시 여행 컨텍스트 세팅 + 상태 초기화. 무효 tripId 는 null.
     startForTrip(tripId) {
       const id = Number(tripId)
       this.selectedTripId = Number.isInteger(id) && id > 0 ? id : null
       this.photoIds = []
       this.outlines = {}
       this.captions = {}
+    },
+    // 카드로 만들 사진 = 배치된 사진. 고르기 → 에디터 전이 때 확정해 넘긴다.
+    setPhotoIds(ids) {
+      this.photoIds = Array.isArray(ids) ? [...ids] : []
     },
     // 외곽선 폴링 결과를 보관한다(이후 렌더 단계 입력).
     setOutline(photoId, data) {
@@ -78,12 +63,6 @@ export const useCardStore = defineStore('card', {
     // 문구 생성 결과를 보관한다. 세션 캐시 역할 — 같은 사진 재호출(크레딧 차감)을 막는다.
     setCaption(photoId, data) {
       this.captions = { ...this.captions, [photoId]: data }
-    },
-    // 사진 선택 토글. 한도 초과로 추가가 막히면 true 를 돌려준다(호출부 피드백용).
-    togglePhoto(photoId) {
-      const { ids, blocked } = togglePhotoSelection(this.photoIds, photoId, MAX_CARD_PHOTOS)
-      this.photoIds = ids
-      return blocked
     },
   },
 })

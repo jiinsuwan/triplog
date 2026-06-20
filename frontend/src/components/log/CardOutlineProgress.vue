@@ -28,7 +28,13 @@ watch(
   { deep: true },
 )
 
-const done = computed(() => finished.value || timedOut.value)
+// 배치 화면에서 전처리 폴링이 이미 모든 사진을 끝내(card.outlines 시드) 두면 대기 없이 바로 에디터.
+const preReady = computed(
+  () =>
+    props.photoIds.length > 0 &&
+    props.photoIds.every((id) => ['READY', 'FAILED'].includes(card.outlines[id]?.status)),
+)
+const done = computed(() => preReady.value || finished.value || timedOut.value)
 
 function statusOf(id) {
   return outlines[id]?.status ?? 'PENDING'
