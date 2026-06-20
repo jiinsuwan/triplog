@@ -1,31 +1,20 @@
 <script setup>
 // 미분류 사진 트레이 (S4-LOG-01 기록 뷰). 아직 장소에 배치 안 된 사진들 — 끌어서 장소로 배치한다.
-// 여기로 다시 끌어다 놓으면 배치 해제.
-import { ref } from 'vue'
+// 여기로 다시 끌어다 놓으면 배치 해제(useRecordDrag 가 data-record-tray 로 판정).
+import { computed } from 'vue'
 import RecordPhotoChip from './RecordPhotoChip.vue'
+import { useRecordDrag } from '@/composables/useRecordDrag'
 
-const props = defineProps({
+defineProps({
   photos: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['unplace'])
 
-const over = ref(false)
-
-function onDrop(event) {
-  over.value = false
-  const photoId = Number(event.dataTransfer.getData('text/plain'))
-  if (photoId) emit('unplace', photoId)
-}
+const { drag } = useRecordDrag()
+const over = computed(() => drag.active && drag.overTray)
 </script>
 
 <template>
-  <section
-    class="tray"
-    :class="{ over }"
-    @dragover.prevent="over = true"
-    @dragleave="over = false"
-    @drop="onDrop"
-  >
+  <section class="tray" :class="{ over }" data-record-tray>
     <div class="head">
       <b>미분류 사진</b>
       <span class="count">{{ photos.length }}장 · 장소로 끌어 배치</span>

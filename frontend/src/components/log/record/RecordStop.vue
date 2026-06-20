@@ -1,34 +1,24 @@
 <script setup>
 // 일정의 한 장소(stop) + 그 장소에 배치된 사진 (S4-LOG-01 기록 뷰).
-// 사진을 끌어다 놓으면 이 장소로 배치된다(드롭 타깃).
-import { ref } from 'vue'
+// 사진을 끌어다 놓으면 이 장소로 배치된다(드롭 타깃). 드롭 판정은 useRecordDrag 가
+// data-stop-id 로 한다 — 여기선 드롭 영역 표시(data 속성)와 하이라이트만.
+import { computed } from 'vue'
 import RecordPhotoChip from './RecordPhotoChip.vue'
+import { useRecordDrag } from '@/composables/useRecordDrag'
 
 const props = defineProps({
   stop: { type: Object, required: true },
   photos: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['place'])
 
 const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
 
-const over = ref(false)
-
-function onDrop(event) {
-  over.value = false
-  const photoId = Number(event.dataTransfer.getData('text/plain'))
-  if (photoId) emit('place', { photoId, stopId: props.stop.id })
-}
+const { drag } = useRecordDrag()
+const over = computed(() => drag.active && drag.overStopId === props.stop.id)
 </script>
 
 <template>
-  <div
-    class="stop"
-    :class="{ over }"
-    @dragover.prevent="over = true"
-    @dragleave="over = false"
-    @drop="onDrop"
-  >
+  <div class="stop" :class="{ over }" :data-stop-id="stop.id">
     <div class="head">
       <span class="num">{{ stop.sortOrder }}</span>
       <span class="icon" aria-hidden="true">{{ TYPE_ICON[stop.place?.placeType] ?? '📍' }}</span>

@@ -2,10 +2,13 @@
 // 여행 기록 뷰 (S4-LOG-01, 목업 ③). 좌 경로 지도 · 우 일정 타임라인 · 하단 미분류 트레이.
 // 사진을 장소(stop)로 끌어다 놓아 동선 위에 배치한다. 일정은 trip 트랙 itinerary 를 재사용,
 // 사진↔장소 배치는 usePhotoPlacement(로컬). 여기서 카드 만들기로 진입한다.
+import { onScopeDispose } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
+import { useRecordDrag, cancelPhotoDrag } from '@/composables/useRecordDrag'
+import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import RecordRouteMap from '@/components/log/record/RecordRouteMap.vue'
 import RecordStop from '@/components/log/record/RecordStop.vue'
 import RecordPhotoTray from '@/components/log/record/RecordPhotoTray.vue'
@@ -17,9 +20,10 @@ const tripId = Number(route.params.tripId)
 const { days, loading, error, stopsFlat, unplaced, photosForStop, placePhoto, unplacePhoto } =
   usePhotoPlacement(tripId)
 
-function onPlace({ photoId, stopId }) {
-  placePhoto(photoId, stopId)
-}
+// 사진 드래그(포인터 기반) 드롭 처리 등록 + 고스트 상태 구독.
+const { drag } = useRecordDrag({ place: placePhoto, unplace: unplacePhoto })
+onScopeDispose(cancelPhotoDrag)
+
 function goCards() {
   router.push({ name: 'card-create', query: { tripId: String(tripId) } })
 }
@@ -64,14 +68,24 @@ function goUpload() {
               :key="stop.id"
               :stop="stop"
               :photos="photosForStop(stop.id)"
-              @place="onPlace"
             />
           </section>
         </div>
       </div>
 
-      <RecordPhotoTray class="tray" :photos="unplaced" @unplace="unplacePhoto" />
+      <RecordPhotoTray class="tray" :photos="unplaced" />
     </template>
+
+    <!-- 드래그 중 커서를 따라다니는 사진 고스트(드롭 판정을 막지 않도록 pointer-events:none). -->
+    <Teleport to="body">
+      <div
+        v-if="drag.active && drag.photoId != null"
+        class="drag-ghost"
+        :style="{ left: drag.x + 'px', top: drag.y + 'px' }"
+      >
+        <PhotoThumb :photo-id="drag.photoId" :alt="drag.alt" />
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -139,6 +153,19 @@ function goUpload() {
 }
 .tray {
   margin-top: 18px;
+}
+/* 드래그 고스트 — 커서 따라다니는 사진 미리보기. 드롭 판정(elementFromPoint)을 막지 않게 pointer-events 없음. */
+.drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  width: 64px;
+  height: 64px;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  opacity: 0.92;
+  pointer-events: none;
 }
 
 @media (max-width: 840px) {
