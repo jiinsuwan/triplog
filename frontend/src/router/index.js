@@ -63,9 +63,11 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'planning' },
   },
   {
+    // 기록 워크스페이스 진입 = 카드 만들기(배치) 화면 직행. 사진 업로드는 그 화면에서 모달로 한다
+    //   (업로드 전용 화면을 먼저 거치지 않아 "기존 사진 모르고 또 올려 중복" 되던 문제 해소).
     path: '/trips/:tripId/log',
     name: 'trip-record-workspace',
-    redirect: (to) => ({ name: 'trip-photos', params: to.params }),
+    redirect: (to) => ({ name: 'card-create', query: { tripId: to.params.tripId } }),
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {

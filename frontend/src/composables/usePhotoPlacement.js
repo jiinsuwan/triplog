@@ -1,6 +1,6 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { fetchItinerary } from '@/api/itineraryApi'
-import { fetchTripPhotos } from '@/api/photoApi'
+import { fetchTripPhotos, unlinkPhotoFromTrip } from '@/api/photoApi'
 
 // 사진 ↔ 일정 장소(stop) 배치 상태 (S4-LOG-01 기록 뷰).
 // 일정(days/stops)은 trip 트랙 itinerary API 를 그대로 재사용한다. 사진↔stop 연결은 아직 스키마에
@@ -95,6 +95,25 @@ export function usePhotoPlacement(tripId) {
       loading.value = false
     }
   }
+
+  // 사진만 다시 받는다(전체 로딩 스피너 없이). 기존 배치는 유지하고 새 사진만 자동배치(장소당 1장).
+  async function refreshPhotos() {
+    try {
+      const photoList = await fetchTripPhotos(tripId)
+      photos.value = Array.isArray(photoList) ? photoList : []
+      autoPlaceByTime()
+    } catch {
+      /* 일시 실패 — 다음 갱신에서 반영 */
+    }
+  }
+
+  // 이 여행에서 사진 빼기(unlink) — 사진 레코드는 남고 trip 연결만 끊는다. 화면 목록·배치에서 제거.
+  async function removeFromTrip(photoId) {
+    await unlinkPhotoFromTrip(photoId)
+    delete placement[photoId]
+    photos.value = photos.value.filter((p) => p.id !== photoId)
+  }
+
   onMounted(load)
 
   return {
@@ -110,6 +129,8 @@ export function usePhotoPlacement(tripId) {
     placePhoto,
     unplacePhoto,
     unplaceAll,
+    refreshPhotos,
+    removeFromTrip,
     autoPlaceByTime,
     reload: load,
   }

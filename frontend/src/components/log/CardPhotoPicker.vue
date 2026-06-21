@@ -7,6 +7,7 @@ import { computed, ref, watch, onScopeDispose } from 'vue'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
+import PhotoManageDialog from '@/components/log/PhotoManageDialog.vue'
 import RecordRouteMap from '@/components/log/record/RecordRouteMap.vue'
 import RecordStop from '@/components/log/record/RecordStop.vue'
 import RecordPhotoTray from '@/components/log/record/RecordPhotoTray.vue'
@@ -22,8 +23,25 @@ const props = defineProps({
 const emit = defineEmits(['proceed'])
 
 const card = useCardStore()
-const { days, loading, error, photos, stopsFlat, unplaced, placedPhotoIds, photosForStop, placePhoto, unplacePhoto, unplaceAll } =
+const { days, loading, error, photos, stopsFlat, unplaced, placedPhotoIds, photosForStop, placePhoto, unplacePhoto, unplaceAll, refreshPhotos, removeFromTrip } =
   usePhotoPlacement(props.tripId)
+
+// 사진 관리 모달(이미 올린 사진 보기·빼기 + 새 업로드).
+const showManage = ref(false)
+const removingIds = ref(new Set())
+async function onRemovePhoto(photoId) {
+  if (removingIds.value.has(photoId)) return
+  removingIds.value = new Set(removingIds.value).add(photoId)
+  try {
+    await removeFromTrip(photoId)
+  } catch {
+    /* 실패 — 다음 시도 */
+  } finally {
+    const s = new Set(removingIds.value)
+    s.delete(photoId)
+    removingIds.value = s
+  }
+}
 
 // 드래그(포인터 기반) — 배치/해제 처리 등록 + 고스트 상태 구독.
 const { drag } = useRecordDrag({ place: placePhoto, unplace: unplacePhoto })
@@ -104,6 +122,7 @@ function proceed() {
 
     <div v-else-if="isEmpty" class="empty">
       <p>이 여행에 사진이 없습니다. 먼저 사진을 올려 주세요.</p>
+      <Button label="＋ 사진 추가" icon="pi pi-upload" @click="showManage = true" />
     </div>
 
     <div v-else-if="!stopsFlat.length" class="empty">
@@ -120,6 +139,14 @@ function proceed() {
         </span>
         <span class="grow" />
         <span v-if="!placedCount" class="nudge">사진을 장소에 끌어다 놓으면 카드를 만들 수 있어요</span>
+        <Button
+          label="사진 관리"
+          icon="pi pi-images"
+          size="small"
+          severity="secondary"
+          text
+          @click="showManage = true"
+        />
         <Button
           v-if="placedCount"
           label="전체 빼기"
@@ -164,6 +191,16 @@ function proceed() {
       <p class="tray-note">📷 미배치 사진은 <b>카드로 만들어지지 않습니다.</b> 장소에 끌어다 놓으세요.</p>
       <RecordPhotoTray :photos="unplaced" />
     </template>
+
+    <!-- 사진 관리 모달(보기·빼기 + 새 업로드) -->
+    <PhotoManageDialog
+      v-model:visible="showManage"
+      :trip-id="tripId"
+      :photos="photos"
+      :removing-ids="removingIds"
+      @remove="onRemovePhoto"
+      @uploaded="refreshPhotos"
+    />
 
     <!-- 드래그 고스트(커서 따라다님, 드롭 판정 막지 않게 pointer-events:none) -->
     <Teleport to="body">
