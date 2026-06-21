@@ -870,7 +870,9 @@ async function exportCurrent() {
       items: items.value,
       captions: { objects: visibleObjects, closing: closing.value },
       photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
-      style: { toneDown: toneDown.value },
+      // 미리보기 scene 과 동일: 외곽선은 paintOutlines(composeOverlays)가 전담 → buildScene sketch 외곽선 끔.
+      // (이게 빠지면 문구 생성된 객체는 buildScene sketch + paintOutlines 가 겹쳐 PNG 외곽선 중복)
+      style: { toneDown: toneDown.value, outline: false },
     }
     const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value })
     triggerDownload(await composeOverlays(blob), `triplog-card-${currentId.value}.png`)
