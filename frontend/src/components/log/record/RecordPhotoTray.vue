@@ -18,6 +18,8 @@ const over = computed(() => drag.active && drag.overTray)
     <div class="head">
       <b>미분류 사진</b>
       <span class="count">{{ photos.length }}장 · 장소로 끌어 배치</span>
+      <span class="grow" />
+      <slot name="action" />
     </div>
     <ul v-if="photos.length" class="photos">
       <li v-for="p in photos" :key="p.id">
@@ -42,9 +44,12 @@ const over = computed(() => drag.active && drag.overTray)
 }
 .head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+.head .grow {
+  flex: 1;
 }
 .count {
   color: #8b95a1;

@@ -140,14 +140,6 @@ function proceed() {
         <span class="grow" />
         <span v-if="!placedCount" class="nudge">사진을 장소에 끌어다 놓으면 카드를 만들 수 있어요</span>
         <Button
-          label="사진 관리"
-          icon="pi pi-images"
-          size="small"
-          severity="secondary"
-          text
-          @click="showManage = true"
-        />
-        <Button
           v-if="placedCount"
           label="전체 빼기"
           icon="pi pi-times"
@@ -187,9 +179,13 @@ function proceed() {
         </div>
       </div>
 
-      <!-- 미배치 트레이 — 카드로 만들어지지 않음을 명시 -->
+      <!-- 미배치 트레이 — 카드로 만들어지지 않음을 명시. 사진 관리(추가·빼기)도 여기서. -->
       <p class="tray-note">📷 미배치 사진은 <b>카드로 만들어지지 않습니다.</b> 장소에 끌어다 놓으세요.</p>
-      <RecordPhotoTray :photos="unplaced" />
+      <RecordPhotoTray :photos="unplaced">
+        <template #action>
+          <Button label="사진 추가·관리" icon="pi pi-images" size="small" severity="secondary" @click="showManage = true" />
+        </template>
+      </RecordPhotoTray>
     </template>
 
     <!-- 사진 관리 모달(보기·빼기 + 새 업로드) -->
