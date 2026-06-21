@@ -92,6 +92,34 @@ describe('router authGuard — 보호 라우트 가드', () => {
     })
   })
 
+  it('record workspace redirect 는 카드 만들기(card-create)로 보낸다', () => {
+    const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record-workspace')
+
+    expect(recordRoute.redirect).toBeTypeOf('function')
+    expect(recordRoute.redirect({ params: { tripId: '12' } })).toEqual({
+      name: 'card-create',
+      query: { tripId: '12' },
+    })
+  })
+
+  it('옛 record 경로(/trips/:id/record)도 카드 만들기로 리다이렉트한다', () => {
+    const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record')
+
+    expect(recordRoute?.path).toBe('/trips/:tripId/record')
+    expect(recordRoute.redirect).toBeTypeOf('function')
+    expect(recordRoute.redirect({ params: { tripId: '7' } })).toEqual({
+      name: 'card-create',
+      query: { tripId: '7' },
+    })
+  })
+
+  it('card-create 라우트는 보호 라우트로 등록한다', () => {
+    const cardRoute = router.getRoutes().find((item) => item.name === 'card-create')
+
+    expect(cardRoute?.path).toBe('/cards/new')
+    expect(cardRoute?.meta).toMatchObject({ requiresAuth: true })
+  })
+
   it('trip photos route belongs to record workspace', () => {
     const photoRoute = router.getRoutes().find((item) => item.name === 'trip-photos')
 

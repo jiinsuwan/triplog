@@ -23,6 +23,14 @@ const card = useCardStore()
 // (가드가 갓 초기화된 photoIds 를 봐야 에디터 딥링크를 올바로 막는다).
 card.startForTrip(route.query.tripId)
 
+// 같은 /cards/new 라우트에서 ?tripId 만 바뀌면 컴포넌트가 재사용돼 setup 이 다시 안 돈다.
+// tripId 변경 시 카드 상태를 재초기화한다(이전 여행 사진을 다른 여행 화면에서 편집하는 것 방지).
+// 피커는 아래 :key 로 재마운트되어 그 여행의 사진·일정을 새로 불러온다.
+watch(
+  () => route.query.tripId,
+  (tid) => card.startForTrip(tid),
+)
+
 // 현재 단계 = URL ?step= 을 정규화한 값.
 const currentStepKey = computed(() => normalizeStepKey(route.query.step))
 const activeIndex = computed(() => stepIndexOf(currentStepKey.value))
@@ -63,7 +71,7 @@ watch(
 
     <Steps :model="stepItems" :activeStep="activeIndex" :readonly="true" class="cc-steps" />
 
-    <CardPhotoPicker :trip-id="card.selectedTripId" @proceed="goNext" />
+    <CardPhotoPicker :key="card.selectedTripId" :trip-id="card.selectedTripId" @proceed="goNext" />
   </main>
 
   <!-- 에디터 단계: 풀스크린(외곽선 처리 → 에디터). 위저드 칼럼/스텝/푸터 없음. -->
