@@ -151,6 +151,7 @@ onScopeDispose(() => {
 // deadline 으로 끊겼을 수 있다 — 그새 워커가 끝냈으면 반영). 무한 폴링 아님 = 진입 1회.
 onMounted(async () => {
   for (const id of props.photoIds) {
+    if (disposed) break // 진입 직후 이탈 시 남은 재조회 중단(불필요 호출 방지)
     const s = card.outlines[id]?.status
     if (s != null && s !== 'PENDING') continue
     try {
@@ -1123,7 +1124,8 @@ watch(
               @click="generateCaption" />
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
             <p v-else-if="captionFailed[currentId]" class="warn small">문구를 불러오지 못했어요. 다시 시도하거나 직접 꾸며도 좋아요.</p>
-            <p v-else-if="!items.length" class="muted small">텍스트와 선으로 자유롭게 꾸며보세요.</p>
+            <p v-else-if="hasNoOutline(currentId)" class="muted small">텍스트와 선으로 자유롭게 꾸며보세요.</p>
+            <p v-else-if="!items.length" class="muted small">사진을 준비하고 있어요…</p>
             <p v-else class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
           </div>
           <div v-else-if="activeTool === 'text'" class="tool-block">
@@ -1334,7 +1336,7 @@ watch(
 }
 .fallback-hint {
   position: absolute;
-  top: 10px;
+  top: 52px; /* 상단 선택/생성 토글 아래 */
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;

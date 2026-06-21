@@ -102,4 +102,17 @@ class CardCaptionControllerTest {
         // 크레딧 보호: 빈 items 면 LLM(GMS) 호출에 도달하지 않는다.
         verifyNoInteractions(cardCaptionService);
     }
+
+    @Test
+    void READY_이지만_items_가_배열이_아니면_INVALID_INPUT_을_던진다() throws Exception {
+        // 계약 위반(NullNode 등 비배열)도 NPE/500 이 아니라 4xx 로 끊고 LLM 호출에 도달하지 않는다.
+        when(photoService.getOutline(1L, 7L))
+                .thenReturn(new PhotoOutlineResponse(7L, OutlineStatus.READY, mapper.readTree("null")));
+
+        assertThatThrownBy(() -> controller.caption(1L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
+        verifyNoInteractions(cardCaptionService);
+    }
 }

@@ -56,7 +56,9 @@ public class CardCaptionController {
             @PathVariable Long photoId) {
         // 소유자 검증 + 외곽선 조회는 PhotoService 가 담당(미소유 → PHOTO_005).
         PhotoOutlineResponse outline = photoService.getOutline(userId, photoId);
-        if (outline.status() != OutlineStatus.READY || outline.items() == null) {
+        // items 는 추론 서버 계약상 항상 배열이다. status 미완료·null·비배열(계약 위반)은
+        // convertValue/isEmpty 에서 NPE·500 으로 새지 않도록 여기서 4xx 로 끊는다.
+        if (outline.status() != OutlineStatus.READY || outline.items() == null || !outline.items().isArray()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,
                     "사진 외곽선 처리가 끝나지 않아 카드 문구를 만들 수 없습니다.");
         }
