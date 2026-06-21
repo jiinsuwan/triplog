@@ -110,6 +110,33 @@ describe('autoPlaceByTime — 촬영시각 근사·장소당 1장·같은 날짜
     api.autoPlaceByTime()
     expect(api.placement[1]).toBeUndefined()
   })
+
+  it('재호출(refreshPhotos 후) 시 이미 사진이 있는 장소는 새 사진으로 덮지 않는다', () => {
+    const api = setup()
+    seed(
+      api,
+      [{ dayNumber: 1, date: '2024-05-01', stops: [stop(10, 1, '10:00')] }],
+      [{ id: 1, takenAt: '2024-05-01T10:00:00' }],
+    )
+    api.autoPlaceByTime()
+    expect(api.placement[1]).toBe(10)
+    // 새 사진을 추가하고 다시 자동배치 — 이미 1장 있는 stop10 은 건너뛴다(장소당 1장 유지).
+    api.photos.value = [...api.photos.value, { id: 2, takenAt: '2024-05-01T10:01:00' }]
+    api.autoPlaceByTime()
+    expect(api.placement[1]).toBe(10) // 기존 배치 유지
+    expect(api.placement[2]).toBeUndefined() // 장소가 이미 차서 미배치
+  })
+
+  it('selectedTime 이 있는 장소가 없으면 아무 것도 배치하지 않는다', () => {
+    const api = setup()
+    seed(
+      api,
+      [{ dayNumber: 1, date: '2024-05-01', stops: [{ id: 10, sortOrder: 1, place: { name: '장소' } }] }],
+      [{ id: 1, takenAt: '2024-05-01T10:00:00' }],
+    )
+    api.autoPlaceByTime()
+    expect(api.placement[1]).toBeUndefined()
+  })
 })
 
 describe('placedPhotoIds — 일정(DAY/stop) 순서', () => {
@@ -121,13 +148,13 @@ describe('placedPhotoIds — 일정(DAY/stop) 순서', () => {
         { dayNumber: 1, date: '2024-05-01', stops: [stop(10, 1, '09:00'), stop(11, 2, '13:00')] },
         { dayNumber: 2, date: '2024-05-02', stops: [stop(20, 1, '10:00')] },
       ],
-      [{ id: 7 }, { id: 8 }, { id: 9 }],
+      // 업로드(배열) 순서 [9,8,7] — 일정 순서와 일부러 어긋나게 둔다.
+      [{ id: 9 }, { id: 8 }, { id: 7 }],
     )
-    // 업로드 순서(7,8,9)와 다른 stop 에 배치
-    api.placePhoto(9, 20) // DAY2
-    api.placePhoto(8, 11) // DAY1 stop2
     api.placePhoto(7, 10) // DAY1 stop1
-    // 일정 순서 = stop10(7) → stop11(8) → stop20(9)
+    api.placePhoto(8, 11) // DAY1 stop2
+    api.placePhoto(9, 20) // DAY2
+    // 일정 순서 = stop10(7) → stop11(8) → stop20(9). 업로드 순서였다면 [9,8,7].
     expect(api.placedPhotoIds.value).toEqual([7, 8, 9])
   })
 
