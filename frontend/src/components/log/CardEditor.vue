@@ -275,6 +275,14 @@ function drawPadding(ctx, img, W, H) {
   ctx.drawImage(blurBg(img, W, H), 0, 0)
 }
 
+// fixed 여백 합성용 콘텐츠 캔버스 — 매 프레임 createElement 대신 재사용(드래그 중 GC 압박 감소).
+let contentCanvas = null
+function getContentCanvas(cw, ch) {
+  if (!contentCanvas) contentCanvas = document.createElement('canvas')
+  if (contentCanvas.width !== cw) contentCanvas.width = cw
+  if (contentCanvas.height !== ch) contentCanvas.height = ch
+  return contentCanvas
+}
 function redraw() {
   const el = canvasEl.value
   const sc = scene.value
@@ -282,16 +290,18 @@ function redraw() {
   if (!el || !sc || !img || !fontReady.value) return
   const { W: fw, H: fh } = canvasDims.value // 프레임(출력) 크기
   const { cw, ch, dx, dy } = contentRect.value
-  el.width = fw
-  el.height = fh
+  // 같은 값 재대입도 백버퍼를 재할당하므로 크기가 바뀔 때만. 잔상은 아래 renderCard clearRect /
+  //   drawPadding 전체덮기가 지운다.
+  if (el.width !== fw || el.height !== fh) {
+    el.width = fw
+    el.height = fh
+  }
   const ctx = el.getContext('2d', { willReadFrequently: true })
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   if (dx > 0 || dy > 0) {
     // fixed: 여백 채움 → 콘텐츠를 별도 캔버스에 그려 가운데 얹는다(export 와 동일).
     drawPadding(ctx, img, fw, fh)
-    const content = document.createElement('canvas')
-    content.width = cw
-    content.height = ch
+    const content = getContentCanvas(cw, ch)
     renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img })
     ctx.drawImage(content, dx, dy)
   } else {
@@ -410,9 +420,12 @@ function bulkSetVisible(vis) {
   }
 }
 
-// 추가 텍스트를 그린다(편집·export 공용 로직). 손글씨 폰트 + 크기·회전·색.
+const TEXT_LH = 1.4 // 줄 높이 배수(폰트 size 대비)
+// 추가 텍스트를 그린다(편집·export 공용 로직). 손글씨 폰트 + 크기·회전·색 + 여러 줄(\n).
 function paintText(ctx, t, W, H) {
   const size = Math.round(W * 0.05 * (t.size ?? 1))
+  const lines = String(t.text ?? '').split('\n')
+  const lh = size * TEXT_LH
   ctx.save()
   ctx.translate(t.x * W, t.y * H)
   ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
@@ -422,16 +435,23 @@ function paintText(ctx, t, W, H) {
   ctx.lineWidth = Math.max(2, W * 0.004)
   ctx.strokeStyle = 'rgba(0,0,0,0.45)'
   ctx.fillStyle = t.color ?? '#ffffff'
-  ctx.strokeText(t.text, 0, 0)
-  ctx.fillText(t.text, 0, 0)
+  const y0 = -((lines.length - 1) * lh) / 2 // 줄 블록을 중심에 세로 정렬
+  lines.forEach((ln, i) => {
+    const y = y0 + i * lh
+    ctx.strokeText(ln, 0, y)
+    ctx.fillText(ln, 0, y)
+  })
   ctx.restore()
 }
-// 텍스트 박스 메트릭(중심 기준 반폭/반높이, px). 회전 핸들 거리 포함.
+// 텍스트 박스 메트릭(중심 기준 반폭/반높이, px). 여러 줄 = 가장 긴 줄 폭 + 줄 수만큼 높이. 회전 핸들 거리 포함.
 function textMetrics(ctx, t, W) {
   const size = W * 0.05 * (t.size ?? 1)
   ctx.font = `${Math.round(size)}px "Ownglyph ooa", sans-serif`
-  const tw = ctx.measureText(t.text || ' ').width
-  return { size, hw: tw / 2 + size * 0.3, hh: size * 0.72, rotOff: Math.max(20, W * 0.032) }
+  const lines = String(t.text || ' ').split('\n')
+  const lh = size * TEXT_LH
+  const tw = Math.max(...lines.map((ln) => ctx.measureText(ln || ' ').width))
+  const totalH = Math.max(lh, lines.length * lh)
+  return { size, hw: tw / 2 + size * 0.3, hh: totalH / 2 + size * 0.08, rotOff: Math.max(20, W * 0.032) }
 }
 // 선택된 텍스트의 변형 박스(모서리=크기, 위 핸들=회전) — 캔버스에서 직접 조절.
 function drawTextBox(ctx, t, W, H) {
@@ -653,14 +673,15 @@ function onCanvasPointerDown(e) {
       return
     }
   }
-  // 2) 텍스트(위에서부터) — 박스 근사(회전 무시 축정렬)
+  // 2) 텍스트(위에서부터) — 박스 근사(회전 무시 축정렬). 여러 줄 = 가장 긴 줄 폭·줄 수 높이.
   for (let i = texts.value.length - 1; i >= 0; i--) {
     const t = texts.value[i]
     if (t.hidden) continue
     const fs = W * 0.05 * (t.size ?? 1)
     ctx.font = `${Math.round(fs)}px "Ownglyph ooa", sans-serif`
-    const w = ctx.measureText(t.text).width / W
-    const h = (fs * 1.4) / H
+    const tlines = String(t.text ?? '').split('\n')
+    const w = Math.max(...tlines.map((ln) => ctx.measureText(ln || ' ').width)) / W
+    const h = (fs * 1.4 * Math.max(1, tlines.length)) / H
     if (Math.abs(nx - t.x) <= w / 2 + 0.02 && Math.abs(ny - t.y) <= h / 2 + 0.01) {
       drag = { kind: 'text', id: t.id, dx: nx - t.x, dy: ny - t.y }
       selectText(t.id)
@@ -862,6 +883,9 @@ async function exportCurrent() {
   if (exporting.value || !photoImg.value) return
   exporting.value = true
   exportNote.value = ''
+  // 이 사진 기준으로 저장한다. export 는 비동기(await)라 그 사이 필름스트립 전환이 가능하므로,
+  // 합성 후 사진이 바뀌었으면(stale) 저장을 취소한다 — 잘못된 합성 PNG 다운로드 방지.
+  const exportId = currentId.value
   try {
     const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? []).filter((o) =>
       isObjectOn(o.itemId),
@@ -875,7 +899,12 @@ async function exportCurrent() {
       style: { toneDown: toneDown.value, outline: false },
     }
     const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value })
-    triggerDownload(await composeOverlays(blob), `triplog-card-${currentId.value}.png`)
+    const composed = await composeOverlays(blob)
+    if (currentId.value !== exportId) {
+      exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
+      return
+    }
+    triggerDownload(composed, `triplog-card-${exportId}.png`)
     exportNote.value = '저장 완료'
   } catch (e) {
     exportNote.value = `저장 실패: ${e.message}`
