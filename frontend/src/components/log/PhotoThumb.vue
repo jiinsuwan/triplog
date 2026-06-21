@@ -47,6 +47,7 @@ watch(() => props.photoId, loadPhoto, { immediate: true })
       :src="objectUrl"
       alt=""
       class="image"
+      draggable="false"
       @load="state = 'loaded'"
       @error="state = 'error'"
     />

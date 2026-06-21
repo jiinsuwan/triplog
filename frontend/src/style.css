@@ -1,4 +1,13 @@
 /* 전역 기본 스타일 (core). 컴포넌트 룩은 PrimeVue 테마(Aura)에 맡기고, 여기선 리셋만. */
+
+/* 카드 렌더용 손글씨 폰트(온글잎 ooa). 캔버스 measureText 가 폴백 메트릭으로 굳지 않도록
+   카드 렌더 전 document.fonts.ready 로 로드 완료를 기다린다. 라이선스 = public/fonts/LICENSE.txt */
+@font-face {
+  font-family: 'Ownglyph ooa';
+  src: url('/fonts/ownglyph-ooa.ttf') format('truetype');
+  font-display: swap;
+}
+
 :root {
   --sans: system-ui, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif;
   font-family: var(--sans);
