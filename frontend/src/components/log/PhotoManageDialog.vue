@@ -11,6 +11,7 @@ defineProps({
   tripId: { type: Number, default: null },
   photos: { type: Array, default: () => [] },
   removingIds: { type: Object, default: () => new Set() }, // 빼는 중인 photoId Set
+  error: { type: String, default: '' }, // 빼기 실패 안내
 })
 const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
 </script>
@@ -44,6 +45,7 @@ const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
           </button>
         </li>
       </ul>
+      <p v-if="error" class="err small">{{ error }}</p>
       <p class="muted small note">✕ = 이 여행에서 빼기(사진 자체는 남습니다). 중복·불필요한 사진을 정리하세요.</p>
     </section>
 
@@ -70,6 +72,11 @@ const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
 }
 .note {
   margin-top: 8px;
+}
+.err {
+  margin: 8px 0 0;
+  color: #f04452;
+  font-weight: 600;
 }
 .grid {
   list-style: none;

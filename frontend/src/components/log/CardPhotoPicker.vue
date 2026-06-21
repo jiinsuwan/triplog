@@ -29,13 +29,15 @@ const { days, loading, error, photos, stopsFlat, unplaced, placedPhotoIds, photo
 // 사진 관리 모달(이미 올린 사진 보기·빼기 + 새 업로드).
 const showManage = ref(false)
 const removingIds = ref(new Set())
+const manageError = ref('') // 사진 빼기 실패 안내(모달)
 async function onRemovePhoto(photoId) {
   if (removingIds.value.has(photoId)) return
   removingIds.value = new Set(removingIds.value).add(photoId)
+  manageError.value = ''
   try {
     await removeFromTrip(photoId)
   } catch {
-    /* 실패 — 다음 시도 */
+    manageError.value = '사진을 빼지 못했어요. 잠시 후 다시 시도해 주세요.'
   } finally {
     const s = new Set(removingIds.value)
     s.delete(photoId)
@@ -52,10 +54,11 @@ const outlineStatus = ref({}) // photoId -> 'PENDING' | 'READY' | 'FAILED'
 let pollTimer = null
 let disposed = false
 let pollStart = 0
-let polling = false
+let polling = false // "폴링 루프 활성" — 완료·deadline 으로 끝나면 false 로 되돌려 신규 사진에 재가동 가능
+const seenIds = new Set() // 이미 폴링 대상에 들어온 사진 id (신규 추가 감지용)
+const timedOut = ref(false) // deadline 으로 끝났는데 아직 PENDING 이 남은 경우(사용자 안내용)
 async function pollOutlines() {
   if (disposed) return
-  if (!pollStart) pollStart = performance.now()
   const pending = photos.value.map((p) => p.id).filter((id) => !isOutlineTerminal(outlineStatus.value[id]))
   await Promise.all(
     pending.map(async (id) => {
@@ -70,17 +73,33 @@ async function pollOutlines() {
   )
   if (disposed) return
   const stillPending = photos.value.some((p) => !isOutlineTerminal(outlineStatus.value[p.id]))
-  // 무한 대기 방지(워커 다운 시 영영 PENDING) — 90s deadline 후 중단(에디터가 이어서 폴링).
-  if (stillPending && performance.now() - pollStart < 90000) pollTimer = setTimeout(pollOutlines, 2500)
+  if (stillPending && performance.now() - pollStart < 90000) {
+    pollTimer = setTimeout(pollOutlines, 2500)
+  } else {
+    // 완료(전부 terminal) 또는 90s deadline 도달 → 루프 종료. deadline 인데 PENDING 남으면 표시.
+    polling = false
+    timedOut.value = stillPending
+  }
+}
+// 새 폴링 세션 시작(자체 90s 윈도우). 이미 활성이면 무시.
+function startPolling() {
+  if (polling || disposed) return
+  polling = true
+  timedOut.value = false
+  pollStart = performance.now()
+  pollOutlines()
 }
 watch(
   photos,
   (list) => {
-    // 사진 로드되면 한 번만 폴링 시작(setTimeout id 는 발사 후에도 truthy 라 가드로 못 씀 → polling 플래그).
-    if (list.length && !polling && !disposed) {
-      polling = true
-      pollOutlines()
-    }
+    if (!list.length || disposed) return
+    // 신규 추가된 사진(모달 업로드 등)이 있고 미완료가 있을 때만 (재)시작.
+    //   워커 다운으로 영영 PENDING 인 기존 사진은 신규가 아니라 재가동 안 함(무한 폴링 방지).
+    const ids = list.map((p) => p.id)
+    const hasNew = ids.some((id) => !seenIds.has(id))
+    ids.forEach((id) => seenIds.add(id))
+    const pendingNow = list.some((p) => !isOutlineTerminal(outlineStatus.value[p.id]))
+    if (hasNew && pendingNow) startPolling()
   },
   { immediate: true },
 )
@@ -98,6 +117,7 @@ const outlineSummary = computed(() => {
     failed,
     total: ids.length,
     done: ids.length > 0 && ids.every((id) => isOutlineTerminal(outlineStatus.value[id])),
+    timedOut: timedOut.value, // deadline 후에도 PENDING 남음(처리 지연)
   }
 })
 
@@ -134,6 +154,7 @@ function proceed() {
       <div class="bar">
         <span class="prep" :class="{ done: outlineSummary.done }">
           <template v-if="outlineSummary.done">✓ 사진 준비 완료</template>
+          <template v-else-if="outlineSummary.timedOut">⏳ 처리가 지연돼요 · {{ outlineSummary.ready }}/{{ outlineSummary.total }} (에디터에서 이어집니다)</template>
           <template v-else>AI가 사진을 준비하고 있어요 · {{ outlineSummary.ready }}/{{ outlineSummary.total }}</template>
           <template v-if="outlineSummary.failed"> · 실패 {{ outlineSummary.failed }}</template>
         </span>
@@ -194,6 +215,7 @@ function proceed() {
       :trip-id="tripId"
       :photos="photos"
       :removing-ids="removingIds"
+      :error="manageError"
       @remove="onRemovePhoto"
       @uploaded="refreshPhotos"
     />
