@@ -91,8 +91,10 @@ const routes = [
   },
   {
     // 카드 생성 위저드 (log 트랙, S3-LOG-06). 단일 라우트 + ?step= 쿼리.
-    // tripId 는 path 가 아닌 query 로 받으므로 workspace 가드는 여기선 동작하지 않는다
-    // (가드는 params.tripId 가 있을 때만 작동) — 'record' 는 워크스페이스 분류 라벨.
+    // tripId 는 path 가 아닌 query 로 받으므로 workspaceGuard(params.tripId 기준)는 여기서 동작하지 않는다.
+    //   이는 의도된 동작이다 — 카드 생성은 trip status(planning/record)로 게이트하지 않고,
+    //   "사진이 있으면" 만든다(사진 0이면 화면이 빈 상태로 안내). 'record' 는 분류 라벨일 뿐
+    //   접근 제어 수단이 아니다. (PR #100 리뷰 P2: planning trip 우회 경로 우려 → 의도 명시)
     path: '/cards/new',
     name: 'card-create',
     component: () => import('@/views/log/CardCreateView.vue'),

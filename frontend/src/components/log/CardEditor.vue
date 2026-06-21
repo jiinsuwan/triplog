@@ -182,13 +182,19 @@ const scene = computed(() => {
     captions: { objects: visibleObjects, closing: closing.value },
     canvas: { W: contentRect.value.cw, H: contentRect.value.ch },
     photo: { w: img.naturalWidth, h: img.naturalHeight },
-    style: { toneDown: toneDown.value },
+    // 외곽선은 에디터 paintOutlines 가 전담(두께·점선·흰색·visibility 조절) — renderCore sketch 외곽선 끔.
+    style: { toneDown: toneDown.value, outline: false },
   })
 })
 
-function drawOutlines(ctx, img) {
-  // 외곽선은 프레임 전체가 아니라 사진 콘텐츠 사각형(레터박스 안쪽)에 맞춘다.
-  const { cw, ch, dx, dy } = contentRect.value
+// 외곽선 패스(카드 최종 외곽선). 미리보기·export 공용 — 같은 소스라 미리보기=저장 일치.
+//   forExport=true 면 편집 보조(번호 배지·선택 빨강) 없이 흰 외곽선만. frameW/H = 그릴 캔버스 크기
+//   (미리보기=canvasDims, export=PNG bmp). 외곽선은 레터박스 안쪽 사진 콘텐츠 사각형에 맞춘다.
+function paintOutlines(ctx, img, frameW, frameH, { forExport = false } = {}) {
+  const { cw, ch, dx, dy } =
+    format.value === 'fixed'
+      ? computeFitRect(img.naturalWidth, img.naturalHeight, frameW, frameH)
+      : { cw: frameW, ch: frameH, dx: 0, dy: 0 }
   const W = cw
   const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, cw, ch)
   const base = Math.max(1, W * 0.002)
@@ -198,8 +204,8 @@ function drawOutlines(ctx, img) {
   for (const item of items.value) {
     no += 1 // 레이어 목록과 같은 번호(숨겨도 번호 유지)
     if (!isObjectOn(item.id)) continue
-    const sel = item.id === selectedItemId.value
-    // 외곽선은 카드 최종처럼 흰색. 선택된 것만 빨강으로 구분(편집 피드백).
+    const sel = !forExport && item.id === selectedItemId.value
+    // 외곽선은 카드 최종처럼 흰색. (편집 미리보기에서) 선택된 것만 빨강으로 구분.
     const color = sel ? 'rgba(240,68,82,0.95)' : 'rgba(255,255,255,0.96)'
 
     ctx.save()
@@ -220,8 +226,8 @@ function drawOutlines(ctx, img) {
     }
     ctx.restore()
 
-    // 번호 배지(객체 중심) — 레이어와 매칭. 편집 보조라 export 에는 안 들어간다.
-    if (Array.isArray(item.center)) {
+    // 번호 배지(객체 중심) — 레이어 매칭용 편집 보조. export 에는 안 들어간다.
+    if (!forExport && Array.isArray(item.center)) {
       const [cx, cy] = cf.ptPx(item.center[0], item.center[1])
       const r = Math.max(11, W * 0.016)
       ctx.save()
@@ -291,7 +297,7 @@ function redraw() {
   } else {
     renderCard(ctx, sc, { photo: img }) // native: 프레임 전체가 콘텐츠
   }
-  drawOutlines(ctx, img)
+  paintOutlines(ctx, img, fw, fh)
   drawLines(ctx, { W: fw, H: fh })
   drawTexts(ctx, { W: fw, H: fh })
 }
@@ -867,7 +873,7 @@ async function exportCurrent() {
       style: { toneDown: toneDown.value },
     }
     const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value })
-    triggerDownload(await composeTexts(blob), `triplog-card-${currentId.value}.png`)
+    triggerDownload(await composeOverlays(blob), `triplog-card-${currentId.value}.png`)
     exportNote.value = '저장 완료'
   } catch (e) {
     exportNote.value = `저장 실패: ${e.message}`
@@ -876,12 +882,17 @@ async function exportCurrent() {
   }
 }
 
-// export 결과(PNG blob) 위에 선·텍스트를 합성한다(렌더 모듈은 이 요소들을 모르므로 후처리).
+// export 결과(PNG blob) 위에 외곽선·선·텍스트를 합성한다(렌더 모듈은 이 요소들을 모르므로 후처리).
+// 외곽선은 미리보기와 동일한 paintOutlines 로 그려 미리보기=저장을 맞춘다(문구 유무 무관).
 // 좌표는 프레임(출력 크기) 기준 정규화 — 미리보기와 export 프레임이 같아 native·fixed 모두 정확.
-async function composeTexts(blob) {
+async function composeOverlays(blob) {
+  const img = photoImg.value
   const vText = texts.value.filter((t) => !t.hidden && t.text.trim())
   const vLine = lines.value.filter((l) => !l.hidden)
-  if (!vText.length && !vLine.length) return blob
+  const hasOutline = items.value.some(
+    (it) => isObjectOn(it.id) && Array.isArray(it.polygons) && it.polygons.length,
+  )
+  if (!vText.length && !vLine.length && !hasOutline) return blob
   try {
     // 폰트가 아직 안 굳었으면 폴백(sans-serif)으로 구워지므로, 합성 전에 손글씨 폰트를 보장한다.
     try {
@@ -895,8 +906,9 @@ async function composeTexts(blob) {
     cv.height = bmp.height
     const ctx = cv.getContext('2d')
     ctx.drawImage(bmp, 0, 0)
-    for (const l of vLine) paintLine(ctx, l, bmp.width, bmp.height) // 선 먼저
-    for (const t of vText) paintText(ctx, t, bmp.width, bmp.height) // 텍스트는 위에
+    if (img && hasOutline) paintOutlines(ctx, img, bmp.width, bmp.height, { forExport: true }) // 외곽선(맨 아래)
+    for (const l of vLine) paintLine(ctx, l, bmp.width, bmp.height) // 선
+    for (const t of vText) paintText(ctx, t, bmp.width, bmp.height) // 텍스트(위)
     return await new Promise((res) => cv.toBlob(res, 'image/png'))
   } catch {
     return blob
