@@ -12,6 +12,7 @@ import { buildScene } from '@/card/render/buildScene'
 import { renderCard } from '@/card/render/renderCore'
 import { exportCardPng, computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
+import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
 
 const props = defineProps({ photoIds: { type: Array, default: () => [] } })
@@ -91,6 +92,18 @@ const items = computed(() => {
   const o = card.outlines[currentId.value]
   return o?.status === 'READY' && Array.isArray(o.items) ? o.items : []
 })
+
+// 사진에 자동 외곽선이 없다(실패했거나 인식 0개) → 텍스트·선으로 꾸미는 사진.
+function hasNoOutline(id) {
+  const o = card.outlines[id]
+  return o?.status === 'FAILED' || (o?.status === 'READY' && !(Array.isArray(o.items) && o.items.length))
+}
+// 캔버스 위 도구 무관 폴백 안내. 처리 중(PENDING)·미확정은 제외(재폴링/안내가 담당).
+const fallbackHint = computed(() => {
+  const status = card.outlines[currentId.value]?.status
+  if (status == null || status === 'PENDING') return null
+  return hasNoOutline(currentId.value) ? '이 사진은 텍스트와 선으로 자유롭게 꾸며보세요' : null
+})
 const captionByItem = computed(() => {
   const map = {}
   for (const o of card.captions[currentId.value]?.response?.objects ?? []) map[o.itemId] = o
@@ -132,6 +145,23 @@ const layers = computed(() => {
 let disposed = false
 onScopeDispose(() => {
   disposed = true
+})
+
+// 진입 시 처리 미완(PENDING)으로 넘어온 사진을 1회만 재조회한다(배치 화면 폴링이
+// deadline 으로 끊겼을 수 있다 — 그새 워커가 끝냈으면 반영). 무한 폴링 아님 = 진입 1회.
+onMounted(async () => {
+  for (const id of props.photoIds) {
+    const s = card.outlines[id]?.status
+    if (s != null && s !== 'PENDING') continue
+    try {
+      const res = await fetchPhotoOutline(id)
+      if (!disposed && (res.status === 'READY' || res.status === 'FAILED')) {
+        card.setOutline(id, { status: res.status, items: res.items })
+      }
+    } catch {
+      /* 외곽선 없이 수동 진행 */
+    }
+  }
 })
 
 onMounted(async () => {
@@ -1015,6 +1045,7 @@ watch(
           <button :class="{ on: !isSelectMode }" @click="setMode('create')">＋ 생성</button>
         </div>
         <div class="stage-canvas">
+          <p v-if="fallbackHint" class="fallback-hint">{{ fallbackHint }}</p>
           <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
         </div>
         <div class="zoom-bar">
@@ -1088,11 +1119,12 @@ watch(
               <label class="row">간격 <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span></label>
             </template>
             <Button label="✨ 문구 생성" size="small" severity="secondary" class="full"
-              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !!card.captions[currentId]"
+              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !items.length || !!card.captions[currentId]"
               @click="generateCaption" />
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
-            <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
-            <p class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
+            <p v-else-if="captionFailed[currentId]" class="warn small">문구를 불러오지 못했어요. 다시 시도하거나 직접 꾸며도 좋아요.</p>
+            <p v-else-if="!items.length" class="muted small">텍스트와 선으로 자유롭게 꾸며보세요.</p>
+            <p v-else class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
           </div>
           <div v-else-if="activeTool === 'text'" class="tool-block">
             <p class="muted small">캔버스를 클릭해 텍스트를 추가하세요.</p>
@@ -1168,6 +1200,7 @@ watch(
         <li v-for="(id, i) in photoIds" :key="id">
           <button class="film" :class="{ on: i === current }" @click="current = i">
             <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
+            <span v-if="hasNoOutline(id)" class="film-badge">직접 꾸미기</span>
           </button>
           <button class="film-status" :class="{ done: isDone(id) }" :title="isDone(id) ? '완성 해제' : '완성으로 표시'" @click="toggleDone(id)">
             {{ isDone(id) ? '✓ 완성' : '미완성' }}
@@ -1294,9 +1327,25 @@ watch(
     #eef1f4;
 }
 .stage-canvas {
+  position: relative;
   margin: auto; /* 작을 때 가운데, 클 때 스크롤 */
   display: flex;
   align-items: center;
+}
+.fallback-hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 99px;
+  background: rgba(25, 31, 40, 0.72);
+  color: #fff;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 .card-canvas {
   max-height: 100%;
@@ -1765,6 +1814,18 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.film-badge {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(49, 130, 246, 0.92);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  pointer-events: none;
 }
 /* 사진별 완성 토글 배지(썸네일 아래) */
 .film-status {

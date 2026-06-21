@@ -62,6 +62,11 @@ public class CardCaptionController {
         }
         List<CardCaptionItem> items =
                 objectMapper.convertValue(outline.items(), new TypeReference<List<CardCaptionItem>>() {});
+        // 인식된 피사체가 0개면 문구를 만들 객체가 없다 — LLM(GMS) 호출 전 차단(크레딧 보호).
+        if (items.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "인식된 피사체가 없어 카드 문구를 만들 수 없습니다.");
+        }
         return ApiResponse.success("Card caption.", cardCaptionService.generate(items));
     }
 }
