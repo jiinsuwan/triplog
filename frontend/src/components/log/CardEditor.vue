@@ -88,6 +88,19 @@ const contentRect = computed(() => {
   return { cw: img.naturalWidth, ch: img.naturalHeight, dx: 0, dy: 0 }
 })
 
+// 줌 상태(1 = stage 에 맞춘 100%). watch/redraw 보다 먼저 선언해 TDZ 방지.
+const zoom = ref(1)
+const stageEl = ref(null)
+const stageSize = ref({ w: 0, h: 0 })
+// 캔버스 내부 해상도(canvasDims)를 stage 에 맞추는 배율. 맞춤 = zoom 1 = 100%.
+const fitScale = computed(() => {
+  const { W, H } = canvasDims.value
+  const sw = stageSize.value.w - 32 // .ed-stage padding(16*2) 제외
+  const sh = stageSize.value.h - 32
+  if (!(W > 0) || !(H > 0) || sw <= 0 || sh <= 0) return 1
+  return Math.min(sw / W, sh / H)
+})
+
 const items = computed(() => {
   const o = card.outlines[currentId.value]
   return o?.status === 'READY' && Array.isArray(o.items) ? o.items : []
@@ -102,7 +115,7 @@ function hasNoOutline(id) {
 const fallbackHint = computed(() => {
   const status = card.outlines[currentId.value]?.status
   if (status == null || status === 'PENDING') return null
-  return hasNoOutline(currentId.value) ? '이 사진은 텍스트와 선으로 자유롭게 꾸며보세요' : null
+  return hasNoOutline(currentId.value) ? '객체 인식이 잘 되지 않아 외곽선을 찾지 못했어요' : null
 })
 const captionByItem = computed(() => {
   const map = {}
@@ -188,6 +201,7 @@ let reqSeq = 0
 async function loadCurrent() {
   const id = currentId.value
   if (!id) return
+  zoom.value = 1 // 사진 전환 시 맞춤(100%)으로 리셋 — 사진별 배율 간섭 방지
   const seq = ++reqSeq
   photoImg.value = null
   selectedItemId.value = null
@@ -327,6 +341,10 @@ function redraw() {
     el.width = fw
     el.height = fh
   }
+  // 표시 크기 = 맞춤배율 × zoom. 내부 해상도와 같은 시점에 설정해 사진 전환 시 stretch 방지.
+  const dispScale = fitScale.value * zoom.value
+  el.style.width = Math.round(fw * dispScale) + 'px'
+  el.style.height = Math.round(fh * dispScale) + 'px'
   const ctx = el.getContext('2d', { willReadFrequently: true })
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   if (dx > 0 || dy > 0) {
@@ -358,7 +376,7 @@ onScopeDispose(() => {
 
 watch(currentId, loadCurrent, { immediate: true })
 watch(
-  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor],
+  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor, zoom, stageSize],
   scheduleRedraw,
   { flush: 'post' },
 )
@@ -866,7 +884,17 @@ function toggleDone(id) {
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
 
 // 캔버스 줌(확대/축소/맞춤). 하단 필름스트립 썸네일 크기 배율.
-const zoom = ref(1)
+let stageRo = null
+onMounted(() => {
+  if (!stageEl.value) return
+  const measure = () => {
+    if (stageEl.value) stageSize.value = { w: stageEl.value.clientWidth, h: stageEl.value.clientHeight }
+  }
+  stageRo = new ResizeObserver(measure)
+  stageRo.observe(stageEl.value)
+  measure()
+})
+onScopeDispose(() => stageRo?.disconnect())
 function zoomBy(d) {
   zoom.value = Math.min(4, Math.max(0.25, Math.round((zoom.value + d) * 20) / 20))
 }
@@ -1039,16 +1067,14 @@ watch(
       </nav>
 
       <!-- 중: 캔버스 (줌) -->
-      <section class="ed-stage">
+      <section class="ed-stage" ref="stageEl">
         <!-- 사진 위 플로팅 모드 토글 -->
         <div class="stage-modes">
           <button :class="{ on: isSelectMode }" @click="setMode('select')">↖ 선택</button>
           <button :class="{ on: !isSelectMode }" @click="setMode('create')">＋ 생성</button>
         </div>
-        <div class="stage-canvas">
-          <p v-if="fallbackHint" class="fallback-hint">{{ fallbackHint }}</p>
-          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
-        </div>
+        <p v-if="fallbackHint" class="fallback-hint">{{ fallbackHint }}</p>
+        <canvas v-show="photoImg" ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
         <div class="zoom-bar">
           <button title="축소" @click="zoomBy(-0.25)">−</button>
           <span class="zoom-v">{{ Math.round(zoom * 100) }}%</span>
@@ -1124,7 +1150,7 @@ watch(
               @click="generateCaption" />
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
             <p v-else-if="captionFailed[currentId]" class="warn small">문구를 불러오지 못했어요. 다시 시도하거나 직접 꾸며도 좋아요.</p>
-            <p v-else-if="hasNoOutline(currentId)" class="muted small">텍스트와 선으로 자유롭게 꾸며보세요.</p>
+            <p v-else-if="hasNoOutline(currentId)" class="muted small">객체 인식이 잘 되지 않아 외곽선을 찾지 못했어요. 텍스트·선으로 꾸밀 수 있어요.</p>
             <p v-else-if="!items.length" class="muted small">사진을 준비하고 있어요…</p>
             <p v-else class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
           </div>
@@ -1320,10 +1346,8 @@ watch(
   min-width: 0;
   min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 16px;
-  overflow: auto; /* 줌 확대 시 스크롤 */
+  overflow: auto; /* 줌 확대 시 스크롤. 가운데 정렬은 캔버스 margin:auto (justify/align center 는 overflow 좌상단을 잘라 스크롤 불가) */
   background:
     radial-gradient(circle, #d6dbe1 1px, transparent 1px) 0 0 / 18px 18px,
     #eef1f4;
@@ -1350,10 +1374,8 @@ watch(
   pointer-events: none;
 }
 .card-canvas {
-  max-height: 100%;
-  max-width: 100%;
-  height: auto;
-  width: auto;
+  display: block; /* 표시 크기는 redraw 가 el.style 로 stage 에 맞춰 px 제어 */
+  margin: auto; /* flex 컨테이너 가운데 + 확대 시 좌상단까지 스크롤 접근 가능 */
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   background: #fff;
