@@ -12,6 +12,7 @@ import { buildScene } from '@/card/render/buildScene'
 import { renderCard } from '@/card/render/renderCore'
 import { exportCardPng, computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
+import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
 
 const props = defineProps({ photoIds: { type: Array, default: () => [] } })
@@ -87,9 +88,34 @@ const contentRect = computed(() => {
   return { cw: img.naturalWidth, ch: img.naturalHeight, dx: 0, dy: 0 }
 })
 
+// 줌 상태(1 = stage 에 맞춘 100%). watch/redraw 보다 먼저 선언해 TDZ 방지.
+const zoom = ref(1)
+const stageEl = ref(null)
+const stageSize = ref({ w: 0, h: 0 })
+// 캔버스 내부 해상도(canvasDims)를 stage 에 맞추는 배율. 맞춤 = zoom 1 = 100%.
+const fitScale = computed(() => {
+  const { W, H } = canvasDims.value
+  const sw = stageSize.value.w - 32 // .ed-stage padding(16*2) 제외
+  const sh = stageSize.value.h - 32
+  if (!(W > 0) || !(H > 0) || sw <= 0 || sh <= 0) return 1
+  return Math.min(sw / W, sh / H)
+})
+
 const items = computed(() => {
   const o = card.outlines[currentId.value]
   return o?.status === 'READY' && Array.isArray(o.items) ? o.items : []
+})
+
+// 사진에 자동 외곽선이 없다(실패했거나 인식 0개) → 텍스트·선으로 꾸미는 사진.
+function hasNoOutline(id) {
+  const o = card.outlines[id]
+  return o?.status === 'FAILED' || (o?.status === 'READY' && !(Array.isArray(o.items) && o.items.length))
+}
+// 캔버스 위 도구 무관 폴백 안내. 처리 중(PENDING)·미확정은 제외(재폴링/안내가 담당).
+const fallbackHint = computed(() => {
+  const status = card.outlines[currentId.value]?.status
+  if (status == null || status === 'PENDING') return null
+  return hasNoOutline(currentId.value) ? '객체 인식이 잘 되지 않아 외곽선을 찾지 못했어요' : null
 })
 const captionByItem = computed(() => {
   const map = {}
@@ -134,6 +160,24 @@ onScopeDispose(() => {
   disposed = true
 })
 
+// 진입 시 처리 미완(PENDING)으로 넘어온 사진을 1회만 재조회한다(배치 화면 폴링이
+// deadline 으로 끊겼을 수 있다 — 그새 워커가 끝냈으면 반영). 무한 폴링 아님 = 진입 1회.
+onMounted(async () => {
+  for (const id of props.photoIds) {
+    if (disposed) break // 진입 직후 이탈 시 남은 재조회 중단(불필요 호출 방지)
+    const s = card.outlines[id]?.status
+    if (s != null && s !== 'PENDING') continue
+    try {
+      const res = await fetchPhotoOutline(id)
+      if (!disposed && (res.status === 'READY' || res.status === 'FAILED')) {
+        card.setOutline(id, { status: res.status, items: res.items })
+      }
+    } catch {
+      /* 외곽선 없이 수동 진행 */
+    }
+  }
+})
+
 onMounted(async () => {
   try {
     await document.fonts.load('40px "Ownglyph ooa"')
@@ -157,6 +201,7 @@ let reqSeq = 0
 async function loadCurrent() {
   const id = currentId.value
   if (!id) return
+  zoom.value = 1 // 사진 전환 시 맞춤(100%)으로 리셋 — 사진별 배율 간섭 방지
   const seq = ++reqSeq
   photoImg.value = null
   selectedItemId.value = null
@@ -296,6 +341,10 @@ function redraw() {
     el.width = fw
     el.height = fh
   }
+  // 표시 크기 = 맞춤배율 × zoom. 내부 해상도와 같은 시점에 설정해 사진 전환 시 stretch 방지.
+  const dispScale = fitScale.value * zoom.value
+  el.style.width = Math.round(fw * dispScale) + 'px'
+  el.style.height = Math.round(fh * dispScale) + 'px'
   const ctx = el.getContext('2d', { willReadFrequently: true })
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   if (dx > 0 || dy > 0) {
@@ -327,7 +376,7 @@ onScopeDispose(() => {
 
 watch(currentId, loadCurrent, { immediate: true })
 watch(
-  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor],
+  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor, zoom, stageSize],
   scheduleRedraw,
   { flush: 'post' },
 )
@@ -835,7 +884,17 @@ function toggleDone(id) {
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
 
 // 캔버스 줌(확대/축소/맞춤). 하단 필름스트립 썸네일 크기 배율.
-const zoom = ref(1)
+let stageRo = null
+onMounted(() => {
+  if (!stageEl.value) return
+  const measure = () => {
+    if (stageEl.value) stageSize.value = { w: stageEl.value.clientWidth, h: stageEl.value.clientHeight }
+  }
+  stageRo = new ResizeObserver(measure)
+  stageRo.observe(stageEl.value)
+  measure()
+})
+onScopeDispose(() => stageRo?.disconnect())
 function zoomBy(d) {
   zoom.value = Math.min(4, Math.max(0.25, Math.round((zoom.value + d) * 20) / 20))
 }
@@ -1008,15 +1067,14 @@ watch(
       </nav>
 
       <!-- 중: 캔버스 (줌) -->
-      <section class="ed-stage">
+      <section class="ed-stage" ref="stageEl">
         <!-- 사진 위 플로팅 모드 토글 -->
         <div class="stage-modes">
           <button :class="{ on: isSelectMode }" @click="setMode('select')">↖ 선택</button>
           <button :class="{ on: !isSelectMode }" @click="setMode('create')">＋ 생성</button>
         </div>
-        <div class="stage-canvas">
-          <canvas ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" :style="{ zoom }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
-        </div>
+        <p v-if="fallbackHint" class="fallback-hint">{{ fallbackHint }}</p>
+        <canvas v-show="photoImg" ref="canvasEl" class="card-canvas" :class="{ grab: texts.length || lines.length, draw: activeTool === 'line' }" aria-label="카드 편집 캔버스" @pointerdown="onCanvasPointerDown" />
         <div class="zoom-bar">
           <button title="축소" @click="zoomBy(-0.25)">−</button>
           <span class="zoom-v">{{ Math.round(zoom * 100) }}%</span>
@@ -1088,11 +1146,13 @@ watch(
               <label class="row">간격 <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span></label>
             </template>
             <Button label="✨ 문구 생성" size="small" severity="secondary" class="full"
-              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !!card.captions[currentId]"
+              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !items.length || !!card.captions[currentId]"
               @click="generateCaption" />
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
-            <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
-            <p class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
+            <p v-else-if="captionFailed[currentId]" class="warn small">문구를 불러오지 못했어요. 다시 시도하거나 직접 꾸며도 좋아요.</p>
+            <p v-else-if="hasNoOutline(currentId)" class="muted small">객체 인식이 잘 되지 않아 외곽선을 찾지 못했어요. 텍스트·선으로 꾸밀 수 있어요.</p>
+            <p v-else-if="!items.length" class="muted small">사진을 준비하고 있어요…</p>
+            <p v-else class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
           </div>
           <div v-else-if="activeTool === 'text'" class="tool-block">
             <p class="muted small">캔버스를 클릭해 텍스트를 추가하세요.</p>
@@ -1168,6 +1228,7 @@ watch(
         <li v-for="(id, i) in photoIds" :key="id">
           <button class="film" :class="{ on: i === current }" @click="current = i">
             <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
+            <span v-if="hasNoOutline(id)" class="film-badge">직접 꾸미기</span>
           </button>
           <button class="film-status" :class="{ done: isDone(id) }" :title="isDone(id) ? '완성 해제' : '완성으로 표시'" @click="toggleDone(id)">
             {{ isDone(id) ? '✓ 완성' : '미완성' }}
@@ -1285,24 +1346,36 @@ watch(
   min-width: 0;
   min-height: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 16px;
-  overflow: auto; /* 줌 확대 시 스크롤 */
+  overflow: auto; /* 줌 확대 시 스크롤. 가운데 정렬은 캔버스 margin:auto (justify/align center 는 overflow 좌상단을 잘라 스크롤 불가) */
   background:
     radial-gradient(circle, #d6dbe1 1px, transparent 1px) 0 0 / 18px 18px,
     #eef1f4;
 }
 .stage-canvas {
+  position: relative;
   margin: auto; /* 작을 때 가운데, 클 때 스크롤 */
   display: flex;
   align-items: center;
 }
+.fallback-hint {
+  position: absolute;
+  top: 52px; /* 상단 선택/생성 토글 아래 */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 99px;
+  background: rgba(25, 31, 40, 0.72);
+  color: #fff;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .card-canvas {
-  max-height: 100%;
-  max-width: 100%;
-  height: auto;
-  width: auto;
+  display: block; /* 표시 크기는 redraw 가 el.style 로 stage 에 맞춰 px 제어 */
+  margin: auto; /* flex 컨테이너 가운데 + 확대 시 좌상단까지 스크롤 접근 가능 */
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   background: #fff;
@@ -1765,6 +1838,18 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.film-badge {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(49, 130, 246, 0.92);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  pointer-events: none;
 }
 /* 사진별 완성 토글 배지(썸네일 아래) */
 .film-status {

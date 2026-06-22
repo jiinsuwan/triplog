@@ -83,4 +83,23 @@ describe('useCardStore', () => {
       expect(card.photoIds).toEqual([])
     })
   })
+
+  describe('setOutline / setCaption — 폴링·문구 결과 보관(불변 갱신)', () => {
+    it('setOutline — 새 키 추가가 기존 키를 보존하고 새 참조로 갱신한다', () => {
+      const card = useCardStore()
+      card.setOutline(1, { status: 'READY', items: [] })
+      const first = card.outlines
+      card.setOutline(2, { status: 'FAILED', items: null })
+      expect(card.outlines[1]).toEqual({ status: 'READY', items: [] })
+      expect(card.outlines[2]).toEqual({ status: 'FAILED', items: null })
+      expect(card.outlines).not.toBe(first)
+    })
+
+    it('setCaption — 세션 캐시에 결과를 보관한다(같은 사진 재호출 방지용)', () => {
+      const card = useCardStore()
+      const data = { response: { objects: [], closing: null }, warnings: [] }
+      card.setCaption(7, data)
+      expect(card.captions[7]).toEqual(data)
+    })
+  })
 })

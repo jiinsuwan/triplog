@@ -90,6 +90,14 @@ describe('useOutlinePolling 상태머신', () => {
     expect(h.summary.value.done).toBe(true)
   })
 
+  it('모두 FAILED 여도 timeout 아니라 finished 로 끝난다(#75 폴백: 전체 실패는 막힘 아님)', async () => {
+    const h = setup({ 1: ['FAILED'], 2: ['FAILED'] })
+    await flush()
+    expect(h.finished.value).toBe(true)
+    expect(h.timedOut.value).toBe(false)
+    expect(h.summary.value.done).toBe(true)
+  })
+
   it('PENDING→READY 전이 후 finished', async () => {
     const h = setup({ 1: ['PENDING', 'READY'], 2: ['READY'] })
     await flush()
