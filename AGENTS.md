@@ -13,9 +13,9 @@ TripLog는 "AI 기능이 있는 여행 서비스"가 아니라, **AI agent를 �
 
 ---
 
-> 🟢 **현재 단계 (2026-06-12)**: **Sprint 3 시작** — [`docs/sprints/sprint-3.md`](docs/sprints/sprint-3.md). 일정 & 카드 생성 → **P0 완성**. Sprint 2 완료(회고 = [sprint-2.md](docs/sprints/sprint-2.md)).
+> 🟢 **현재 단계 (2026-06-22)**: **Sprint 4 시작** — [`docs/sprints/sprint-4.md`](docs/sprints/sprint-4.md). 디자인 반영 · 필수 완비 · 제출 마무리. Sprint 3 완료(회고 = [sprint-3.md](docs/sprints/sprint-3.md)).
 >
-> **다음 할 일**: sprint-3.md 기준 **Issue 발행**(분담: log 담당자 = core+log / trip 담당자 = trip — 발행자가 본문 작성) 후 자기 트랙 진행 ([conventions §1-2](docs/conventions.md)). **프로세스 변경(S2 회고): self-merge 폐지 → 상호 리뷰(§1-3), PR 발행 = 사람 확인 후 + reviewer 지정 필수.** 프론트 정본 = [frontend-structure.md](docs/frontend-structure.md)(**와이어프레임 v3 채택**) + [목업](docs/design/trip-planner-flow.html).
+> **다음 할 일**: sprint-4.md 기준 **이슈 분해·발행**(분담: log 담당자 = core+log / trip 담당자 = trip — 발행자가 본문 작성) 후 자기 트랙 진행 ([conventions §1-2](docs/conventions.md)). 진행 순서 = 디자인 반영 → 필수 완비 → 추가(되는대로) → 산출물. **프로세스: 상호 리뷰(§1-3), PR 발행 = 사람 확인 후 + reviewer 지정 필수.** 프론트 정본 = [frontend-structure.md](docs/frontend-structure.md)(와이어프레임 v3) + [목업](docs/design/trip-planner-flow.html), 디자인 확정 진행 중.
 
 ### 🚦 세션 진입 절차 — 이 순서로 시작한다 (맥락 없이 문서만으로 따라갈 수 있어야 함)
 
