@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripLog — LOGS 추억 목록</title>
+<link rel="stylesheet" href="design-system.css">
+<style>
+  body{background:var(--bg);padding:0 0 60px}
+  .pagehead{max-width:1080px;margin:10px auto 0;padding:0 22px;color:var(--ink-faint);font-size:12px}
+  .pagehead b{color:var(--ink-sub)}
+  .wrap{max-width:1080px;margin:0 auto;padding:6px 22px 0}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;margin:14px 0 6px}
+  .head h1{font-size:24px;font-weight:800;letter-spacing:-.5px}
+  .head h1 .ds-hand{color:var(--accent);font-weight:400;font-size:26px;margin-left:4px}
+  .head .sub{color:var(--ink-sub);font-size:13px;margin-top:5px}
+  .filters{display:flex;gap:6px}
+  .filters button{border:1px solid var(--line);background:var(--paper);color:var(--ink-sub);border-radius:8px;
+    padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+  .filters button.on{background:var(--ink);border-color:var(--ink);color:var(--on-fill)}
+  /* 폴라로이드 그리드 = design-system .polaroid 재사용(크기만 화면 지정) */
+  .board{display:grid;grid-template-columns:repeat(4,minmax(0,232px));justify-content:center;gap:32px 26px;margin-top:30px}
+  .board .polaroid{--pola-w:232px;transition:transform .15s}
+  .board .polaroid:hover{transform:translateY(-4px)}
+  .board .polaroid.empty .ph-plus{color:var(--ink-faint);font-size:.85em;text-align:center;line-height:1.5;font-weight:700}
+  .hint{text-align:center;color:var(--ink-faint);font-size:11.5px;margin-top:34px}
+  .doc-note{max-width:1080px;margin:30px auto 0;padding:14px 22px;color:var(--ink-faint);font-size:12px;
+    background:#fff8;border:1px dashed var(--line);border-radius:10px}
+  .doc-note b{color:var(--ink-sub)} .doc-note ul{margin:6px 0 0;padding-left:17px} .doc-note li{margin:2.5px 0}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">Trip<b>Log</b></div>
+    <div class="tabs"><a href="#">HOME</a><a href="#">TRIPS</a><a class="on" href="#">LOGS</a></div>
+    <div class="search">추억·여행 검색</div>
+    <div class="avatar">지</div>
+  </div>
+
+  <p class="pagehead"><b>LOGS 추억 목록</b> — 추억(여행 1개) = 폴라로이드 한 장. 클릭 = 추억 상세(팝업). design-system 컴포넌트 재사용.</p>
+
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1>추억 <span class="ds-hand">한 장 한 장</span></h1>
+        <p class="sub">다녀온 여행을 카드로 남긴 기록 · 완성 4 · 기록 중 2</p>
+      </div>
+      <div class="filters">
+        <button class="on">전체</button>
+        <button>최근순</button>
+        <button>연도별</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="polaroid"><div class="photo" style="background:radial-gradient(80% 70% at 60% 35%,#d39a5a,#9a4b2a 60%,#5a2c18)"></div><div class="cap"><div class="name">교토 단풍 기행</div><div class="meta">교토 · 2023.11</div><div class="tags">#단풍 #사찰</div><span class="done-stamp">COMPLETE</span></div></div>
+      <div class="polaroid"><div class="photo" style="background:radial-gradient(80% 70% at 40% 40%,#7bb0ad,#3d8079 60%,#235650)"></div><div class="cap"><div class="name">다낭 휴양 여행</div><div class="meta">다낭 · 2023.12</div><div class="tags">#휴양 #해변</div><span class="done-stamp">COMPLETE</span></div></div>
+      <div class="polaroid"><div class="photo" style="background:linear-gradient(150deg,#6f93b0,#37516a 70%,#243a52)"></div><div class="cap"><div class="name">제주 동쪽 바다</div><div class="meta">제주 · 2024.09</div><div class="tags">#오름 #바다</div></div></div>
+      <div class="polaroid"><div class="photo" style="background:radial-gradient(80% 70% at 50% 30%,#8a6a9e,#4a3566 65%,#2a1d3e)"></div><div class="cap"><div class="name">도쿄의 밤</div><div class="meta">도쿄 · 2024.03</div><div class="tags">#야경 #미식</div><span class="done-stamp">COMPLETE</span></div></div>
+      <div class="polaroid"><div class="photo" style="background:linear-gradient(150deg,#d4b36a,#9a7a2e 70%,#6a5320)"></div><div class="cap"><div class="name">부산 1박 2일</div><div class="meta">부산 · 2024.05</div><div class="tags">#바다 #먹방</div></div></div>
+      <div class="polaroid"><div class="photo" style="background:linear-gradient(150deg,#7fa56f,#3f6a45 70%,#284a30)"></div><div class="cap"><div class="name">후쿠오카 주말</div><div class="meta">후쿠오카 · 2024.07</div><div class="tags">#온천 #미식</div><span class="done-stamp">COMPLETE</span></div></div>
+      <div class="polaroid empty"><div class="photo"><div class="ph-plus">＋<br>추억 만들기</div></div><div class="cap"><div class="name">오사카 봄 여행</div><div class="meta">오사카 · 다녀옴</div></div></div>
+    </div>
+
+    <p class="hint">폴라로이드를 누르면 그 여행의 카드들을 추억 상세(팝업)로 봅니다 · 빈 폴라로이드 = 다녀왔지만 아직 추억을 안 만든 여행</p>
+
+    <div class="doc-note">
+      <b>LOGS 추억 목록 — 디자인 정의</b> (이 목업이 구현 정본)
+      <ul>
+        <li>추억(여행 1개) = 폴라로이드 한 장. 클릭 = 추억 상세(memory-viewer 팝업)로</li>
+        <li>상태 = COMPLETE 도장/빈 유무: 완성 = COMPLETE / 기록 중 = 없음 / 미생성 = 빈 폴라로이드(추억 만들기)</li>
+        <li>컴포넌트 = design-system.css의 `.polaroid`(+`.empty`·`.done-stamp`)·`.topbar` 재사용. 화면 전용 = 그리드·헤더·필터뿐</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

@@ -174,5 +174,5 @@ v3 렌더/에디터 데모 재현은 [v3 리포트](card-poc-v3-report.md) 상�
 후속 (S3 이슈 분해의 입력 — [decisions/0006 D4](../decisions/0006-card-outline-module.md)):
 
 1) GMS LLM 프롬프트 설계 (문구 생성 + 앵커 선택, OUTLINE_API §2-1 기반).
-2) 에디터에 탭/박스/그룹 버블/톤다운 슬라이더 반영 (와이어프레임 v3 — [log-flow-proposal.html](../design/log-flow-proposal.html)).
+2) 에디터에 탭/박스/그룹 버블/톤다운 슬라이더 반영 (와이어프레임 v3 — log-flow-proposal, 폐기·docs/design/로 대체).
 3) 사이드카 도입 시 SAM 인코딩 1회 캐시 구조 검토(탭 수백 ms급 단축 여지) + RSS·지연 자체 계측(#20 카드 실측과 함께).

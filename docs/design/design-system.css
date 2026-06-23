@@ -1,0 +1,184 @@
+/* ============================================================
+   TripLog 디자인 시스템 (Sprint 4)
+   - 이 파일 하나로 토큰 + 공통 컴포넌트를 정의한다.
+   - 모든 화면 목업은 이 CSS를 link 해서 컴포넌트를 "배치만" 한다.
+   - 컴포넌트(티켓·도장·폴라로이드 등)는 여기서만 수정한다 — 화면별로 변형 금지.
+   ============================================================ */
+
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap');
+
+/* ── 토큰 ── */
+:root{
+  /* 바탕·종이·잉크 */
+  --bg:#ece4d6; --paper:#fbf7ee; --paper-card:#fffdf8;
+  --paper-dim:#f6efe2;                  /* 빈/비활성 표면 */
+  --on-fill:#fbf8f1;                    /* 색 채움 위 텍스트 + 입력면 = 빈티지 화이트(순백 대신) */
+  --ink:#2c2926; --ink-sub:#8a8276; --ink-faint:#b6ab97;
+  --line:#e2d8c4; --line2:#efe8d9; --line-strong:#d8ccb6;
+  /* 기능색 */
+  --stamp:#2f4a5c;        /* 도장 잉크(단색 통일) */
+  --complete:#c0392b;     /* COMPLETE 적색 */
+  --accent:#c2693f;       /* 주 액션(테라코타) */
+  --accent-soft:#e9c39f;  /* accent 연한 톤(그라데이션용) */
+  /* 티켓 빈티지 팔레트(여행마다 1색) */
+  --t-terra:#c2693f; --t-mustard:#c39a40; --t-sage:#6f8a5f;
+  --t-blue:#5f7d94; --t-burgundy:#8f4a47; --t-khaki:#7c7a4f; --t-plum:#8a6a82;
+  /* 형태 */
+  --radius:14px; --radius-sm:9px;
+  --shadow-card:0 5px 14px -8px rgba(60,40,20,.4);
+  --shadow-pop:0 14px 40px -12px rgba(50,30,15,.5);
+}
+
+*{box-sizing:border-box;margin:0}
+body{font-family:Pretendard,system-ui,sans-serif;background:var(--bg);color:var(--ink);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.ds-hand{font-family:'Nanum Pen Script',cursive}
+.ds-mono{font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace}
+
+/* ── 상단바 ── */
+.topbar{background:var(--paper);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:20px;padding:11px 26px}
+.topbar .logo{font-weight:800;font-size:17px;letter-spacing:-.4px}
+.topbar .logo b{color:var(--accent)}
+.tabs{display:flex;gap:3px;margin-left:6px}
+.tabs a{font-size:13px;font-weight:600;color:var(--ink-sub);text-decoration:none;padding:6px 13px;border-radius:8px}
+.tabs a.on{color:var(--ink);background:#0000000a}
+.topbar .search{flex:0 1 240px;margin-left:auto;display:flex;align-items:center;gap:7px;
+  border:1px solid var(--line);border-radius:9px;padding:7px 12px;color:var(--ink-faint);font-size:12.5px;background:var(--bg)}
+.avatar{width:31px;height:31px;border-radius:50%;background:linear-gradient(135deg,var(--accent-soft),var(--accent));
+  color:var(--on-fill);display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 auto}
+
+/* ── 버튼 ── */
+.btn{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:var(--radius-sm);
+  padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  font-family:inherit}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-fill)}
+.btn.sm{padding:5px 11px;font-size:12px}
+.btn.ghost{background:transparent}
+.btn.danger{background:var(--complete);border-color:var(--complete);color:var(--on-fill)}
+
+/* ── 배지·태그 ── */
+.tag-hand{font-family:'Nanum Pen Script',cursive;color:var(--accent);font-size:15px;letter-spacing:.3px}
+.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px}
+/* 여행 상태 배지(틴트) — 화면에서 인라인 색 금지, 이 variant 사용 */
+.badge.plan{background:#f7ecd6;color:#c4892e}      /* 계획 중 */
+.badge.upcoming{background:#e6eef2;color:#4d7089}  /* 예정 */
+.badge.past{background:#e7efe4;color:#5b7a52}      /* 다녀옴 */
+
+/* ============================================================
+   티켓 (여행 계획) — 고정 비율. 크기는 --ticket-w 로 스케일.
+   상태: 기본(계획·예정, 오른쪽 스텁 = 바코드+D-DAY) / .torn(다녀옴, 스텁 뜯김)
+   ============================================================ */
+.ticket{--tc:var(--t-mustard);--ticket-w:416px;       /* 가로 = 기존 520의 4/5 (비율 416:118) */
+  width:var(--ticket-w);height:calc(var(--ticket-w) * 118 / 416);  /* 높이 비례 — torn은 폭만 줄고 높이·왼쪽 동일 */
+  font-size:calc(var(--ticket-w) / 29);  /* 내부 글자가 폭에 비례해 함께 줄어듦(em 기준) */
+  display:flex;background:var(--paper-card);border:1px solid var(--line2);border-radius:var(--radius);
+  overflow:hidden;box-shadow:var(--shadow-card)}
+.ticket .stub-l{flex:0 0 calc(var(--ticket-w) * 36 / 416);background:var(--tc);display:flex;align-items:center;justify-content:center}
+.ticket .stub-l .serial{writing-mode:vertical-rl;transform:rotate(180deg);color:var(--on-fill);font-size:0.76em;
+  letter-spacing:0.16em;opacity:.92;font-family:'SF Mono',monospace}
+.ticket .perf-l{flex:0 0 0;border-left:2px dashed rgba(0,0,0,.15);margin:0.77em 0;position:relative}
+.ticket .body{flex:1;padding:0.9em 1.26em;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.ticket .label{font-size:0.7em;letter-spacing:0.25em;color:var(--tc);font-weight:700;margin-bottom:5px}
+.ticket .ttl{font-size:1.26em;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ticket .meta{font-size:0.84em;color:var(--ink-sub);margin-top:5px}
+.ticket .meta .dot{color:var(--ink-faint);margin:0 5px}
+.ticket .tags{margin-top:7px;font-family:'Nanum Pen Script',cursive;font-size:1.08em;color:var(--accent)}
+.ticket .perf-r{flex:0 0 0;border-left:2px dashed rgba(0,0,0,.15);margin:0.77em 0;position:relative}
+.ticket .perf-r::before,.ticket .perf-r::after{content:'';position:absolute;left:-0.56em;width:1.05em;height:1.05em;
+  border-radius:50%;background:var(--ds-surface,var(--bg))}  /* 노치 = 티켓이 놓인 배경색(부모가 --ds-surface로 지정) */
+.ticket .perf-r::before{top:-1.4em}.ticket .perf-r::after{bottom:-1.4em}
+.ticket .stub-r{flex:0 0 calc(var(--ticket-w) * 90 / 416);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.42em;padding:0.56em}
+.ticket .barcode{width:calc(var(--ticket-w) * 64 / 416);height:calc(var(--ticket-w) * 30 / 416);
+  background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 4px,var(--ink) 4px 5px,
+    transparent 5px 8px,var(--ink) 8px 11px,transparent 11px 13px,var(--ink) 13px 14px,transparent 14px 17px);opacity:.82}
+.ticket .dday{text-align:center;line-height:1}
+.ticket .dday .k{font-size:0.63em;letter-spacing:0.16em;color:var(--ink-faint);font-weight:700}
+.ticket .dday .v{font-size:1.47em;font-weight:800;letter-spacing:-.03em;color:var(--tc);font-family:'SF Mono',monospace}
+.ticket .dday .v.muted{font-size:0.9em;color:var(--ink-faint);font-weight:600}
+/* 절취선 위·아래 노치(왼쪽 스텁) — 오른쪽 perf-r 과 동일 */
+.ticket .perf-l::before,.ticket .perf-l::after{content:'';position:absolute;left:-0.56em;width:1.05em;height:1.05em;
+  border-radius:50%;background:var(--ds-surface,var(--bg))}
+.ticket .perf-l::before{top:-1.4em}.ticket .perf-l::after{bottom:-1.4em}
+/* 다녀온 티켓 = 오른쪽 스텁이 뜯긴 자리(절취선 점선+노치만 남음) */
+.ticket.torn{width:calc(var(--ticket-w) * 326 / 416)}  /* 416 - 90(오른쪽 스텁) = 326. 높이는 .ticket 그대로 */
+.ticket.torn .body{padding-right:1.8em;position:relative}
+.ticket.torn .stamp-slot{position:absolute;right:0.56em;top:50%;transform:translateY(-50%) rotate(-9deg);pointer-events:none}
+.ticket.torn .stamp-slot .stamp-svg{width:calc(var(--ticket-w) * 92 / 416);height:calc(var(--ticket-w) * 92 / 416)}
+
+/* ============================================================
+   도장 (다녀옴 + 추억 진행) — SVG 컴포넌트. 마크업은 카탈로그의 정본 스니펫 사용.
+   단계: 추억 상태로만 결정 — .stage-1 도착 / .stage-2 기록 중 / .stage-3 완성(+COMPLETE)
+   ============================================================ */
+.stamp-svg{display:block;overflow:visible;width:118px;height:118px}
+.stamp-svg .ring{fill:none;stroke:var(--stamp)}
+.stamp-svg text,.stamp-svg .glyph{fill:var(--stamp)}
+.stamp-svg .bg{fill:var(--stamp);fill-opacity:.10}
+.stamp-svg .complete{fill:var(--complete)}
+.stamp-svg .complete-box{fill:none;stroke:var(--complete)}
+.stage-1 .stamp-svg{opacity:.62}
+.stage-2 .stamp-svg{opacity:.88}
+.stage-3 .stamp-svg{opacity:.97}
+
+/* ============================================================
+   폴라로이드 (완성된 추억, 여행 1개 = 한 장) — 똑바르게, 기울임 없음.
+   하단: 제목(고딕) + 날짜·장소 + 해시태그(손글씨) + (완성 시) COMPLETE 도장
+   ============================================================ */
+.polaroid{--pola-w:200px;width:var(--pola-w);font-size:calc(var(--pola-w) / 14.3);  /* 내부가 폭에 비례 */
+  background:var(--paper-card);border:1px solid var(--line2);border-radius:4px;padding:0.56em 0.56em 0;
+  box-shadow:0 5px 13px -7px rgba(60,40,20,.42);cursor:pointer}
+.polaroid .photo{aspect-ratio:1/1;border-radius:2px;position:relative;overflow:hidden}
+/* 캡션 영역 높이 고정 → 해시태그 유무와 무관하게 모든 폴라로이드 같은 크기 */
+.polaroid .cap{position:relative;padding:0.84em 0.9em 1.12em;text-align:left;height:calc(var(--pola-w) * 86 / 200)}
+.polaroid .name{font-size:1.02em;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.polaroid .meta{font-size:0.72em;color:var(--ink-sub);margin-top:0.22em}
+.polaroid .tags{font-family:'Nanum Pen Script',cursive;font-size:1.14em;color:var(--accent);margin-top:0.05em;letter-spacing:.02em}
+.polaroid .done-stamp{position:absolute;right:0.7em;bottom:1em;transform:rotate(-8deg);
+  color:var(--complete);border:0.12em solid var(--complete);border-radius:3px;
+  padding:0.05em 0.43em;font-size:0.6em;font-weight:800;letter-spacing:.07em}
+.polaroid.empty{background:var(--paper-dim);border-style:dashed;border-color:var(--line-strong);box-shadow:none}
+.polaroid.empty .photo{background:var(--line2);display:grid;place-items:center}
+.polaroid.empty .name{color:var(--ink-sub)}
+
+/* ── 오버레이(모달/팝업) ── */
+.scrim{position:fixed;inset:0;background:rgba(40,30,20,.42);display:grid;place-items:center;z-index:50}
+.modal{background:var(--paper);border-radius:16px;box-shadow:var(--shadow-pop);max-width:92vw;overflow:hidden}
+
+/* ── 패널(섹션 카드) ── */
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.panel > .ph{font-size:12px;font-weight:700;color:var(--ink-sub);letter-spacing:.3px;margin-bottom:11px;
+  display:flex;align-items:center;justify-content:space-between}
+.panel > .ph .link{font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none}
+
+/* ── 폼 ── */
+.field{margin-bottom:15px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-sub);margin-bottom:6px}
+.input{width:100%;border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px 13px;font-size:14px;
+  font-family:inherit;background:var(--on-fill);color:var(--ink)}
+.input::placeholder{color:var(--ink-faint)}
+.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,105,63,.16)}
+.btn.block{width:100%;justify-content:center;padding:12px 14px;font-size:14px}
+.form-link{color:var(--accent);font-weight:600;text-decoration:none;font-size:12.5px}
+.form-narrow{max-width:400px;width:100%}  /* 폼 영역 권장 폭 — input이 과하게 길어지지 않게 */
+
+/* ── 토스트(하단 알림) ── */
+.toast{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:var(--on-fill);
+  border-radius:11px;padding:12px 17px;font-size:13px;font-weight:600;box-shadow:0 10px 28px -10px rgba(0,0,0,.45)}
+.toast .ic{font-size:15px;line-height:1}
+.toast.success{background:var(--stamp)}     /* 남색 = 성공 */
+.toast.error{background:var(--complete)}     /* 적색 = 오류 */
+
+/* ── 로딩 ── */
+.spinner{width:26px;height:26px;border:2.6px solid #0000001a;border-top-color:var(--accent);
+  border-radius:50%;animation:ds-spin .7s linear infinite}
+@keyframes ds-spin{to{transform:rotate(360deg)}}
+.skeleton{background:linear-gradient(90deg,#e7ddca 25%,#f1eadb 50%,#e7ddca 75%);background-size:200% 100%;
+  animation:ds-shimmer 1.3s linear infinite;border-radius:7px}
+@keyframes ds-shimmer{to{background-position:-200% 0}}
+
+/* ── 빈 상태 ── */
+.empty-state{text-align:center;padding:46px 24px;color:var(--ink-sub)}
+.empty-state .ic{font-size:38px;opacity:.45;margin-bottom:12px}
+.empty-state .et{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:5px}
+.empty-state .ed{font-size:13px;margin-bottom:16px;line-height:1.5}

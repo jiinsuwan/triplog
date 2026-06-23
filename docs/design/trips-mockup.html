@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripLog — TRIPS(여행 생성·미리보기·탐색·일정)</title>
+<link rel="stylesheet" href="design-system.css">
+<style>
+  body{background:var(--bg);padding:30px 20px 70px}
+  .pagehead{max-width:1160px;margin:0 auto 6px;color:var(--ink-faint);font-size:12px}
+  .pagehead b{color:var(--ink-sub)}
+  .seclbl{max-width:1160px;margin:30px auto 9px;font-size:12.5px;font-weight:700;color:var(--ink-sub)}
+  .seclbl span{color:var(--ink-faint);font-weight:500}
+
+  /* 팝업이 뜬 장면 */
+  .scene{position:relative;max-width:1160px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+  .scene .dim{position:absolute;inset:0;filter:saturate(.9);background:var(--paper-card);padding:22px 26px;overflow:hidden}
+  .scene .grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px;opacity:.5}
+  .scene .grid6 i{height:128px;border-radius:14px;background:var(--line2);display:block}
+  .scene .ghost-ttl{font-size:19px;font-weight:800;color:var(--ink-faint)}
+  .scene .scrim{position:relative;background:rgba(40,30,20,.42);display:grid;place-items:center;padding:30px;min-height:330px}
+
+  /* 모달 공통 */
+  .modal{--ds-surface:var(--paper)}
+  .m-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 22px 14px;border-bottom:1px solid var(--line2)}
+  .m-head .ey{font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.3px}
+  .m-head .ttl{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:3px}
+  .m-x{border:none;background:none;color:var(--ink-faint);font-size:19px;cursor:pointer;line-height:1;padding:2px}
+  .m-foot{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:16px 22px;background:#f5efe2;border-top:1px solid var(--line2)}
+  .m-foot .left{margin-right:auto}
+  .lbl{font-size:12.5px;font-weight:700;color:var(--ink-sub);margin-bottom:7px}
+  .col2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+  /* 입력 폼 룩 */
+  .inp{border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:var(--on-fill);font-size:13.5px;color:var(--ink)}
+  .inp.ph{color:var(--ink-faint)}
+  .inp.on{border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,105,63,.13)}
+  /* 해시태그 입력 */
+  .tags-inp{border:1px solid var(--line);border-radius:9px;padding:8px 11px;background:var(--on-fill);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .tchip{font-family:'Nanum Pen Script',cursive;font-size:15px;color:var(--accent);background:#f7eee4;border:1px solid var(--line);border-radius:14px;padding:1px 10px}
+  .tchip .x{color:var(--ink-faint);margin-left:3px;cursor:pointer}
+  .tags-inp .cue{color:var(--ink-faint);font-size:12.5px}
+
+  /* 범위 캘린더 */
+  .cal{border:1px solid var(--line);border-radius:12px;background:var(--on-fill);padding:13px 14px}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;font-size:13px;font-weight:700}
+  .cal-nav .a{color:var(--ink-faint);cursor:pointer;font-size:14px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cal-grid .wd{text-align:center;font-size:10.5px;font-weight:700;color:var(--ink-faint);padding:3px 0}
+  .cal-grid .wd.sun{color:#bb6a5e}.cal-grid .wd.sat{color:#5f7d94}
+  .cal-grid .dy{height:31px;display:grid;place-items:center;border-radius:8px;font-size:12.5px;color:var(--ink)}
+  .cal-grid .dy.mut{color:transparent}
+  .cal-grid .dy.r-mid{background:#f3e3d7;border-radius:0}
+  .cal-grid .dy.r-s{background:var(--accent);color:var(--on-fill);font-weight:700;border-radius:8px 0 0 8px}
+  .cal-grid .dy.r-e{background:var(--accent);color:var(--on-fill);font-weight:700;border-radius:0 8px 8px 0}
+
+  /* 미리보기 팝업 */
+  .modal.preview{width:680px}
+  .pv-head{display:flex;align-items:center;gap:11px;padding:16px 22px 12px}
+  .pv-head .pv-stamp+.x,.pv-head .x{align-self:center}
+  .pv-head .ttl{font-size:19px;font-weight:800;letter-spacing:-.3px}
+  .pv-head .x{margin-left:auto;border:none;background:none;color:var(--ink-faint);font-size:19px;cursor:pointer}
+  .pv-meta{display:flex;flex-wrap:wrap;gap:6px;padding:0 22px 14px;border-bottom:1px solid var(--line2)}
+  .chip-meta{font-size:12px;font-weight:600;color:var(--ink-sub);background:#f5efe2;border:1px solid var(--line);border-radius:8px;padding:4px 11px}
+  .pv-body{display:grid;grid-template-columns:236px 1fr;gap:16px;padding:16px 22px 6px}
+  .pv-map{border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;min-height:270px}
+  .pv-plan{display:flex;flex-direction:column;min-height:270px}
+  .day-tabs{display:flex;gap:5px;margin-bottom:12px;align-items:center}
+  .day-tabs .d{font-size:11.5px;font-weight:700;background:var(--on-fill);color:var(--ink-sub);border:1px solid var(--line);border-radius:7px;padding:5px 12px;cursor:pointer}
+  .day-tabs .d.on{background:var(--ink);color:var(--on-fill);border-color:var(--ink)}
+  .day-tabs .dt{margin-left:auto;font-size:11px;color:var(--ink-faint)}
+  .plan-list{overflow:auto;flex:1}
+  .pstop{display:flex;align-items:flex-start}
+  .pstop .tcol{flex:0 0 44px;text-align:right;padding-right:9px;font-family:'SF Mono',monospace;font-size:12px;font-weight:700;color:var(--accent);line-height:1.45}
+  .pstop .lcol{flex:0 0 13px;align-self:stretch;position:relative;display:flex;justify-content:center}
+  .pstop .lcol::before{content:'';position:absolute;top:7px;bottom:-2px;width:2px;background:var(--line)}
+  .pstop:last-child .lcol::before{display:none}
+  .pstop .lcol .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);margin-top:4px;z-index:1;box-shadow:0 0 0 2px var(--paper-card)}
+  .pstop .bcol{flex:1;min-width:0;padding:0 0 13px 11px}
+  .pstop .bcol .nm{font-size:13.5px;font-weight:600}
+  .pstop .bcol .ty{font-size:10px;color:var(--ink-sub);border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-left:6px;white-space:nowrap}
+  .pstop .bcol .tr{font-size:10.5px;color:var(--ink-faint);margin-top:4px}
+
+  /* 다녀옴 도장(헤더 우측) */
+  .pv-stamp{flex:none;cursor:pointer;text-align:center;transition:transform .15s}
+  .pv-stamp:hover{transform:scale(1.05)}
+  .pv-stamp .stamp-svg{width:52px;height:52px}
+  .pv-stamp .cap{font-family:'Nanum Pen Script',cursive;color:var(--accent);font-size:11px;margin-top:2px;line-height:1.1;white-space:nowrap}
+
+  /* 지도(목업) */
+  .map{background:linear-gradient(135deg,#e9e2cf,#e3dcc4 50%,#ece6d4);position:relative;overflow:hidden;height:100%}
+  .map .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(120,100,60,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,100,60,.05) 1px,transparent 1px);background-size:40px 40px}
+  .map .route{position:absolute;height:0;border-top:2px dashed var(--accent);opacity:.6;transform-origin:left center}
+  .map .pin{position:absolute;width:24px;height:24px;transform:translate(-50%,-100%) rotate(-45deg);
+    border:2px solid var(--on-fill);border-radius:50% 50% 50% 0;box-shadow:0 3px 7px rgba(0,0,0,.25);display:grid;place-items:center}
+  .map .pin.db{background:var(--t-sage)}.map .pin.food{background:var(--t-burgundy)}.map .pin.cafe{background:var(--t-plum)}
+  .map .pin.num{background:var(--accent)}
+  .map .pin span{transform:rotate(45deg);color:var(--on-fill);font-size:11px;font-weight:700}
+  .map .plabel{position:absolute;transform:translate(-50%,-100%);background:var(--paper-card);border:1px solid var(--line);
+    border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.1);white-space:nowrap}
+  .map .legend{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--ink-sub);background:var(--paper-card);
+    border:1px solid var(--line);border-radius:7px;padding:4px 10px}
+
+  /* 전체 페이지 */
+  .page{max-width:1160px;margin:0 auto;border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    background:var(--paper-card);box-shadow:var(--shadow-card)}
+  .topbar2{display:flex;align-items:center;gap:14px;padding:11px 20px;border-bottom:1px solid var(--line2);background:var(--paper-card)}
+  .topbar2 .logo{font-weight:800;font-size:16px}.topbar2 .logo b{color:var(--accent)}
+  .topbar2 .crumb{font-size:13px;font-weight:600}.topbar2 .crumb .s{color:var(--ink-faint);font-weight:400;margin:0 5px}
+  .topbar2 .crumb .cur{color:var(--ink-sub);font-weight:400}
+  .steps{display:flex;align-items:center;gap:5px;margin-left:auto;font-size:12px;font-weight:700}
+  .steps .on{color:var(--accent)}.steps .off{color:var(--ink-faint)}.steps .sep{color:var(--line)}
+  .next-btn{background:var(--accent);color:var(--on-fill);font-weight:700;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;cursor:pointer;box-shadow:0 3px 10px -3px rgba(194,105,63,.5)}
+
+  /* ⑥ 탐색 = 좌 결과 / 중앙 지도 / 우 보관함 (실제 구현 3단) */
+  .work3{display:grid;grid-template-columns:328px 1fr 280px;height:600px}
+  .wcol{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line2)}
+  .wcol:last-child{border-right:none}
+  .wc-head{padding:12px 15px;border-bottom:1px solid var(--line2);font-size:12px;font-weight:700;color:var(--ink-sub);display:flex;align-items:center;justify-content:space-between}
+  .wc-head small{font-size:11px;color:var(--ink-faint);font-weight:400}
+  .wc-scroll{overflow:auto;flex:1;padding:12px 14px}
+  .searchbar{display:flex;gap:7px;margin-bottom:11px}
+  .searchbar .field-inp{flex:1;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:var(--on-fill);font-size:12.5px;color:var(--ink-faint);display:flex;align-items:center;gap:7px}
+  .cat-row{display:flex;gap:5px;margin-bottom:12px}
+  .cat-row .c{font-size:11.5px;font-weight:600;color:var(--ink-sub);border:1px solid var(--line);background:var(--on-fill);border-radius:18px;padding:5px 12px;cursor:pointer}
+  .cat-row .c.on{background:var(--accent);border-color:var(--accent);color:var(--on-fill)}
+  .res{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line2)}
+  .res .pic{width:42px;height:42px;border-radius:8px;flex:none}
+  .res .info{flex:1;min-width:0}
+  .res .nm{font-size:13px;font-weight:700}
+  .res .sub{font-size:10.5px;color:var(--ink-sub);margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .res .src{font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-faint)}
+  .add-btn{border:1px solid var(--accent);background:var(--on-fill);color:var(--accent);border-radius:7px;font-size:12px;font-weight:700;padding:5px 11px;cursor:pointer;flex:none}
+  .add-btn.done{border-color:var(--line);background:var(--bg);color:var(--ink-sub)}
+  .pager{display:flex;justify-content:center;gap:5px;margin-top:12px}
+  .pager span{width:24px;height:24px;display:grid;place-items:center;font-size:12px;border-radius:6px;color:var(--ink-sub);cursor:pointer}
+  .pager span.on{background:var(--ink);color:var(--on-fill);font-weight:700}
+  .mapcol{position:relative}
+  .map-tool{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:5;background:var(--paper-card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-sub);box-shadow:0 2px 8px rgba(0,0,0,.12);cursor:pointer}
+  .zoom{position:absolute;left:14px;bottom:14px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:30px;background:var(--paper-card)}
+  .zoom div{height:30px;display:grid;place-items:center;font-size:14px;cursor:pointer}.zoom div:first-child{border-bottom:1px solid var(--line2)}
+  .pk-item{display:flex;align-items:center;gap:9px;padding:10px 2px;border-bottom:1px solid var(--line2)}
+  .pk-item .d{width:9px;height:9px;border-radius:50%;flex:none}
+  .pk-item .info{flex:1;min-width:0}.pk-item .nm{font-size:12.5px;font-weight:600}.pk-item .ct{font-size:10.5px;color:var(--ink-faint);margin-top:1px}
+  .pk-item .x{border:none;background:none;color:var(--ink-faint);cursor:pointer;font-size:14px}
+
+  /* ⑦ 일정 배치 */
+  .itin-bar{display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid var(--line2)}
+  .itin-bar .ti{font-size:15px;font-weight:700}.itin-bar .ti small{font-size:12px;color:var(--ink-sub);font-weight:400;margin-left:6px}
+  .itin-body{display:grid;grid-template-columns:328px 1fr;min-height:620px}
+  .tl-col{border-right:1px solid var(--line2);display:flex;flex-direction:column;background:var(--paper-card)}
+  /* DAY 탭 = 좌측 상단(제목과 타임라인 사이) */
+  .daysel{display:flex;gap:5px;padding:13px 15px 10px;border-bottom:1px solid var(--line2);align-items:center}
+  .daysel .d{font-size:12px;background:var(--on-fill);border:1px solid var(--line);border-radius:7px;padding:5px 13px;cursor:pointer}
+  .daysel .d.on{background:var(--ink);color:var(--on-fill);border-color:var(--ink)}
+  .daysel .d.add{color:var(--ink-faint)}
+  .tl-meta{padding:11px 15px 4px;display:flex;align-items:center;justify-content:space-between}
+  .tl-meta .dh{font-size:12.5px;font-weight:700;color:var(--accent)}
+  .tl-meta .hint{font-size:11px;color:var(--ink-faint);font-family:'Nanum Pen Script',cursive;font-size:13px}
+  .tl-wrap{overflow:auto;flex:1;padding:0 15px 14px}
+  .tl-ext{text-align:center;font-size:11px;color:var(--ink-faint);border:1px dashed var(--line);border-radius:7px;padding:5px;margin:8px 0 8px 46px;cursor:ns-resize}
+  /* 시각 타임라인: 눈금 + stop=시간 블록(높이=체류시간, 1시간=52px) */
+  .tl{position:relative;min-height:676px}
+  .tl .axis{position:absolute;left:46px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .tl .hr{position:absolute;left:0;right:0;height:0}
+  .tl .hr .hl{position:absolute;left:0;top:-7px;width:38px;text-align:right;font-size:10.5px;color:var(--ink-faint);font-family:'SF Mono',monospace}
+  .tl .hr .hb{position:absolute;left:42px;right:0;top:0;border-top:1px solid var(--line2)}
+  .tl .stop{position:absolute;left:40px;right:2px;border:1px solid var(--line);border-radius:9px;background:var(--on-fill);
+    box-shadow:0 1px 4px rgba(80,60,30,.07);overflow:hidden;display:flex;cursor:grab}
+  .tl .stop .bar{width:4px;flex:none}
+  .tl .stop .bar.db{background:var(--t-sage)}.tl .stop .bar.food{background:var(--t-burgundy)}.tl .stop .bar.cafe{background:var(--t-plum)}.tl .stop .bar.stay{background:var(--t-blue)}
+  .tl .stop .grip{display:flex;align-items:center;padding:0 3px 0 5px;color:var(--ink-faint);cursor:grab;font-size:13px}
+  .tl .stop .in{flex:1;padding:6px 8px;min-width:0}
+  .tl .stop .h{display:flex;align-items:center;gap:6px}
+  .tl .stop .t{font-size:11px;font-weight:700;color:var(--accent);font-family:'SF Mono',monospace}
+  .tl .stop .ty{font-size:9.5px;color:var(--ink-faint);border:1px solid var(--line);border-radius:4px;padding:0 5px}
+  .tl .stop .nm{font-size:12.5px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tl .stop .stay{font-size:9.5px;color:var(--ink-faint);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tl .stop .rz{position:absolute;left:0;right:0;bottom:0;height:10px;cursor:ns-resize;display:grid;place-items:center;color:var(--ink-faint);background:linear-gradient(transparent,rgba(0,0,0,.025))}
+  .tl .stop .rz::before{content:'';width:26px;height:3px;border-radius:2px;background:var(--ink-faint);opacity:.55}
+  /* 이동수단 = 클릭 토글 배지 */
+  .tl .trans{position:absolute;left:60px;z-index:3;display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--ink-sub);
+    background:#f5efe2;border:1px solid var(--line);border-radius:13px;padding:2px 9px;cursor:pointer;white-space:nowrap}
+  .tl .trans .ar{color:var(--ink-faint);font-size:9px}
+  .imap{position:relative;background:linear-gradient(135deg,#e9e2cf,#e3dcc4 50%,#ece6d4);overflow:hidden}
+  .pocket-side{position:absolute;right:16px;top:16px;bottom:16px;width:280px;background:var(--paper-card);border:1px solid var(--line);
+    border-radius:11px;box-shadow:0 4px 16px rgba(80,60,30,.14);display:flex;flex-direction:column;overflow:hidden}
+
+  /* ⓪ 여행 목록 */
+  .list-hero{display:flex;align-items:flex-end;justify-content:space-between;padding:24px 26px 16px}
+  .list-hero h1{font-size:25px;font-weight:800;letter-spacing:-.4px}
+  .list-hero p{color:var(--ink-sub);font-size:13px;margin-top:5px}
+  .list-sec{padding:0 26px 22px}
+  .list-sec+.list-sec{border-top:1px solid var(--line2);padding-top:18px}
+  .sec-h{font-size:13px;font-weight:800;color:var(--ink-sub);margin:6px 0 14px;display:flex;align-items:center;gap:8px}
+  .sec-h em{font-style:normal;font-size:11px;background:var(--bg);border-radius:20px;padding:2px 9px;color:var(--ink-faint);font-weight:700}
+  .trip-grid{display:grid;gap:16px;align-items:start;--ds-surface:var(--paper-card)}
+  .trip-grid.plan{grid-template-columns:repeat(3,1fr)}
+  .trip-grid.done{grid-template-columns:repeat(4,1fr)}
+  .trip-grid .ticket{cursor:pointer}
+  .add-trip{border:1.5px dashed var(--line);border-radius:var(--radius);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:4px;color:var(--ink-faint);min-height:96px;cursor:pointer;background:#fffdf855}
+  .add-trip .pl{font-size:22px;line-height:1}
+  .add-trip b{font-size:13px;font-weight:700;color:var(--ink-sub)}
+
+  .doc-note{max-width:1160px;margin:30px auto 0;padding:14px 22px;color:var(--ink-faint);font-size:12px;
+    background:#fff8;border:1px dashed var(--line);border-radius:10px}
+  .doc-note b{color:var(--ink-sub)} .doc-note ul{margin:6px 0 0;padding-left:17px} .doc-note li{margin:2.5px 0}
+  .doc-note .k{color:var(--accent);font-weight:700}
+  .thumb-sage{background:linear-gradient(135deg,#a8b08a,#cad0a8)}
+  .thumb-blue{background:linear-gradient(135deg,#9fb0c4,#c2cede)}
+  .thumb-teal{background:linear-gradient(135deg,#8ab0ac,#a8d0cc)}
+  .thumb-plum{background:linear-gradient(135deg,#bba6bc,#d6c4d6)}
+</style>
+</head>
+<body>
+  <p class="pagehead"><b>TRIPS — 여행 생성·미리보기·탐색·일정</b> · 데스크톱 · 디자인 시안 + 실제 프론트 구조/문구. 이 목업이 구현 정본.</p>
+
+  <!-- ⓪ 여행 목록 -->
+  <div class="seclbl">⓪ 여행 목록 <span>— /trips. 티켓 그리드(클릭 = 미리보기 팝업). 계획·예정 = 온전한 티켓 / 다녀옴 = 뜯긴 티켓 + 도장</span></div>
+  <div class="page">
+    <div class="topbar">
+      <div class="logo">Trip<b>Log</b></div>
+      <div class="tabs"><a href="#">HOME</a><a class="on" href="#">TRIPS</a><a href="#">LOGS</a></div>
+      <div class="search">장소·여행 검색</div>
+      <div class="avatar">지</div>
+    </div>
+    <div class="list-hero">
+      <div><h1>나의 여행</h1><p>계획한 여행과 다녀온 기록을 한 곳에서.</p></div>
+      <button class="next-btn">＋ 새 여행</button>
+    </div>
+    <div class="list-sec">
+      <div class="sec-h">계획 중 <em>1</em></div>
+      <div class="trip-grid plan">
+        <div class="ticket" style="--tc:var(--t-mustard);--ticket-w:340px">
+          <div class="stub-l"><span class="serial">TL-2026-0623</span></div><div class="perf-l"></div>
+          <div class="body">
+            <div class="label">TRIP TICKET</div>
+            <div class="ttl">제주, 바람의 사흘</div>
+            <div class="meta">제주<span class="dot">·</span>날짜 미정</div>
+            <div class="tags">#바다멍 #드라이브</div>
+          </div>
+          <div class="perf-r"></div>
+          <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v muted">??</div></div></div>
+        </div>
+        <div class="add-trip"><span class="pl">＋</span><b>새 여행 만들기</b></div>
+      </div>
+    </div>
+    <div class="list-sec">
+      <div class="sec-h">예정 <em>1</em> <span style="font-weight:500;color:var(--ink-faint);font-size:11px">· 계획 완료, 출발 대기</span></div>
+      <div class="trip-grid plan">
+        <div class="ticket" style="--tc:var(--t-blue);--ticket-w:340px">
+          <div class="stub-l"><span class="serial">TL-2026-0402</span></div><div class="perf-l"></div>
+          <div class="body">
+            <div class="label">TRIP TICKET</div>
+            <div class="ttl">후쿠오카 주말 여행</div>
+            <div class="meta">후쿠오카<span class="dot">·</span>07.05–07.07<span class="dot">·</span>2박3일</div>
+            <div class="tags">#온천 #미식</div>
+          </div>
+          <div class="perf-r"></div>
+          <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v">13</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="list-sec">
+      <div class="sec-h">다녀온 여행 <em>1</em></div>
+      <div class="trip-grid done">
+        <div class="ticket torn" style="--tc:var(--t-terra);--ticket-w:340px">
+          <div class="stub-l"><span class="serial">TL-2026-0421</span></div><div class="perf-l"></div>
+          <div class="body">
+            <div class="label">TRIP TICKET</div>
+            <div class="ttl">교토 단풍 기행</div>
+            <div class="meta">교토<span class="dot">·</span>11.07–11.09<span class="dot">·</span>2박3일</div>
+            <div class="tags">#단풍 #사찰</div>
+            <div class="stamp-slot stage-3"><svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 3단계 완성">
+              <circle class="bg" cx="100" cy="100" r="88"/>
+              <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+              <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+              <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+              <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+              <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+              <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
+              <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+              <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+              <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
+              <g transform="rotate(-12 100 100)">
+                <rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/>
+                <text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text>
+              </g>
+            </svg></div>
+          </div>
+          <div class="perf-r"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ① 새 여행 모달 -->
+  <div class="seclbl">① 새 여행 모달 <span>— 제목·기간(범위 캘린더)·지역·테마(자유 입력)·해시태그 → "계획 시작하기". 상태 없음(날짜로 자동)</span></div>
+  <div class="scene">
+    <div class="dim"><div class="ghost-ttl">나의 여행</div><div class="grid6"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="scrim">
+      <div class="modal" style="width:480px">
+        <div class="m-head"><div><div class="ey">새 여행</div><div class="ttl">여행의 뼈대를 잡아요</div></div><button class="m-x">✕</button></div>
+        <div style="padding:18px 22px 4px;display:flex;flex-direction:column;gap:15px">
+          <div><div class="lbl">여행 제목</div><div class="inp ph">예: 제주, 바람의 사흘</div></div>
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+              <div class="lbl" style="margin:0">기간</div>
+              <div style="font-size:12px;font-weight:700">6.28 토 <span style="color:var(--ink-faint);margin:0 4px">→</span> 6.30 월 <span style="color:var(--ink-sub);font-weight:500">· 3일</span></div>
+            </div>
+            <div class="cal">
+              <div class="cal-nav"><span class="a">‹</span><span>2026년 6월</span><span class="a">›</span></div>
+              <div class="cal-grid">
+                <span class="wd sun">일</span><span class="wd">월</span><span class="wd">화</span><span class="wd">수</span><span class="wd">목</span><span class="wd">금</span><span class="wd sat">토</span>
+                <span class="dy">1</span><span class="dy">2</span><span class="dy">3</span><span class="dy">4</span><span class="dy">5</span><span class="dy">6</span><span class="dy">7</span>
+                <span class="dy">8</span><span class="dy">9</span><span class="dy">10</span><span class="dy">11</span><span class="dy">12</span><span class="dy">13</span><span class="dy">14</span>
+                <span class="dy">15</span><span class="dy">16</span><span class="dy">17</span><span class="dy">18</span><span class="dy">19</span><span class="dy">20</span><span class="dy">21</span>
+                <span class="dy">22</span><span class="dy">23</span><span class="dy">24</span><span class="dy">25</span><span class="dy">26</span><span class="dy">27</span><span class="dy r-s">28</span>
+                <span class="dy r-mid">29</span><span class="dy r-e">30</span><span class="dy mut">.</span><span class="dy mut">.</span><span class="dy mut">.</span><span class="dy mut">.</span><span class="dy mut">.</span>
+              </div>
+            </div>
+          </div>
+          <div class="col2">
+            <div><div class="lbl">지역</div><div class="inp ph">예: 제주</div></div>
+            <div><div class="lbl">테마</div><div class="inp ph">예: 바다, 힐링</div></div>
+          </div>
+          <div>
+            <div class="lbl">해시태그 <span style="color:var(--ink-faint);font-weight:400">· 선택</span></div>
+            <div class="tags-inp"><span class="cue">입력 후 Enter… (예: #바다멍 #드라이브)</span></div>
+          </div>
+        </div>
+        <div class="m-foot"><button class="btn ghost">취소</button><button class="btn pri">계획 시작하기</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 미리보기 팝업 — 계획 있음(미니멀) -->
+  <div class="seclbl">② 여행 미리보기 팝업 — 계획 있음 <span>— 목록 티켓 클릭 = 여행 개요(팝업). 상단 정보 + 좌 작은 지도 + 우 DAY 탭 일정</span></div>
+  <div class="scene">
+    <div class="dim"><div class="ghost-ttl">나의 여행</div><div class="grid6"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="scrim">
+      <div class="modal preview">
+        <div class="pv-head">
+          <span class="badge plan">계획 중</span>
+          <div class="ttl">제주, 바람의 사흘</div>
+          <button class="x">✕</button>
+        </div>
+        <div class="pv-meta">
+          <span class="chip-meta">제주</span><span class="chip-meta">바다</span>
+          <span class="chip-meta">2026.06.28 – 06.30 · 3일</span><span class="chip-meta">담은 장소 12곳</span>
+        </div>
+        <div class="pv-body">
+          <div class="pv-map"><div class="map"><div class="grid"></div>
+            <div class="route" style="left:26%;top:46%;width:28%;transform:rotate(20deg)"></div>
+            <div class="route" style="left:52%;top:42%;width:24%;transform:rotate(72deg)"></div>
+            <div class="pin num" style="left:32%;top:52%"><span>1</span></div>
+            <div class="pin num" style="left:58%;top:40%"><span>2</span></div>
+            <div class="pin num" style="left:70%;top:66%"><span>3</span></div>
+            <div class="pin num" style="left:48%;top:76%"><span>4</span></div>
+            <div class="legend">제주 · DAY 1 경로</div>
+          </div></div>
+          <div class="pv-plan">
+            <div class="day-tabs"><span class="d on">DAY 1</span><span class="d">DAY 2</span><span class="d">DAY 3</span><span class="dt">6.28 토 · 4곳</span></div>
+            <div class="plan-list">
+              <div class="pstop"><span class="tcol">10:00</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">성산일출봉</span><span class="ty">관광지</span><div class="tr">자동차 25분 · 18km</div></div></div>
+              <div class="pstop"><span class="tcol">12:30</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">올레국수</span><span class="ty">식당</span><div class="tr">도보 8분 · 600m</div></div></div>
+              <div class="pstop"><span class="tcol">14:00</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">카페 그곶</span><span class="ty">카페</span><div class="tr">자동차 35분 · 24km</div></div></div>
+              <div class="pstop"><span class="tcol">17:30</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">스테이 바람</span><span class="ty">숙소</span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="m-foot">
+          <button class="btn ghost left">정보 수정</button>
+          <button class="btn ghost" style="background:none;color:var(--complete);border-color:#e3b3a0">삭제</button>
+          <button class="btn pri">계획 수정하기 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 미리보기 팝업 — 빈(계획 0) -->
+  <div class="seclbl">③ 여행 미리보기 팝업 — 계획 0(빈) <span>— 정보 + 빈 안내</span></div>
+  <div class="scene">
+    <div class="dim"><div class="ghost-ttl">나의 여행</div><div class="grid6"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="scrim">
+      <div class="modal preview" style="width:520px">
+        <div class="pv-head">
+          <span class="badge plan">계획 중</span>
+          <div class="ttl">제주 가을 힐링</div>
+          <button class="x">✕</button>
+        </div>
+        <div class="pv-meta"><span class="chip-meta">제주</span><span class="chip-meta">휴식</span><span class="chip-meta">날짜 미정</span></div>
+        <div style="padding:6px 22px">
+          <div class="empty-state">
+            <div class="ic">🧳</div>
+            <div class="et">아직 담은 장소가 없어요</div>
+            <div class="ed">다음 단계에서 가고 싶은 곳을 담고 일정으로 엮어보세요.</div>
+            <button class="btn pri">장소 담으러 가기 →</button>
+          </div>
+        </div>
+        <div class="m-foot">
+          <button class="btn ghost left">정보 수정</button>
+          <button class="btn ghost" style="background:none;color:var(--complete);border-color:#e3b3a0">삭제</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 미리보기 팝업 — 다녀옴(일정 + 도장) -->
+  <div class="seclbl">④ 여행 미리보기 팝업 — 다녀옴 <span>— 일정도 보임 + 도장(상단 우측, 클릭 = 추억 만들기)</span></div>
+  <div class="scene">
+    <div class="dim"><div class="ghost-ttl">나의 여행</div><div class="grid6"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="scrim">
+      <div class="modal preview">
+        <div class="pv-head">
+          <span class="badge past">다녀옴</span>
+          <div class="ttl">교토 단풍 기행</div>
+          <div class="pv-stamp stage-2" style="margin-left:auto">
+            <svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 2단계 기록 중">
+              <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+              <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+              <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+              <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+              <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+              <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
+            </svg>
+            <div class="cap">눌러 추억 만들기</div>
+          </div>
+          <button class="x" style="margin-left:12px">✕</button>
+        </div>
+        <div class="pv-meta"><span class="chip-meta">교토</span><span class="chip-meta">사찰</span><span class="chip-meta">2023.11.07 – 11.09 · 3일</span></div>
+        <div class="pv-body">
+          <div class="pv-map"><div class="map"><div class="grid"></div>
+            <div class="route" style="left:30%;top:50%;width:26%;transform:rotate(16deg)"></div>
+            <div class="route" style="left:56%;top:44%;width:18%;transform:rotate(60deg)"></div>
+            <div class="pin num" style="left:32%;top:54%"><span>1</span></div>
+            <div class="pin num" style="left:58%;top:44%"><span>2</span></div>
+            <div class="pin num" style="left:68%;top:68%"><span>3</span></div>
+            <div class="legend">교토 · 다녀온 경로</div>
+          </div></div>
+          <div class="pv-plan">
+            <div class="day-tabs"><span class="d on">DAY 1</span><span class="d">DAY 2</span><span class="dt">11.07 · 3곳</span></div>
+            <div class="plan-list">
+              <div class="pstop"><span class="tcol">09:00</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">기요미즈데라</span><span class="ty">사찰</span><div class="tr">버스 20분</div></div></div>
+              <div class="pstop"><span class="tcol">13:00</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">아라시야마 대나무길</span><div class="tr">도보 5분</div></div></div>
+              <div class="pstop"><span class="tcol">15:30</span><span class="lcol"><span class="dot"></span></span><div class="bcol"><span class="nm">% 아라비카 커피</span><span class="ty">카페</span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="m-foot">
+          <button class="btn ghost left">정보 수정</button>
+          <button class="btn pri">추억 만들러 가기 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ 정보 수정 팝업 -->
+  <div class="seclbl">⑤ 여행 정보 수정 팝업 <span>— 제목·기간·지역·테마(자유 입력) + 해시태그</span></div>
+  <div class="scene">
+    <div class="dim"><div style="font-size:26px;font-weight:800;color:var(--ink-faint)">제주, 바람의 사흘</div>
+      <div style="display:grid;grid-template-columns:.95fr 1.05fr;gap:18px;margin-top:16px;opacity:.5"><i style="height:240px;border-radius:14px;background:var(--line2);display:block"></i><i style="height:240px;border-radius:14px;background:var(--line2);display:block"></i></div></div>
+    <div class="scrim">
+      <div class="modal" style="width:480px">
+        <div class="m-head"><div><div class="ey">정보 수정</div><div class="ttl">여행 정보 편집</div></div><button class="m-x">✕</button></div>
+        <div style="padding:18px 22px 4px;display:flex;flex-direction:column;gap:15px">
+          <div><div class="lbl">여행 제목</div><div class="inp on">제주, 바람의 사흘</div></div>
+          <div class="col2">
+            <div><div class="lbl">시작일</div><div class="inp">2026.06.28 토</div></div>
+            <div><div class="lbl">종료일</div><div class="inp">2026.06.30 월</div></div>
+          </div>
+          <div class="col2">
+            <div><div class="lbl">지역</div><div class="inp">제주</div></div>
+            <div><div class="lbl">테마</div><div class="inp">바다</div></div>
+          </div>
+          <div>
+            <div class="lbl">해시태그</div>
+            <div class="tags-inp">
+              <span class="tchip">#바다멍<span class="x">✕</span></span>
+              <span class="tchip">#드라이브<span class="x">✕</span></span>
+              <span class="cue">입력 후 Enter…</span>
+            </div>
+          </div>
+        </div>
+        <div class="m-foot"><button class="btn ghost">취소</button><button class="btn pri">변경 사항 저장</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥ 탐색(장소 담기) — 좌 결과 / 중앙 지도 / 우 보관함 -->
+  <div class="seclbl">⑥ 탐색 — ① 장소 담기 <span>— /trips/:id/places. 좌 검색·결과 / 중앙 지도 / 우 보관함. "일정 배치하기 →"로 ②로</span></div>
+  <div class="page">
+    <div class="topbar2">
+      <div class="logo">Trip<b>Log</b></div>
+      <div class="crumb">제주, 바람의 사흘 <span class="s">/</span><span class="cur">장소 담기</span></div>
+      <div class="steps"><span class="on">① 장소 담기</span><span class="sep">›</span><span class="off">② 일정 배치</span></div>
+      <button class="next-btn">일정 배치하기 →</button>
+      <div class="avatar">지</div>
+    </div>
+    <div class="work3">
+      <!-- 좌: 검색 + 결과 -->
+      <div class="wcol">
+        <div class="wc-scroll">
+          <div class="searchbar"><div class="field-inp">🔍 카페, 관광지, 식당…</div><button class="btn pri sm">검색</button></div>
+          <div class="cat-row"><span class="c on">전체</span><span class="c">관광지</span><span class="c">식당</span><span class="c">카페</span></div>
+          <div class="res"><span class="pic thumb-sage"></span><div class="info"><div class="nm">성산일출봉</div><div class="sub"><span class="src">한국관광공사</span> 관광지 · ★4.7</div></div><button class="add-btn done">담음</button></div>
+          <div class="res"><span class="pic thumb-blue"></span><div class="info"><div class="nm">카페 그곶</div><div class="sub"><span class="src">카카오맵</span> 카페 · ★4.8</div></div><button class="add-btn">담기</button></div>
+          <div class="res"><span class="pic thumb-teal"></span><div class="info"><div class="nm">우도 등대</div><div class="sub"><span class="src">한국관광공사</span> 관광지 · ★4.5</div></div><button class="add-btn">담기</button></div>
+          <div class="res"><span class="pic thumb-sage"></span><div class="info"><div class="nm">광치기 해변</div><div class="sub"><span class="src">카카오맵</span> 관광지 · ★4.4</div></div><button class="add-btn">담기</button></div>
+          <div class="res"><span class="pic thumb-plum"></span><div class="info"><div class="nm">올레국수</div><div class="sub"><span class="src">카카오맵</span> 식당 · ★4.6</div></div><button class="add-btn">담기</button></div>
+          <div class="pager"><span class="on">1</span><span>2</span><span>3</span></div>
+        </div>
+      </div>
+      <!-- 중앙: 지도 -->
+      <div class="wcol mapcol">
+        <div class="map-tool">이 지도 영역 재검색</div>
+        <div class="map"><div class="grid"></div>
+          <div class="pin db" style="left:34%;top:42%"><span>★</span></div><div class="plabel" style="left:34%;top:26%">성산일출봉</div>
+          <div class="pin food" style="left:60%;top:38%"><span>★</span></div>
+          <div class="pin cafe" style="left:50%;top:62%"><span>★</span></div>
+          <div class="pin db" style="left:72%;top:56%"><span>★</span></div>
+          <div class="pin db" style="left:26%;top:68%"><span>★</span></div>
+          <div class="legend">제주 · 카카오맵</div>
+        </div>
+        <div class="zoom"><div>＋</div><div>−</div></div>
+      </div>
+      <!-- 우: 보관함 -->
+      <div class="wcol">
+        <div class="wc-head">담은 장소 <small>보관함 12곳</small></div>
+        <div class="wc-scroll" style="padding-top:6px">
+          <div class="pk-item"><span class="d" style="background:var(--t-sage)"></span><div class="info"><div class="nm">성산일출봉</div><div class="ct">관광지</div></div><button class="x">✕</button></div>
+          <div class="pk-item"><span class="d" style="background:var(--t-burgundy)"></span><div class="info"><div class="nm">올레국수</div><div class="ct">식당</div></div><button class="x">✕</button></div>
+          <div class="pk-item"><span class="d" style="background:var(--t-plum)"></span><div class="info"><div class="nm">카페 그곶</div><div class="ct">카페</div></div><button class="x">✕</button></div>
+        </div>
+        <div style="padding:13px 15px;border-top:1px solid var(--line)"><button class="btn pri block">일정 배치하기 →</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑦ 일정 배치 -->
+  <div class="seclbl">⑦ 일정 배치 — ② <span>— 좌 DAY 탭 + 시각 타임라인(블록 끌어 시간 이동, 아래 끝 늘려 체류시간), 우 지도·담은 장소</span></div>
+  <div class="page">
+    <div class="topbar2">
+      <div class="logo">Trip<b>Log</b></div>
+      <div class="crumb">제주, 바람의 사흘 <span class="s">/</span><span class="cur">계획</span></div>
+      <div class="steps"><span class="off">① 장소 담기</span><span class="sep">›</span><span class="on">② 일정 배치</span></div>
+      <div style="display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:9px;padding:7px 12px;color:var(--ink-faint);font-size:12px;background:#f5efe2;width:150px">🔍 장소 더 담기</div>
+      <div class="avatar">지</div>
+    </div>
+    <div class="itin-bar">
+      <span class="ti">제주, 바람의 사흘 <small>제주 · 6.28–6.30 · 계획 중</small></span>
+    </div>
+    <div class="itin-body">
+      <div class="tl-col">
+        <div class="daysel"><span class="d on">DAY 1</span><span class="d">DAY 2</span><span class="d">DAY 3</span><span class="d add">＋ 날</span></div>
+        <div class="tl-meta"><span class="dh">DAY 1 · 6월 28일 토</span></div>
+        <div class="tl-wrap">
+          <div class="tl-ext">▲ 더 일찍부터 (08:00)</div>
+          <div class="tl">
+            <div class="axis"></div>
+            <div class="hr" style="top:0"><span class="hl">09:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:52px"><span class="hl">10:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:104px"><span class="hl">11:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:156px"><span class="hl">12:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:208px"><span class="hl">13:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:260px"><span class="hl">14:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:312px"><span class="hl">15:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:364px"><span class="hl">16:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:416px"><span class="hl">17:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:468px"><span class="hl">18:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:520px"><span class="hl">19:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:572px"><span class="hl">20:00</span><span class="hb"></span></div>
+            <div class="hr" style="top:624px"><span class="hl">21:00</span><span class="hb"></span></div>
+            <!-- stop = top(시작) + height(체류 1시간=52px). 10:00~11:30(1.5h) -->
+            <div class="stop" style="top:52px;height:78px"><span class="bar db"></span><span class="grip">⠿</span><div class="in"><div class="h"><span class="t">10:00</span><span class="ty">관광지</span></div><div class="nm">성산일출봉</div><div class="stay">머무는 시간 1시간 30분</div></div><span class="rz"></span></div>
+            <div class="trans" style="top:135px">🚗 자동차 25분 · 18km <span class="ar">▾</span></div>
+            <div class="stop" style="top:182px;height:52px"><span class="bar food"></span><span class="grip">⠿</span><div class="in"><div class="h"><span class="t">12:30</span><span class="ty">식당</span></div><div class="nm">올레국수</div><div class="stay">1시간</div></div><span class="rz"></span></div>
+            <div class="trans" style="top:239px">🚶 도보 8분 · 600m <span class="ar">▾</span></div>
+            <div class="stop" style="top:260px;height:52px"><span class="bar cafe"></span><span class="grip">⠿</span><div class="in"><div class="h"><span class="t">14:00</span><span class="ty">카페</span></div><div class="nm">카페 그곶</div><div class="stay">1시간</div></div><span class="rz"></span></div>
+            <div class="trans" style="top:317px">🚗 자동차 35분 · 24km <span class="ar">▾</span></div>
+            <div class="stop" style="top:416px;height:60px"><span class="bar stay"></span><span class="grip">⠿</span><div class="in"><div class="h"><span class="t">17:30</span><span class="ty">숙소</span></div><div class="nm">스테이 바람</div><div class="stay">체크인</div></div><span class="rz"></span></div>
+          </div>
+          <div class="tl-ext">▼ 더 늦게까지 (22:00)</div>
+        </div>
+      </div>
+      <div class="imap">
+        <div class="map"><div class="grid"></div>
+          <div class="route" style="left:24%;top:46%;width:26%;transform:rotate(18deg)"></div>
+          <div class="route" style="left:47%;top:54%;width:14%;transform:rotate(-30deg)"></div>
+          <div class="route" style="left:50%;top:42%;width:26%;transform:rotate(70deg)"></div>
+          <div class="pin num" style="left:30%;top:50%"><span>1</span></div><div class="plabel" style="left:30%;top:34%">성산일출봉</div>
+          <div class="pin num" style="left:56%;top:40%"><span>2</span></div>
+          <div class="pin num" style="left:68%;top:64%"><span>3</span></div>
+          <div class="pin num" style="left:46%;top:74%"><span>4</span></div>
+        </div>
+        <div class="pocket-side">
+          <div class="wc-head">담은 장소 <small>끌어 일정에 추가</small></div>
+          <div style="overflow:auto;flex:1">
+            <div class="pk-item" style="padding-left:13px;padding-right:13px"><span class="grip" style="color:var(--ink-faint);cursor:grab;margin-right:2px">⠿</span><span class="pic thumb-teal" style="width:34px;height:34px;border-radius:7px"></span><div class="info"><div class="nm">우도 등대</div><div class="ct">관광지 · ★4.5</div></div></div>
+            <div class="pk-item" style="padding-left:13px;padding-right:13px"><span class="grip" style="color:var(--ink-faint);cursor:grab;margin-right:2px">⠿</span><span class="pic thumb-sage" style="width:34px;height:34px;border-radius:7px"></span><div class="info"><div class="nm">광치기 해변</div><div class="ct">관광지 · ★4.4</div></div></div>
+            <div class="pk-item" style="padding-left:13px;padding-right:13px"><span class="grip" style="color:var(--ink-faint);cursor:grab;margin-right:2px">⠿</span><span class="pic thumb-plum" style="width:34px;height:34px;border-radius:7px"></span><div class="info"><div class="nm">동문시장</div><div class="ct">식당 · ★4.6</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc-note">
+    <b>TRIPS — 디자인 정의</b> (Sprint 4 · 이 목업이 구현 정본 · 디자인 시안 + 실제 프론트 구조/문구)
+    <ul>
+      <li><span class="k">진입</span> 목록(티켓) → 미리보기 팝업(여행 개요) → 탐색(① 장소 담기) → 일정(② 배치). 둘은 같은 `/trips/:id/places`, 상단 단계 표시로 이동</li>
+      <li><span class="k">① 새 여행 / ⑤ 정보 수정</span> 지역·테마 = <b>자유 입력</b>, 해시태그 = <b>태그 입력</b>(칩+Enter). 새 여행·정보 수정 동일 필드. 상태는 날짜로 자동(입력 없음). 백엔드가 태그 미지원이면 지역·테마를 태그로 노출(폴백)</li>
+      <li><span class="k">②③④ 미리보기 팝업</span> 상단 정보(상태·지역·테마·기간·담은 장소 수) + 좌 지도 + 우 DAY 탭 일정. ③ 계획 0 = 빈 안내 / ④ 다녀옴 = 일정 + <b>도장(상단 우측, 클릭 = 추억 만들기)</b> → "추억 만들러 가기"</li>
+      <li><span class="k">⑥ 장소 담기</span> 좌 검색·카테고리·결과(출처 배지·평점·담기) / 중앙 지도(재검색·줌) / 우 보관함(✕) + "일정 배치하기 →" (실제 TripPlaceSearchView 구조)</li>
+      <li><span class="k">⑦ 일정 배치</span> DAY 탭(좌측 상단) + 시각 타임라인. stop = <b>시간 블록</b>: 끌어 시각 이동 / 아래 끝 늘려 <b>체류시간 조정(최소 1시간, 30분 단위)</b>. 시간 범위는 위·아래로 <b>늘릴 수 있음</b>(기본 09–21). 이동수단 = <b>클릭 토글</b>(도보·자동차·대중교통)</li>
+      <li><span class="k">컴포넌트</span> design-system.css 재사용(modal·badge·btn·empty-state·stamp). 지도·캘린더·타임라인은 화면 전용 룩(실제 지도 = 카카오맵)</li>
+    </ul>
+  </div>
+
+</body>
+</html>

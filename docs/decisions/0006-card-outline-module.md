@@ -3,7 +3,7 @@
 - **상태**: Accepted (Sprint 2 회고 합의)
 - **결정일**: 2026-06-12
 - **출처**: 카드 PoC v4~v12 (`poc/card/`), [card-poc-v12-report](../poc/card-poc-v12-report.md), [`poc/card/DEPLOY_RESEARCH.md`](../../poc/card/DEPLOY_RESEARCH.md)
-- **관련 문서**: [decisions/0004](0004-card-poc-result.md) — **D2(업로드 1회 로컬 전처리)의 실행 형태를 본 문서 D1이 구체화**, [`poc/card/OUTLINE_API.md`](../../poc/card/OUTLINE_API.md), 와이어프레임 v3([log-flow-proposal.html](../design/log-flow-proposal.html)), [sprint-2](../sprints/sprint-2.md)
+- **관련 문서**: [decisions/0004](0004-card-poc-result.md) — **D2(업로드 1회 로컬 전처리)의 실행 형태를 본 문서 D1이 구체화**, [`poc/card/OUTLINE_API.md`](../../poc/card/OUTLINE_API.md), 와이어프레임 v3(log-flow-proposal — 폐기·docs/design/로 대체), [sprint-2](../sprints/sprint-2.md)
 
 ---
 
