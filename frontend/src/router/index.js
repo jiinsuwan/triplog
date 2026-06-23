@@ -7,6 +7,7 @@ import TripListView from '@/views/trip/TripListView.vue'
 import PhotoView from '@/views/log/PhotoView.vue'
 import { useTripStore } from '@/stores/trip'
 import { isPastTripStatus } from '@/utils/tripStatus'
+import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 
 // 라우터 (architecture §3, 공유 영역).
 //
@@ -120,9 +121,9 @@ export function authGuard(to) {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
-  // 이미 로그인한 사용자가 로그인/회원가입 접근 → 홈으로.
-  if (GUEST_ONLY_PATHS.includes(to.path) && auth.isAuthenticated) {
-    return { path: '/' }
+  // 이미 로그인한 사용자의 기본 진입점은 여행 목록이다.
+  if (auth.isAuthenticated && (to.path === '/' || GUEST_ONLY_PATHS.includes(to.path))) {
+    return { path: AUTHENTICATED_ENTRY_PATH }
   }
 
   return workspaceGuard(to)

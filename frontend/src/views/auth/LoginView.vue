@@ -6,6 +6,7 @@ import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
+import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 
 const router = useRouter()
 const route = useRoute()
@@ -23,7 +24,8 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(email.value, password.value)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/trips'
+    const redirect =
+      typeof route.query.redirect === 'string' ? route.query.redirect : AUTHENTICATED_ENTRY_PATH
     router.push(redirect)
   } catch (e) {
     error.value = e?.response?.data?.message ?? '로그인에 실패했습니다.'
