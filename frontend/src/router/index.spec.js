@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
 import router, { authGuard } from '@/router'
+import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
 
@@ -34,12 +35,17 @@ describe('router authGuard — 보호 라우트 가드', () => {
 
   it('이미 로그인한 사용자가 / 접근 시 여행 목록으로 보낸다', () => {
     useAuthStore().setTokens('a1', 'r1')
-    expect(authGuard(route('/'))).toEqual({ path: '/trips' })
+    expect(authGuard(route('/'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
 
   it('이미 로그인한 사용자가 /login 접근 시 여행 목록으로 보낸다', () => {
     useAuthStore().setTokens('a1', 'r1')
-    expect(authGuard(route('/login'))).toEqual({ path: '/trips' })
+    expect(authGuard(route('/login'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
+  })
+
+  it('이미 로그인한 사용자가 /signup 접근 시 여행 목록으로 보낸다', () => {
+    useAuthStore().setTokens('a1', 'r1')
+    expect(authGuard(route('/signup'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
 
   it('미인증 사용자는 /login 에 그대로 접근한다', () => {
@@ -54,8 +60,8 @@ describe('router authGuard — 보호 라우트 가드', () => {
   it('authenticated users are redirected away from password reset screens', () => {
     useAuthStore().setTokens('a1', 'r1')
 
-    expect(authGuard(route('/forgot-password'))).toEqual({ path: '/trips' })
-    expect(authGuard(route('/reset-password'))).toEqual({ path: '/trips' })
+    expect(authGuard(route('/forgot-password'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
+    expect(authGuard(route('/reset-password'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
 
   it('여행 상세 라우트는 보호 라우트로 등록한다', () => {

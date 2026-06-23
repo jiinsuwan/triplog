@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as authApi from '@/api/authApi'
+import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 import LoginView from '@/views/auth/LoginView.vue'
 
 const routerMock = vi.hoisted(() => ({
@@ -68,7 +69,7 @@ describe('LoginView', () => {
     await wrapper.find('form').trigger('submit')
 
     await vi.waitFor(() => {
-      expect(routerMock.push).toHaveBeenCalledWith('/trips')
+      expect(routerMock.push).toHaveBeenCalledWith(AUTHENTICATED_ENTRY_PATH)
     })
   })
 
