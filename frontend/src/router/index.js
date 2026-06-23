@@ -7,12 +7,14 @@ import TripListView from '@/views/trip/TripListView.vue'
 import PhotoView from '@/views/log/PhotoView.vue'
 import { useTripStore } from '@/stores/trip'
 import { isPastTripStatus } from '@/utils/tripStatus'
+import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 
 // 라우터 (architecture §3, 공유 영역).
 //
 // 보호 라우트 컨벤션 (트랙 공통 — agent·팀원은 이 규칙을 따른다):
 //   - 가드는 "명시적 보호" 방식이다. 로그인이 필요한 라우트는 meta: { requiresAuth: true } 를 붙인다.
 //   - meta 표시가 없는 라우트는 공개로 취급한다(누락 시 보호되지 않으니 주의).
+//   - 단, 인증 사용자가 / 또는 guest-only 인증 화면에 접근하면 기본 진입점으로 보낸다.
 //   - 각 트랙(trip/log)은 자기 보호 라우트에 requiresAuth 를 직접 명시한다.
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -120,9 +122,9 @@ export function authGuard(to) {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
-  // 이미 로그인한 사용자가 로그인/회원가입 접근 → 홈으로.
-  if (GUEST_ONLY_PATHS.includes(to.path) && auth.isAuthenticated) {
-    return { path: '/' }
+  // 이미 로그인한 사용자의 기본 진입점은 여행 목록이다.
+  if (auth.isAuthenticated && (to.path === '/' || GUEST_ONLY_PATHS.includes(to.path))) {
+    return { path: AUTHENTICATED_ENTRY_PATH }
   }
 
   return workspaceGuard(to)
