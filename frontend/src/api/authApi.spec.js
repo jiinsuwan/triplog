@@ -59,6 +59,19 @@ describe('authApi password reset', () => {
     })
   })
 
+  it('withdraws the current social-only user without password confirmation', async () => {
+    deleteMock.mockResolvedValueOnce({ data: { code: 'SUCCESS', data: null } })
+
+    await expect(withdraw(null)).resolves.toEqual({
+      code: 'SUCCESS',
+      data: null,
+    })
+
+    expect(deleteMock).toHaveBeenCalledWith('/users/me', {
+      data: { password: null },
+    })
+  })
+
   it('builds OAuth authorize URLs through the backend', () => {
     expect(oauthAuthorizeUrl('google', '/profile')).toBe(
       'http://localhost:8080/auth/oauth/google/authorize?redirect=%2Fprofile',

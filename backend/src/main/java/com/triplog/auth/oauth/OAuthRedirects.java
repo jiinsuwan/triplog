@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class OAuthRedirects {
 
+    private static final String DEFAULT_FAILURE_URI = "http://localhost:5173/login";
+
     private final OAuthProperties properties;
 
     public OAuthRedirects(OAuthProperties properties) {
@@ -26,11 +28,24 @@ public class OAuthRedirects {
     }
 
     public URI failure(String reason) {
-        return UriComponentsBuilder.fromUriString(properties.getFrontend().getFailureUri())
+        try {
+            return failure(properties.getFrontend().getFailureUri(), reason);
+        } catch (RuntimeException e) {
+            return failure(DEFAULT_FAILURE_URI, reason);
+        }
+    }
+
+    private URI failure(String baseUri, String reason) {
+        URI uri = UriComponentsBuilder.fromUriString(baseUri)
                 .queryParam("oauthError", reason)
                 .build()
                 .encode()
                 .toUri();
+        if (("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                && (uri.getHost() == null || uri.getHost().isBlank())) {
+            throw new IllegalArgumentException("OAuth failure URI host is blank.");
+        }
+        return uri;
     }
 
     private String stripFragment(String uri) {
