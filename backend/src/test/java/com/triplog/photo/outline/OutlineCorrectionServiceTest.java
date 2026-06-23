@@ -323,4 +323,18 @@ class OutlineCorrectionServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INFERENCE_UNAVAILABLE);
         verify(outlineMapper, never()).updateCorrection(any(), any(), any());
     }
+
+    @Test
+    void malformed_polygons_loop_does_not_crash() {
+        // 내부 loop 가 배열이 아닌 schema drift — addGeometry 가 NPE/500 없이 방어해야 한다.
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[]"));
+        when(inferenceClient.tap(eq("img-7"), any())).thenReturn(json("[{\"a\":1}]"));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[]"));
+        when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
+
+        OutlineCorrectionResponse resp = service().tap(USER, PHOTO, POINT);
+
+        assertThat(resp.itemId()).isEqualTo(0);
+    }
 }

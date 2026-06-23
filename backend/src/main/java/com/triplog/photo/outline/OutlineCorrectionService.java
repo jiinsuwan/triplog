@@ -193,6 +193,9 @@ public class OutlineCorrectionService {
         double area = 0.0;
         boolean any = false;
         for (JsonNode loop : polygons) {
+            if (!loop.isArray()) {
+                continue;             // schema drift(내부 loop 가 배열 아님) 방어 — get(i) null·NPE 차단
+            }
             double shoelace = 0.0;
             int n = loop.size();
             for (int i = 0; i < n; i++) {
