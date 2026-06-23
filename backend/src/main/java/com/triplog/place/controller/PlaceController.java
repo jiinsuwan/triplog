@@ -6,7 +6,6 @@ import com.triplog.place.dto.PlaceListResponse;
 import com.triplog.place.dto.PlaceRegionResponse;
 import com.triplog.place.service.PlaceService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,7 +30,6 @@ public class PlaceController {
     @GetMapping
     public ApiResponse<PlaceListResponse> list(@RequestParam(required = false) String region1,
                                                @RequestParam(required = false) String region2,
-                                               @Parameter(name = "placeType", description = "Content type code. Examples: ATTRACTION, LODGING, CULTURE, EVENT, TRAVEL_COURSE, SHOPPING, RESTAURANT. Defaults to the public tourist catalog when omitted.")
                                                @RequestParam(name = "placeType", required = false) String placeType,
                                                @RequestParam(required = false) String category,
                                                @RequestParam(required = false) String keyword,
