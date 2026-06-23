@@ -11,6 +11,7 @@ public class PhotoOutline {
 
     private Long photoId;
     private OutlineStatus status;
+    private String imageId;     // 추론 서버 캐시 키(보정용, S4-LOG-01). 휘발성 — 정본 아님(items 가 정본)
     private String items;       // JSON 원문(객체별 폴리곤·앵커) — 완료 시에만, OUTLINE_API §1
     private String error;       // 실패 사유 요약(FAILED 시)
     private LocalDateTime createdAt;
@@ -22,6 +23,14 @@ public class PhotoOutline {
 
     public void setPhotoId(Long photoId) {
         this.photoId = photoId;
+    }
+
+    public String getImageId() {
+        return imageId;
+    }
+
+    public void setImageId(String imageId) {
+        this.imageId = imageId;
     }
 
     public OutlineStatus getStatus() {

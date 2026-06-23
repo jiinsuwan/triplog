@@ -169,7 +169,8 @@ public class PhotoService {
     }
 
     // 사진 소유권 확인. 없으면 NOT_FOUND, 남의 사진이면 ACCESS_DENIED.
-    private Photo requireOwnedPhoto(Long userId, Long photoId) {
+    // 외곽선 보정(OutlineCorrectionService, S4-LOG-01)도 같은 검증을 재사용하도록 public 으로 노출한다.
+    public Photo requireOwnedPhoto(Long userId, Long photoId) {
         validateUserId(userId);
         if (photoId == null) {
             throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);

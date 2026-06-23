@@ -4,7 +4,12 @@ import com.triplog.common.ApiResponse;
 import com.triplog.photo.dto.LinkPhotoTripRequest;
 import com.triplog.photo.dto.PhotoContent;
 import com.triplog.photo.dto.PhotoResponse;
+import com.triplog.photo.outline.BoxRequest;
+import com.triplog.photo.outline.OutlineCorrectionResponse;
+import com.triplog.photo.outline.OutlineCorrectionService;
 import com.triplog.photo.outline.PhotoOutlineResponse;
+import com.triplog.photo.outline.RefineRequest;
+import com.triplog.photo.outline.TapRequest;
 import com.triplog.photo.service.PhotoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,9 +39,11 @@ import java.util.List;
 public class PhotoController {
 
     private final PhotoService photoService;
+    private final OutlineCorrectionService outlineCorrectionService;
 
-    public PhotoController(PhotoService photoService) {
+    public PhotoController(PhotoService photoService, OutlineCorrectionService outlineCorrectionService) {
         this.photoService = photoService;
+        this.outlineCorrectionService = outlineCorrectionService;
     }
 
     @Operation(summary = "Upload photos (multiple)")
@@ -95,5 +102,35 @@ public class PhotoController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long photoId) {
         return ApiResponse.success("Photo outline.", photoService.getOutline(userId, photoId));
+    }
+
+    @Operation(summary = "Tap-correct an outline: add a single object (owner only)")
+    @PostMapping("/{photoId}/outline/tap")
+    public ApiResponse<OutlineCorrectionResponse> tapOutline(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @RequestBody TapRequest request) {
+        return ApiResponse.success("Outline tap applied.",
+                outlineCorrectionService.tap(userId, photoId, request.point()));
+    }
+
+    @Operation(summary = "Box-correct an outline: add a grouped object (owner only)")
+    @PostMapping("/{photoId}/outline/box")
+    public ApiResponse<OutlineCorrectionResponse> boxOutline(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @RequestBody BoxRequest request) {
+        return ApiResponse.success("Outline box applied.",
+                outlineCorrectionService.box(userId, photoId, request.box()));
+    }
+
+    @Operation(summary = "Refine an outline with +/- points (owner only)")
+    @PostMapping("/{photoId}/outline/refine")
+    public ApiResponse<OutlineCorrectionResponse> refineOutline(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @RequestBody RefineRequest request) {
+        return ApiResponse.success("Outline refine applied.",
+                outlineCorrectionService.refine(userId, photoId, request.pos(), request.neg()));
     }
 }
