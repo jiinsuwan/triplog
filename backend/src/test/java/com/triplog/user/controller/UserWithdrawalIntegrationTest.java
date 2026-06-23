@@ -153,6 +153,27 @@ class UserWithdrawalIntegrationTest {
                 .andExpect(jsonPath("$.data.id").value(owner.userId()));
     }
 
+    @Test
+    void withdraw_rejects_missing_or_blank_password_without_deleting_user() throws Exception {
+        UserSession owner = createUser("withdraw-invalid-" + UUID.randomUUID() + "@example.com");
+
+        mockMvc.perform(delete("/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_001"));
+
+        mockMvc.perform(delete("/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new WithdrawUserRequest(" "))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_001"));
+
+        assertThat(count("users", "id", owner.userId())).isEqualTo(1);
+    }
+
     private UserSession createUser(String email) throws Exception {
         emails.add(email);
         jdbcTemplate.update("""
