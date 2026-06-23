@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripLog 디자인 시스템 — 컴포넌트 카탈로그</title>
+<link rel="stylesheet" href="design-system.css">
+<style>
+  /* 카탈로그 전용 레이아웃(컴포넌트 자체 스타일 아님) */
+  .cat{max-width:1080px;margin:0 auto;padding:24px 26px 80px}
+  .cat h1{font-size:23px;font-weight:800;letter-spacing:-.5px}
+  .cat .lead{color:var(--ink-sub);font-size:13px;margin-top:6px;max-width:760px}
+  .cat section{margin-top:40px}
+  .cat h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .cat h2 .n{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;display:grid;place-items:center}
+  .cat .desc{color:var(--ink-sub);font-size:12.5px;margin:6px 0 16px;max-width:780px}
+  .cat .row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end}
+  .cat .col{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+  .cat .lbl{font-size:11px;color:var(--ink-faint)}
+  .sw{display:flex;gap:8px;flex-wrap:wrap}
+  .sw .chip{width:62px}
+  .sw .chip i{display:block;height:40px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}
+  .sw .chip span{display:block;font-size:9.5px;color:var(--ink-sub);margin-top:4px;text-align:center}
+  .stamp-3up{display:flex;gap:30px}
+  .stamp-3up .col{align-items:center}
+  .stamp-3up b{font-size:12.5px}.stamp-3up small{color:var(--ink-sub);font-size:11px}
+</style>
+</head>
+<body>
+<div class="cat">
+  <h1>TripLog 디자인 시스템 — 컴포넌트 카탈로그</h1>
+  <p class="lead">이 페이지의 컴포넌트가 <b>정본</b>이다. 모든 화면은 <code>design-system.css</code>를 link 하고
+    여기 마크업을 그대로 가져다 <b>배치만</b> 한다. 컴포넌트는 여기서만 수정한다(화면별 변형 금지).</p>
+
+  <!-- 1. 토큰 -->
+  <section>
+    <h2><span class="n">1</span> 토큰</h2>
+    <p class="desc">색·타이포. CSS 변수로 제공(<code>var(--accent)</code> 등).</p>
+    <div class="row">
+      <div class="col"><span class="lbl">바탕·종이·잉크</span>
+        <div class="sw">
+          <div class="chip"><i style="background:#ece4d6"></i><span>bg</span></div>
+          <div class="chip"><i style="background:#fbf7ee"></i><span>paper</span></div>
+          <div class="chip"><i style="background:#2c2926"></i><span>ink</span></div>
+          <div class="chip"><i style="background:#8a8276"></i><span>ink-sub</span></div>
+          <div class="chip"><i style="background:#e2d8c4"></i><span>line</span></div>
+        </div>
+      </div>
+      <div class="col"><span class="lbl">기능색</span>
+        <div class="sw">
+          <div class="chip"><i style="background:#2f4a5c"></i><span>stamp</span></div>
+          <div class="chip"><i style="background:#c0392b"></i><span>complete</span></div>
+          <div class="chip"><i style="background:#c2693f"></i><span>accent</span></div>
+        </div>
+      </div>
+      <div class="col"><span class="lbl">티켓 빈티지 팔레트(여행마다 1색)</span>
+        <div class="sw">
+          <div class="chip"><i style="background:#c2693f"></i><span>terra</span></div>
+          <div class="chip"><i style="background:#c39a40"></i><span>mustard</span></div>
+          <div class="chip"><i style="background:#6f8a5f"></i><span>sage</span></div>
+          <div class="chip"><i style="background:#5f7d94"></i><span>blue</span></div>
+          <div class="chip"><i style="background:#8f4a47"></i><span>burgundy</span></div>
+          <div class="chip"><i style="background:#7c7a4f"></i><span>khaki</span></div>
+          <div class="chip"><i style="background:#8a6a82"></i><span>plum</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <div class="col"><span class="lbl">타이포</span>
+        <div style="font-size:13px;color:var(--ink-sub)"><b style="font-size:17px;color:var(--ink)">Pretendard</b> 본문 ·
+          <span class="ds-hand" style="font-size:20px">나눔손글씨</span> 감성·해시태그 ·
+          <span class="ds-mono">TL-2026-0623</span> 일련번호</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 상단바 -->
+  <section>
+    <h2><span class="n">2</span> 상단바</h2>
+    <p class="desc">HOME·TRIPS·LOGS 탭 + 검색(자리만) + 새 여행 + 프로필. 모든 화면 상단 공통.</p>
+    <div class="topbar" style="border:1px solid var(--line);border-radius:12px">
+      <div class="logo">Trip<b>Log</b></div>
+      <nav class="tabs"><a href="#" class="on">HOME</a><a href="#">TRIPS</a><a href="#">LOGS</a></nav>
+      <div class="search">🔍 여행 검색</div>
+      <button class="btn pri">＋ 새 여행</button>
+      <div class="avatar">지</div>
+    </div>
+  </section>
+
+  <!-- 3. 버튼 -->
+  <section>
+    <h2><span class="n">3</span> 버튼</h2>
+    <div class="row">
+      <button class="btn pri">주 액션</button>
+      <button class="btn">보조</button>
+      <button class="btn ghost">고스트</button>
+      <button class="btn pri sm">작은 주</button>
+      <button class="btn sm">작은 보조</button>
+    </div>
+  </section>
+
+  <!-- 4. 티켓 -->
+  <section>
+    <h2><span class="n">4</span> 티켓 <span style="font-size:11px;color:var(--ink-faint);font-weight:400">— 가로:세로 비율 고정(520:118 / 다녀옴 430:118)</span></h2>
+    <p class="desc">여행 계획. 왼쪽 색 스텁(계획 생성일) + 본문 + 오른쪽 스텁(바코드·D-DAY). 다녀오면 오른쪽 스텁이 뜯기고 여백에 도장.</p>
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:18px;max-width:560px">
+      <div class="col" style="align-items:stretch"><span class="lbl">계획 중 (D-DAY 미정)</span>
+        <div class="ticket" style="--tc:var(--t-mustard)">
+          <div class="stub-l"><span class="serial">TL-2026-0623</span></div><div class="perf-l"></div>
+          <div class="body"><div class="label">TRIP TICKET</div><div class="ttl">도쿄, 다시 한 번</div>
+            <div class="meta">도쿄<span class="dot">·</span>날짜 미정</div><div class="tags">#미식 #재방문</div></div>
+          <div class="perf-r"></div>
+          <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v muted">미정</div></div></div>
+        </div>
+      </div>
+      <div class="col" style="align-items:stretch"><span class="lbl">예정 (D-DAY 카운트)</span>
+        <div class="ticket" style="--tc:var(--t-blue)">
+          <div class="stub-l"><span class="serial">TL-2026-0402</span></div><div class="perf-l"></div>
+          <div class="body"><div class="label">TRIP TICKET</div><div class="ttl">후쿠오카 주말 여행</div>
+            <div class="meta">후쿠오카<span class="dot">·</span>07.05–07.07<span class="dot">·</span>2박3일</div><div class="tags">#온천 #미식</div></div>
+          <div class="perf-r"></div>
+          <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v">13</div></div></div>
+        </div>
+      </div>
+      <div class="col" style="align-items:stretch"><span class="lbl">다녀옴 (스텁 뜯김 + 완성 도장)</span>
+        <div class="ticket torn" style="--tc:var(--t-terra)">
+          <div class="stub-l"><span class="serial">TL-2026-0421</span></div><div class="perf-l"></div>
+          <div class="body"><div class="label">TRIP TICKET</div><div class="ttl">교토 단풍 기행</div>
+            <div class="meta">교토<span class="dot">·</span>11.07–11.09<span class="dot">·</span>2박3일</div><div class="tags">#단풍 #사찰</div>
+            <div class="stamp-slot stage-3"><svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 완성">
+        <circle class="bg" cx="100" cy="100" r="88"/>
+        <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+        <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+        <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+        <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+        <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+        <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
+        <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+        <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+        <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
+        <g transform="rotate(-12 100 100)">
+          <rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/>
+          <text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text>
+        </g>
+      </svg></div></div>
+          <div class="perf-r"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. 도장 -->
+  <section>
+    <h2><span class="n">5</span> 도장 <span style="font-size:11px;color:var(--ink-faint);font-weight:400">— 추억 상태로 3단계</span></h2>
+    <p class="desc">다녀온 여행에만. 겉 실선 / 안 점선, 비행기·여행지(한글)·날짜(세로). 단계가 오를수록 내부 디테일 누적, 완성 시 적색 COMPLETE.</p>
+    <div class="stamp-3up">
+      <div class="col"><div class="stage-1"><svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 1단계 도착">
+        <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+        <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+        <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+        <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+        <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+        <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
+      </svg></div><b>1 · 도착</b><small>추억 없음</small></div>
+      <div class="col"><div class="stage-2"><svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 2단계 기록 중">
+        <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+        <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+        <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+        <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+        <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+        <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
+        <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+        <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+        <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
+      </svg></div><b>2 · 기록 중</b><small>추억 draft</small></div>
+      <div class="col"><div class="stage-3"><svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 3단계 완성">
+        <circle class="bg" cx="100" cy="100" r="88"/>
+        <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+        <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+        <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+        <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+        <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+        <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
+        <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+        <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+        <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
+        <g transform="rotate(-12 100 100)">
+          <rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/>
+          <text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text>
+        </g>
+      </svg></div><b>3 · 완성</b><small>추억 completed</small></div>
+    </div>
+  </section>
+
+  <!-- 6. 폴라로이드 -->
+  <section>
+    <h2><span class="n">6</span> 폴라로이드 <span style="font-size:11px;color:var(--ink-faint);font-weight:400">— 완성된 추억(여행 1개 = 한 장)</span></h2>
+    <p class="desc">사진 + 제목(고딕) + 날짜·장소 + 해시태그(손글씨) + 완성 시 하단 COMPLETE 도장. 똑바르게.</p>
+    <div class="row">
+      <div class="col"><span class="lbl">완성</span>
+        <div class="polaroid">
+          <div class="photo" style="background:radial-gradient(80% 70% at 60% 35%,#d39a5a,#9a4b2a 60%,#5a2c18)"></div>
+          <div class="cap"><div class="name">교토 단풍 기행</div><div class="meta">교토 · 2023.11</div>
+            <div class="tags">#단풍 #사찰</div><span class="done-stamp">COMPLETE</span></div>
+        </div>
+      </div>
+      <div class="col"><span class="lbl">기록 중(도장 없음)</span>
+        <div class="polaroid">
+          <div class="photo" style="background:linear-gradient(150deg,#6f93b0,#37516a 70%,#243a52)"></div>
+          <div class="cap"><div class="name">제주 동쪽 바다</div><div class="meta">제주 · 2024.09</div>
+            <div class="tags">#오름 #바다</div></div>
+        </div>
+      </div>
+      <div class="col"><span class="lbl">미생성(다녀왔지만 추억 없음)</span>
+        <div class="polaroid empty">
+          <div class="photo"><div style="color:var(--ink-faint);font-size:12px;text-align:center;line-height:1.5">＋<br>추억 만들기</div></div>
+          <div class="cap"><div class="name">오사카 봄 여행</div><div class="meta">오사카 · 다녀옴</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. 폼 · 토스트 · 로딩 · 빈 상태 -->
+  <section>
+    <h2><span class="n">7</span> 폼 · 토스트 · 로딩 · 빈 상태</h2>
+    <p class="desc">입력 폼은 <code>.form-narrow</code>로 폭 제한(과하게 길어지지 않게). 토스트(성공/오류/중립), 로딩(스피너·스켈레톤), 빈 상태.</p>
+    <div class="row" style="align-items:flex-start;gap:44px">
+      <div class="col"><span class="lbl">폼 (.form-narrow)</span>
+        <div class="form-narrow">
+          <div class="field"><label>이메일</label><input class="input" placeholder="you@triplog.kr"></div>
+          <div class="field"><label>비밀번호</label><input class="input" type="password" placeholder="••••••••"></div>
+          <button class="btn pri block">확인</button>
+        </div>
+      </div>
+      <div class="col"><span class="lbl">토스트</span>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="toast success"><span class="ic">✓</span>저장되었어요</div>
+          <div class="toast error"><span class="ic">✕</span>다시 시도해 주세요</div>
+          <div class="toast"><span class="ic">↻</span>처리 중이에요</div>
+        </div>
+      </div>
+      <div class="col"><span class="lbl">로딩</span>
+        <div style="display:flex;align-items:center;gap:18px">
+          <div class="spinner"></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="skeleton" style="width:160px;height:13px"></div>
+            <div class="skeleton" style="width:120px;height:13px"></div>
+            <div class="skeleton" style="width:140px;height:13px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="col"><span class="lbl">빈 상태</span>
+        <div class="empty-state" style="border:1px dashed var(--line);border-radius:12px;width:420px">
+          <div class="ic">🗒️</div>
+          <div class="et">아직 추억이 없어요</div>
+          <div class="ed">다녀온 여행을 카드로 남겨보세요.</div>
+          <button class="btn pri">추억 만들기</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

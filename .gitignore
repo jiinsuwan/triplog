@@ -50,6 +50,9 @@ AGENTS.local.md
 # 회고/플래닝 staging 등 비공식 작업 노트 (커밋 안 함)
 *.wip.md
 
+# 디자인 시안 (로컬 탐색용 — 공유 안 함)
+design_candidates/
+
 # ========== 임시 / 빌드 산출물 ==========
 *.tmp
 *.bak

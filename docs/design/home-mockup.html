@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripLog — 홈 대시보드 (스크랩북) 논의용 목업</title>
+<link rel="stylesheet" href="design-system.css">
+<style>
+  body{background:var(--bg)}
+  .scrap{max-width:1200px;margin:18px auto;background:var(--paper);--ds-surface:var(--paper);border:1px solid var(--line);
+    border-radius:16px;padding:26px 36px 34px;box-shadow:0 12px 34px -18px rgba(60,40,20,.4)}
+  .scrap-head h1{font-family:'Nanum Pen Script',cursive;font-size:31px;letter-spacing:.5px;line-height:1.05}
+  .scrap-head h1 b{color:var(--accent)}
+  .scrap-head .sub{color:var(--ink-sub);font-size:13px;margin-top:2px}
+
+  /* 사용자 배치: stats(좌상) / resume(우상,큰) / stamps(좌하) / recent(중하) / upcoming(우하,세로) */
+  .drawer{display:grid;grid-template-columns:0.92fr 1.5fr 1fr;
+    grid-template-areas:
+      "stats  resume  resume"
+      "stamps recent  upcoming";
+    gap:30px 28px;margin-top:18px;align-items:start}
+  .c-stats{grid-area:stats} .c-resume{grid-area:resume}
+  .c-stamps{grid-area:stamps} .c-recent{grid-area:recent} .c-upcoming{grid-area:upcoming}
+
+  /* 구역 제목 = 마스킹테이프 조각에 손글씨(박스 대신) */
+  .lbl{display:inline-block;font-family:'Nanum Pen Script',cursive;font-size:19px;color:var(--ink);
+    background:rgba(208,170,90,.34);padding:2px 12px;transform:rotate(-1.2deg);margin-bottom:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,.05);line-height:1.3}
+
+  .c-resume .ticket{--ticket-w:640px;max-width:100%}
+  .c-upcoming{display:flex;flex-direction:column}
+  .c-upcoming .up-list{display:flex;flex-direction:column;gap:14px}
+  .c-upcoming .ticket{--ticket-w:300px;max-width:100%}
+  .c-recent .strip{display:flex;gap:14px}
+  .c-recent .polaroid{--pola-w:146px}
+
+  /* 통계(지금까지 기록) */
+  .stats .copy{font-family:'Nanum Pen Script',cursive;font-size:22px;line-height:1.3;margin-bottom:14px}
+  .stats .copy b{color:var(--accent)}
+  .stats .nums{display:grid;grid-template-columns:1fr 1fr;gap:9px 14px}
+  .stats .num{border-bottom:1px dotted var(--line);padding-bottom:6px}
+  .stats .num .v{font-size:21px;font-weight:800;letter-spacing:-.5px;font-family:'SF Mono',monospace}
+  .stats .num .v small{font-size:12px;font-weight:600;margin-left:2px;color:var(--ink-sub);font-family:Pretendard}
+  .stats .num .k{font-size:11px;color:var(--ink-sub);margin-top:1px}
+
+  /* 이어서 = 배경색 구역(마스킹테이프 대신), 헤더로 설명 정돈 */
+  .c-resume{--ds-surface:#f1e7d3;background:#f1e7d3;border:1px solid #e3d7bd;border-radius:14px;padding:15px 18px 18px}
+  .resume-head{margin-bottom:13px}
+  .rh-title{font-size:15px;font-weight:800;letter-spacing:-.3px}
+  .rh-sub{font-size:12px;color:var(--ink-sub);margin-top:3px}
+  /* 도장 = 공책에 찍힌 것처럼(가로줄 노트 배경) */
+  .c-stamps-inner{background:#f6efde;border:1px solid #e3d7bd;border-radius:8px;padding:20px 16px;
+    background-image:repeating-linear-gradient(#f6efde 0 26px,#e8dbc0 26px,#e8dbc0 27px,#f6efde 27px)}
+  .stamps-note{display:flex;flex-wrap:wrap;gap:14px 12px;justify-content:center;align-items:center}
+  .stamps-note .stamp-svg{width:98px;height:98px}
+  .stamps-note .s:nth-child(2n){transform:rotate(2.5deg)}
+  .stamps-note .s:nth-child(3n){transform:rotate(-3deg)}
+
+  .doc-note{max-width:1200px;margin:8px auto 40px;padding:12px 26px;color:var(--ink-faint);font-size:12px;
+    background:#fff8;border:1px dashed var(--line);border-radius:10px}
+  .doc-note b{color:var(--ink-sub)} .doc-note ul{margin:5px 0 0;padding-left:17px} .doc-note li{margin:1.5px 0}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo">Trip<b>Log</b></div>
+    <nav class="tabs"><a href="#" class="on">HOME</a><a href="#">TRIPS</a><a href="#">LOGS</a></nav>
+    <div class="search">🔍 여행 검색</div>
+    <button class="btn pri">＋ 새 여행</button>
+    <div class="avatar">지</div>
+  </div>
+
+  <div class="scrap">
+    <div class="scrap-head">
+      <h1>지인님, 다음 여행 떠나볼까요 <b>?</b></h1>
+      <p class="sub">하던 계획을 이어가고, 다녀온 여행을 추억으로 남겨요.</p>
+    </div>
+
+    <div class="drawer">
+      <!-- 지금까지 기록 (좌상) -->
+      <div class="c-stats stats">
+        <span class="lbl">지금까지 기록</span>
+        <p class="copy">지인님, TripLog와<br><b>12번</b>의 여행을 떠났어요</p>
+        <div class="nums">
+          <div class="num"><div class="v">12<small>번</small></div><div class="k">떠난 여행</div></div>
+          <div class="num"><div class="v">32<small>일</small></div><div class="k">길 위에서</div></div>
+          <div class="num"><div class="v">6<small>개</small></div><div class="k">남긴 추억</div></div>
+          <div class="num"><div class="v">214<small>장</small></div><div class="k">추억 속 사진</div></div>
+        </div>
+      </div>
+
+      <!-- 이어서하기 (우상, 큰) -->
+      <div class="c-resume">
+        <div class="resume-head">
+          <div class="rh-title">이어서 계획하기</div>
+          <div class="rh-sub">가장 최근에 보던 여행이에요 · 눌러서 이어가기</div>
+        </div>
+        <div class="ticket" style="--tc:var(--t-mustard)">
+          <div class="stub-l"><span class="serial">TL-2026-0623</span></div><div class="perf-l"></div>
+          <div class="body"><div class="label">TRIP TICKET</div><div class="ttl">오사카 가을 여행</div>
+            <div class="meta">오사카<span class="dot">·</span>10.18–10.21<span class="dot">·</span>3박4일</div>
+            <div class="tags">#교토 #단풍</div></div>
+          <div class="perf-r"></div>
+          <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v">118</div></div></div>
+        </div>
+      </div>
+
+      <!-- 도장들 (좌하) — 노트에 찍힌 -->
+      <div class="c-stamps">
+        <div class="c-stamps-inner">
+          <div class="stamps-note">
+            <span class="s stage-3"><svg class="stamp-svg" viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="88"/><circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/><circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/><text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text><text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text><text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text><text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text><text x="100" y="121" text-anchor="middle" font-size="11.5">2023.11.07</text><text x="100" y="135" text-anchor="middle" font-size="12.5">~</text><text x="100" y="149" text-anchor="middle" font-size="11.5">2023.11.09</text><g transform="rotate(-12 100 100)"><rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/><text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text></g></svg></span>
+            <span class="s stage-3"><svg class="stamp-svg" viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="88"/><circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/><circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/><text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text><text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">도쿄</text><text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text><text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text><text x="100" y="121" text-anchor="middle" font-size="11.5">2024.03.02</text><text x="100" y="135" text-anchor="middle" font-size="12.5">~</text><text x="100" y="149" text-anchor="middle" font-size="11.5">2024.03.05</text><g transform="rotate(-12 100 100)"><rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/><text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text></g></svg></span>
+            <span class="s stage-2"><svg class="stamp-svg" viewBox="0 0 200 200"><circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/><circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/><text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text><text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">제주</text><text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text><text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text><text x="100" y="121" text-anchor="middle" font-size="11.5">2024.09.02</text><text x="100" y="135" text-anchor="middle" font-size="12.5">~</text><text x="100" y="149" text-anchor="middle" font-size="11.5">2024.09.04</text></svg></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 최근 추억 (중하) -->
+      <div class="c-recent">
+        <span class="lbl">최근 추억</span>
+        <div class="strip">
+          <div class="polaroid"><div class="photo" style="background:radial-gradient(80% 70% at 60% 35%,#d39a5a,#9a4b2a 60%,#5a2c18)"></div>
+            <div class="cap"><div class="name">교토 단풍 기행</div><div class="meta">교토 · 2023.11</div><div class="tags">#단풍</div><span class="done-stamp">COMPLETE</span></div></div>
+          <div class="polaroid"><div class="photo" style="background:radial-gradient(80% 70% at 40% 40%,#7bb0ad,#3d8079 60%,#235650)"></div>
+            <div class="cap"><div class="name">다낭 휴양 여행</div><div class="meta">다낭 · 2023.12</div><div class="tags">#해변</div><span class="done-stamp">COMPLETE</span></div></div>
+          <div class="polaroid"><div class="photo" style="background:radial-gradient(80% 70% at 50% 30%,#8a6a9e,#4a3566 65%,#2a1d3e)"></div>
+            <div class="cap"><div class="name">도쿄의 밤</div><div class="meta">도쿄 · 2024.03</div><div class="tags">#야경</div><span class="done-stamp">COMPLETE</span></div></div>
+        </div>
+      </div>
+
+      <!-- 곧 떠날 여행 (우하) — 세로 티켓 -->
+      <div class="c-upcoming">
+        <span class="lbl">곧 떠날 여행</span>
+        <div class="up-list">
+          <div class="ticket" style="--tc:var(--t-blue)">
+            <div class="stub-l"><span class="serial">TL-2026-0402</span></div><div class="perf-l"></div>
+            <div class="body"><div class="label">TRIP TICKET</div><div class="ttl">후쿠오카 주말 여행</div>
+              <div class="meta">후쿠오카<span class="dot">·</span>07.05–07.07</div></div>
+            <div class="perf-r"></div>
+            <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v">13</div></div></div>
+          </div>
+          <div class="ticket" style="--tc:var(--t-burgundy)">
+            <div class="stub-l"><span class="serial">TL-2026-0228</span></div><div class="perf-l"></div>
+            <div class="body"><div class="label">TRIP TICKET</div><div class="ttl">다낭 휴양 여행</div>
+              <div class="meta">다낭<span class="dot">·</span>12.20–12.23</div></div>
+            <div class="perf-r"></div>
+            <div class="stub-r"><div class="barcode"></div><div class="dday"><div class="k">D-DAY</div><div class="v">41</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc-note">
+    <b>홈 대시보드 — 결정사항</b> (논의용 목업 / Sprint 4)
+    <ul>
+      <li>배치 = 좌상 지금까지 기록 / 우상 이어서(큰 티켓) / 좌하 다녀온 도장(노트에 찍힘) / 중하 최근 추억 / 우하 곧 떠날(세로 티켓)</li>
+      <li>구역 구분 = 마스킹테이프 라벨 + 여백(박스 아님). 컴포넌트는 design-system.css 재사용 — 티켓은 폭 줄이면 내부 글자도 비례 축소</li>
+      <li>이어가기 = 마지막 편집 여행. 완성도 미표시·버튼 없이 티켓 클릭으로 / 곧 떠날 = 클릭 → 여행 상세 팝업 / 추억 = 폴라로이드 클릭 → 추억 상세 팝업</li>
+      <li>모바일 반응형 = 추후(데스크톱 우선)</li>
+    </ul>
+  </div>
+
+</body>
+</html>

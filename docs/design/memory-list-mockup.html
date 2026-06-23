@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripLog — LOGS 추억 목록 논의용 목업</title>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap');
+
+:root{
+  --bg:#ece4d6; --paper:#fbf7ee; --ink:#2c2926; --ink-sub:#8a8276; --ink-faint:#b6ab97;
+  --line:#e2d8c4; --stamp:#2f4a5c; --complete:#c0392b; --accent:#c2693f;
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:Pretendard,system-ui,sans-serif;background:var(--bg);color:var(--ink);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.hand{font-family:'Nanum Pen Script',cursive}
+
+/* 상단바 */
+.topbar{background:var(--paper);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:22px;padding:12px 24px}
+.topbar .logo{font-weight:800;font-size:17px;letter-spacing:-.4px}
+.topbar .logo b{color:var(--accent)}
+.tabs{display:flex;gap:4px;margin-left:6px}
+.tabs a{font-size:13px;font-weight:600;color:var(--ink-sub);text-decoration:none;padding:6px 12px;border-radius:8px}
+.tabs a.on{color:var(--ink);background:#0000000a}
+.topbar .sp{flex:1}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#e9c39f,var(--accent));
+  color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+
+.doc-note{max-width:1080px;margin:14px auto 0;padding:0 22px;color:var(--ink-faint);font-size:12px}
+.doc-note b{color:var(--ink-sub)}
+
+.wrap{max-width:1080px;margin:0 auto;padding:22px 22px 80px}
+
+/* 헤더 */
+.head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
+.head h1{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.head h1 .hand{color:var(--accent);font-weight:400;font-size:26px;margin-left:4px}
+.head .sub{color:var(--ink-sub);font-size:13px;margin-top:5px}
+.filters{display:flex;gap:6px}
+.filters button{border:1px solid var(--line);background:var(--paper);color:var(--ink-sub);
+  border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+.filters button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+
+/* 폴라로이드 그리드 — 작게, 4열 */
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:30px 24px;margin-top:32px}
+.polaroid{position:relative;z-index:1;background:#fffdf8;border:1px solid #ece3d2;border-radius:4px;
+  padding:8px 8px 0;box-shadow:0 5px 13px -7px rgba(60,40,20,.42);cursor:pointer;
+  transition:transform .15s}
+.polaroid:hover{transform:translateY(-4px);z-index:3}
+/* 똑바른 폴라로이드 — 기울임/겹침 없이 깔끔하게 정렬 */
+.polaroid .photo{aspect-ratio:1/1;border-radius:2px;position:relative;overflow:hidden}
+.polaroid .count{position:absolute;top:7px;right:7px;background:#00000055;color:#fff;
+  font-size:10px;font-weight:700;border-radius:20px;padding:2px 8px;backdrop-filter:blur(2px)}
+/* 완성 = COMPLETE 도장 / 기록 중 = 남색 칩 */
+/* COMPLETE = 하단 흰 여백 우측에 도장(사진 위 X — 알록달록 사진에 묻히지 않게) */
+.polaroid .done-stamp{position:absolute;right:10px;bottom:14px;transform:rotate(-8deg);
+  color:var(--complete);border:1.7px solid var(--complete);border-radius:3px;
+  padding:1px 6px;font-size:8.5px;font-weight:800;letter-spacing:1px}
+/* 폴라로이드 하단 필기 영역 — 넓게, 왼쪽 정렬 */
+.polaroid .cap{position:relative;padding:12px 13px 16px;text-align:left;min-height:60px}
+.polaroid .name{font-size:14.5px;font-weight:800;letter-spacing:-.3px;line-height:1.15}
+.polaroid .meta{font-size:10px;color:var(--ink-sub);margin-top:3px}
+.polaroid .tags{font-family:'Nanum Pen Script',cursive;font-size:16px;color:var(--accent);margin-top:1px;letter-spacing:.3px}
+
+/* 다녀왔지만 아직 추억 없음 = 빈 폴라로이드(만들기 유도) */
+.polaroid.empty{background:#f6efe2;border-style:dashed;border-color:#d8ccb6;box-shadow:none}
+.polaroid.empty .photo{background:#efe7d7;display:grid;place-items:center}
+.polaroid.empty .photo .plus{color:var(--ink-faint);font-size:12px;text-align:center;line-height:1.5}
+.polaroid.empty .name{color:var(--ink-sub)}
+
+.hint{text-align:center;color:var(--ink-faint);font-size:11.5px;margin-top:34px}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="logo">Trip<b>Log</b></div>
+    <nav class="tabs"><a href="#">HOME</a><a href="#">TRIPS</a><a href="#" class="on">LOGS</a></nav>
+    <div class="sp"></div>
+    <div class="avatar">지</div>
+  </div>
+
+  <p class="doc-note">논의용 목업 — <b>LOGS 추억 목록</b>. 추억(여행 1개) = 폴라로이드 한 장.
+    누르면 추억 상세(카드 뷰어)가 <b>팝업</b>으로. 상태 = 도장 유무(완성 = COMPLETE 도장 / 기록 중 = 도장 없음 / 미생성 = 빈 폴라로이드).</p>
+
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1>추억 <span class="hand">한 장 한 장</span></h1>
+        <p class="sub">다녀온 여행을 카드로 남긴 기록 · 완성 4 · 기록 중 2</p>
+      </div>
+      <div class="filters">
+        <button class="on">전체</button>
+        <button>최근순</button>
+        <button>연도별</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <!-- 완성(하단 COMPLETE 도장) -->
+      <div class="polaroid s2" style="--rot:-1.5deg">
+        <div class="photo" style="background:radial-gradient(80% 70% at 60% 35%,#d39a5a,#9a4b2a 60%,#5a2c18)">
+        </div>
+        <div class="cap"><div class="name">교토 단풍 기행</div><div class="meta">교토 · 2023.11</div><div class="tags hand">#단풍 #사찰</div><span class="done-stamp">COMPLETE</span></div>
+      </div>
+
+      <div class="polaroid s3" style="--rot:1deg">
+        <div class="photo" style="background:radial-gradient(80% 70% at 40% 40%,#7bb0ad,#3d8079 60%,#235650)">
+        </div>
+        <div class="cap"><div class="name">다낭 휴양 여행</div><div class="meta">다낭 · 2023.12</div><div class="tags hand">#휴양 #해변</div><span class="done-stamp">COMPLETE</span></div>
+      </div>
+
+      <!-- 기록 중(도장 없음) -->
+      <div class="polaroid s1" style="--rot:-1deg">
+        <div class="photo" style="background:linear-gradient(150deg,#6f93b0,#37516a 70%,#243a52)">
+        </div>
+        <div class="cap"><div class="name">제주 동쪽 바다</div><div class="meta">제주 · 2024.09</div><div class="tags hand">#오름 #바다</div></div>
+      </div>
+
+      <div class="polaroid s3" style="--rot:1.5deg">
+        <div class="photo" style="background:radial-gradient(80% 70% at 50% 30%,#8a6a9e,#4a3566 65%,#2a1d3e)">
+        </div>
+        <div class="cap"><div class="name">도쿄의 밤</div><div class="meta">도쿄 · 2024.03</div><div class="tags hand">#야경 #미식</div><span class="done-stamp">COMPLETE</span></div>
+      </div>
+
+      <div class="polaroid s1" style="--rot:-1deg">
+        <div class="photo" style="background:linear-gradient(150deg,#d4b36a,#9a7a2e 70%,#6a5320)">
+        </div>
+        <div class="cap"><div class="name">부산 1박 2일</div><div class="meta">부산 · 2024.05</div><div class="tags hand">#바다 #먹방</div></div>
+      </div>
+
+      <div class="polaroid s2" style="--rot:0.5deg">
+        <div class="photo" style="background:linear-gradient(150deg,#7fa56f,#3f6a45 70%,#284a30)">
+        </div>
+        <div class="cap"><div class="name">후쿠오카 주말</div><div class="meta">후쿠오카 · 2024.07</div><div class="tags hand">#온천 #미식</div><span class="done-stamp">COMPLETE</span></div>
+      </div>
+
+      <!-- 다녀왔지만 추억 아직 없음 -->
+      <div class="polaroid empty" style="--rot:-1deg">
+        <div class="photo"><div class="plus">＋<br>추억 만들기</div></div>
+        <div class="cap"><div class="name">오사카 봄 여행</div><div class="meta">오사카 · 다녀옴</div></div>
+      </div>
+    </div>
+
+    <p class="hint">폴라로이드를 누르면 그 여행의 카드들을 추억 상세(팝업)로 봅니다 · 빈 폴라로이드 = 다녀왔지만 아직 추억을 안 만든 여행</p>
+  </div>
+
+</body>
+</html>
