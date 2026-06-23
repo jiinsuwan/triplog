@@ -1,7 +1,7 @@
 # Frontend 화면 구조 가이드 (제안 / draft)
 
-> **상태**: 🟢 **정본** (S1 회고 베이스 채택 → **S2 회고에서 기록/카드 흐름 와이어프레임 채택으로 확장**) — 이 문서가 IA·컴포넌트 매핑의 기준이다. 정본 목업 = §5 (계획 = trip-planner-flow.html / 기록·카드 = log-flow-proposal.html).
-> **출처**: 프론트 구조 mock → **정본 [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 비주얼 보강 = v3(팀원) 흡수(§6). + 교차 리뷰.
+> **상태**: 🟢 **정본** (S1 회고 베이스 → S2 회고 확장 → **S4에서 시각 디자인 정본을 [docs/design/](design/) 패키지로 교체**) — 이 문서는 **IA·컴포넌트 매핑**의 기준이고, **시각 디자인(색·폰트·컴포넌트·화면 레이아웃)의 정본 = [docs/design/](design/)** (§5, 인덱스 = [design-progress.md](design/design-progress.md)). 화면 세부가 본 문서 IA와 다르면 **docs/design/이 최신·우선**(예: 여행 개요 = 팝업, 탐색+일정 통합).
+> **출처**: 프론트 구조 mock(proposal) → **S4 시각 디자인 정본 = [docs/design/](design/)** (메타포 = 티켓·도장·폴라로이드). 옛 시안(trip-planner-flow / log-flow-proposal)과 v3 흡수 계획(§6)은 폐기·대체.
 > **선행 정본**: [requirements](requirements.md) · [decisions/0004](decisions/0004-card-poc-result.md) · [architecture](architecture.md) · [router](../frontend/src/router/index.js).
 
 ---
@@ -33,7 +33,7 @@
 
 ### 3-0. 최상위 IA = 계획/기록 2워크스페이스 + 상태 기반 진입 (S2 회고 채택)
 
-- 정본 와이어프레임 = [design/log-flow-proposal.html](design/log-flow-proposal.html) (PR #58 — 기록/카드 흐름).
+- 정본 디자인 = [docs/design/](design/) 패키지(기록/카드 = design-progress 11·12·14). (옛 와이어프레임 log-flow-proposal·PR #58 — 폐기·대체)
 - **계획 워크스페이스**(trip): 여행 생성 → 탐색 → 일정. / **기록 워크스페이스**(log): 완성된 일정 위에 사진을 배치하는 **여행 기록(로그) 뷰** — 지도 + 경로 타임라인 + 미분류 트레이 + 상시 드롭존, 일정 인라인 수정. **"계획한 여행에만 로그"** — 진입은 여행 `status` 기반.
 - 기록 뷰 = F14 재정의([requirements v1.2](requirements.md)). 구현 = **S4**(trip 일정 F04 선행 — 일정 완료 시 앞당김 가능).
 - `status` 허용값·검증·라우팅 골격은 **S3 core Issue**로 확정한다 (§3-3의 값은 가안).
@@ -85,14 +85,16 @@ Stop { placeId, type, time?: "HH:MM", memo?, transport }  // 시간·유형·메
 3. **탐색·일정 통합 여부** — 두 탭을 "계획" 한 탭의 토글로 합칠지.
 4. ~~requirements F07 본문 정정~~ — 완료(PR #32).
 
-## 5. 정본 목업 (채택)
+## 5. 정본 디자인 (S4 채택 — docs/design/ 패키지)
 
-- **정본 (계획) = [docs/design/trip-planner-flow.html](design/trip-planner-flow.html)** (proposal 베이스, repo 공유). 색·폰트·IA의 기준.
-- **정본 (기록·카드) = [docs/design/log-flow-proposal.html](design/log-flow-proposal.html)** (PR #58 — S2 회고 채택, §3-0).
-- **디자인 언어** (proposal·v3 이미 일치): Pretendard / 배경 `#f2f4f6` / 주색 파랑 `#3182f6` / 초록 `#16c47e` / 회색 `#191f28`·`#8b95a1`·`#e5e8eb` / 보조 보라`#8b5cf6`·코랄`#f04452`·노랑`#f59e0b`.
-- **PrimeVue 적용**: Aura preset를 `definePreset`로 **primary=파랑(`#3182f6`) + Pretendard + surface 그레이**에 맞춘다. (현재 빌드된 trip 화면의 임시 색은 이 톤으로 수렴 — 정리는 화면 작업 중/후.)
+- **정본 = [docs/design/](design/)** — 인덱스 [design-progress.md](design/design-progress.md), 컴포넌트 정본 [design-system.css](design/design-system.css)·카탈로그 [design-system.html](design/design-system.html), 화면 목업(목록·생성·미리보기·탐색·일정 = [trips-mockup.html](design/trips-mockup.html), 인증·프로필·홈·추억 등). **색·폰트·컴포넌트·화면 레이아웃의 기준.** (옛 시안 trip-planner-flow / log-flow-proposal 폐기)
+- **디자인 언어**: Pretendard(본문) + Nanum Pen Script(감성·해시태그) / 배경 종이 베이지 `#ece4d6`·표면 `#fbf7ee` / 잉크 `#2c2926`·`#8a8276`·`#b6ab97` / 주 액션 테라코타 `#c2693f` / 도장 남색 `#2f4a5c` / COMPLETE 적색 `#c0392b` / 티켓 빈티지 팔레트(테라·머스타드·세이지·블루·버건디·카키·플럼). **메타포 = 티켓(계획)·도장(다녀옴+추억 진행)·폴라로이드(완성된 추억).**
+- **PrimeVue 적용**: Aura preset을 `definePreset`로 위 토큰(primary=테라코타 + Pretendard + 종이 surface)에 맞춘다. 폼 위젯(DatePicker·Select·InputText 등)은 **PrimeVue 유지(테마링)**, 티켓·도장·폴라로이드 등 고유 컴포넌트는 design-system 기반 직접 구현.
+- **공통 컴포넌트는 design-system에서만 정의하고 화면별로 새로 만들지 않는다.** 개편 시 **Vue 컴포넌트로 추출**(TicketCard·Stamp·Polaroid·BaseModal 등)해 재사용을 구조적으로 강제한다.
 
-## 6. v3에서 흡수할 비주얼
+## 6. v3에서 흡수할 비주얼 (폐기 — §5 docs/design/로 대체)
+
+> 아래는 옛 흡수 계획이다. **시각 정본은 §5(docs/design/)** 이며, 이 항목들은 그 목업에 반영·대체되었다. 기록만 남긴다.
 
 proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
 - **홈**: 강한 히어로 카피 + 여행 카드 갤러리(story-grid) 무드.
@@ -137,3 +139,4 @@ proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
 | draft v0 | 2026-06-08 | 프론트 구조 mock + 교차 리뷰 기반 초안. 미승인. |
 | v1 | 2026-06-09 | 정본 채택(docs/design/trip-planner-flow.html) + v3 비주얼 흡수(§6) + PrimeVue 컴포넌트 매핑(§7). F07 정정 완료(PR #32) 반영. |
 | v2 | 2026-06-12 | **S2 회고 반영**: 기록/카드 흐름 와이어프레임(log-flow-proposal.html, PR #58) 정본 채택 — 계획/기록 2워크스페이스 + 상태 기반 진입(§3-0) / Stop에 transport 필수 필드 / 사진↔stop 선택적 연결 방향 / F14 = 기록 뷰 재정의(S4) |
+| v3 | 2026-06-23 | **S4 디자인 반영**: 시각 디자인 정본을 docs/design/ 패키지(design-system + 화면 목업)로 교체. 옛 시안 trip-planner-flow·log-flow-proposal 폐기. 디자인 언어 = 종이/빈티지 티켓 톤(테라코타·도장 남색), 메타포 = 티켓·도장·폴라로이드. 화면 세부는 docs/design/ 우선. |
