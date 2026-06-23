@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TripLog — LOGS(다녀옴 미리보기·카드 에디터)</title>
+<link rel="stylesheet" href="design-system.css">
+<style>
+  body{background:var(--bg);padding:30px 20px 70px}
+  .pagehead{max-width:1160px;margin:0 auto 6px;color:var(--ink-faint);font-size:12px}
+  .pagehead b{color:var(--ink-sub)}
+  .seclbl{max-width:1160px;margin:30px auto 9px;font-size:12.5px;font-weight:700;color:var(--ink-sub)}
+  .seclbl span{color:var(--ink-faint);font-weight:500}
+
+  .scene{position:relative;max-width:1160px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+  .scene .dim{position:absolute;inset:0;filter:saturate(.9);background:var(--paper-card);padding:22px 26px;overflow:hidden}
+  .scene .ghost-ttl{font-size:19px;font-weight:800;color:var(--ink-faint)}
+  .scene .grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px;opacity:.5}
+  .scene .grid6 i{height:128px;border-radius:14px;background:var(--line2);display:block}
+  .scene .scrim{position:relative;background:rgba(40,30,20,.42);display:grid;place-items:center;padding:30px;min-height:330px}
+
+  .modal{--ds-surface:var(--paper)}
+  .modal.rec{width:760px}
+  .pv-head{display:flex;align-items:center;gap:11px;padding:16px 22px 12px}
+  .pv-head .ttl{font-size:19px;font-weight:800;letter-spacing:-.3px}
+  .pv-head .x{margin-left:12px;border:none;background:none;color:var(--ink-faint);font-size:19px;cursor:pointer}
+  .pv-stamp{flex:none;cursor:pointer;text-align:center;transition:transform .15s;margin-left:auto}
+  .pv-stamp:hover{transform:scale(1.05)}
+  .pv-stamp .stamp-svg{width:52px;height:52px}
+  .pv-stamp .cap{font-family:'Nanum Pen Script',cursive;color:var(--accent);font-size:11px;margin-top:2px;line-height:1.1;white-space:nowrap}
+  .pv-meta{display:flex;flex-wrap:wrap;gap:6px;padding:0 22px 14px;border-bottom:1px solid var(--line2)}
+  .chip-meta{font-size:12px;font-weight:600;color:var(--ink-sub);background:#f5efe2;border:1px solid var(--line);border-radius:8px;padding:4px 11px}
+
+  .pv-body{display:grid;grid-template-columns:250px 1fr;gap:16px;padding:16px 22px 8px}
+  .pv-map{border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;min-height:340px}
+  .map{background:linear-gradient(135deg,#e9e2cf,#e3dcc4 50%,#ece6d4);position:relative;overflow:hidden;height:100%}
+  .map .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(120,100,60,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,100,60,.05) 1px,transparent 1px);background-size:38px 38px}
+  .map .route{position:absolute;height:0;border-top:2px dashed var(--accent);opacity:.6;transform-origin:left center}
+  .map .pin{position:absolute;width:22px;height:22px;transform:translate(-50%,-100%) rotate(-45deg);background:var(--accent);border:2px solid var(--on-fill);border-radius:50% 50% 50% 0;box-shadow:0 3px 7px rgba(0,0,0,.25);display:grid;place-items:center}
+  .map .pin span{transform:rotate(45deg);color:var(--on-fill);font-size:10px;font-weight:800;font-family:'SF Mono',monospace}
+  .map .legend{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--ink-sub);background:var(--paper-card);border:1px solid var(--line);border-radius:7px;padding:4px 10px}
+
+  .pv-plan{display:flex;flex-direction:column}
+  .day-tabs{display:flex;gap:5px;margin-bottom:7px;align-items:center}
+  .day-tabs .d{font-size:11.5px;font-weight:700;background:var(--on-fill);color:var(--ink-sub);border:1px solid var(--line);border-radius:7px;padding:4px 13px;cursor:pointer}
+  .day-tabs .d.on{background:var(--ink);color:var(--on-fill);border-color:var(--ink)}
+  .day-tabs .dt{margin-left:auto;font-size:11px;color:var(--ink-faint)}
+  .drag-hint{font-family:'Nanum Pen Script',cursive;color:var(--accent);font-size:13.5px;margin:2px 0 11px}
+
+  .pstop{display:flex;align-items:flex-start;min-height:74px}
+  .pstop .tcol{flex:0 0 42px;text-align:right;padding-right:9px;font-family:'SF Mono',monospace;font-size:12px;font-weight:700;color:var(--accent);padding-top:1px}
+  .pstop .lcol{flex:0 0 13px;align-self:stretch;position:relative;display:flex;justify-content:center}
+  .pstop .lcol::before{content:'';position:absolute;top:8px;bottom:0;width:2px;background:var(--line)}
+  .pstop:last-child .lcol::before{bottom:auto;height:0}
+  .pstop .lcol .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);margin-top:5px;z-index:1;box-shadow:0 0 0 2px var(--paper)}
+  .pstop .bcol{flex:1;min-width:0;padding:0 0 0 11px;display:flex;align-items:flex-start;gap:10px}
+  .pstop .info{flex:1;min-width:0;padding-top:1px}
+  .pstop .nm{font-size:13.5px;font-weight:700;letter-spacing:-.2px}
+  .pstop .ty{font-size:10px;color:var(--ink-sub);border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-left:5px}
+  .ph-group{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+  .ph{display:flex;gap:5px}
+  .photo-th{width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid var(--line);position:relative;cursor:grab}
+  .photo-th .rm{position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#0007;color:var(--on-fill);font-size:9px;display:grid;place-items:center;cursor:pointer;z-index:3}
+  .ph-add{width:56px;height:56px;border-radius:8px;border:1.5px dashed var(--line-strong);background:var(--paper-dim);display:grid;place-items:center;color:var(--ink-faint);font-size:11px;text-align:center;line-height:1.2;cursor:pointer}
+  .photo-th .alert-dot{position:absolute;left:4px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--complete);box-shadow:0 0 0 1.5px var(--on-fill);z-index:3}
+  .pv-tray{display:flex;align-items:center;gap:12px;padding:11px 22px;background:var(--paper-dim);border-top:1px solid var(--line2)}
+  .pv-tray .tt{font-size:11.5px;font-weight:700;color:var(--ink-sub);flex:none}
+  .pv-tray .tt small{display:block;color:var(--ink-faint);font-weight:400;font-size:10.5px}
+  .pv-tray .ph{flex:1}
+  .pv-tray .photo-th{width:46px;height:46px}
+  .pv-tray .photo-th .rm{width:14px;height:14px;font-size:8px}
+  .pv-tray .add{flex:none;font-size:12px;font-weight:700;color:var(--accent);border:1px solid var(--accent);background:var(--on-fill);border-radius:8px;padding:7px 12px;cursor:pointer}
+  .m-foot{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 22px;background:#f5efe2;border-top:1px solid var(--line2)}
+  .m-foot .left{margin-right:auto;font-size:11.5px;color:var(--complete);font-weight:600}
+  .btn.disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+
+  /* ② 카드 에디터 — 실제 CardEditor 구조 + 토큰 */
+  .editor{max-width:1160px;margin:0 auto;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--paper-card);box-shadow:var(--shadow-card)}
+  .ed-top{display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+  .ed-top .back{font-size:13px;color:var(--ink-sub);font-weight:600;cursor:pointer;border:none;background:none}
+  .ed-top .title{font-size:13px;font-weight:700}
+  .ed-top .grow{flex:1}
+  .ed-top fieldset{border:1px solid var(--line);border-radius:8px;padding:3px 9px 5px;display:flex;align-items:center;gap:8px;margin:0}
+  .ed-top legend{font-size:9.5px;color:var(--ink-faint);font-weight:700;padding:0 3px}
+  .ed-top fieldset label{font-size:11px;color:var(--ink-sub);display:flex;align-items:center;gap:3px}
+  .ed-top .tone-lbl input[type=range]{width:74px}
+  /* 좌 도구·우 패널 = 전체 높이 / 필름은 중앙(캔버스) 아래만 */
+  .ed-mid{display:flex;height:560px}
+  .ed-center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .ed-rail{flex:0 0 64px;border-right:1px solid var(--line2);background:var(--bg);display:flex;flex-direction:column;gap:4px;padding:10px 8px}
+  .rail-btn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px;border-radius:9px;border:none;background:none;color:var(--ink-sub);cursor:pointer;font-size:10px;font-weight:600}
+  .rail-btn .rail-ic{font-size:17px;line-height:1}
+  .rail-btn.on{background:var(--accent);color:var(--on-fill)}
+  .ed-stage{flex:1;background:#e7ddca;display:flex;align-items:center;justify-content:center;position:relative;min-height:0}
+  .stage-modes{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;background:var(--paper-card);border:1px solid var(--line);border-radius:9px;padding:3px;box-shadow:0 2px 8px rgba(0,0,0,.12);z-index:3}
+  .stage-modes button{font-size:11.5px;font-weight:700;color:var(--ink-sub);border:none;background:none;border-radius:6px;padding:5px 12px;cursor:pointer}
+  .stage-modes button.on{background:var(--ink);color:var(--on-fill)}
+  .card-canvas{width:236px;height:420px;border-radius:12px;overflow:hidden;position:relative;box-shadow:0 10px 30px -8px rgba(40,25,10,.45)}
+  .card-canvas .photo{position:absolute;inset:0}
+  .card-canvas .tone{position:absolute;inset:0;background:#0000002e}
+  .card-canvas .outline{position:absolute;border:2px dashed var(--on-fill);border-radius:46% 52% 50% 50%}
+  .card-canvas .outline.sel{border-color:var(--complete);border-style:solid}
+  .card-canvas .onum{position:absolute;width:16px;height:16px;border-radius:50%;background:var(--on-fill);color:var(--ink);font-size:9px;font-weight:800;display:grid;place-items:center}
+  .card-canvas .onum.sel{background:var(--complete);color:var(--on-fill)}
+  .card-canvas .ov{position:absolute;color:var(--on-fill);font-family:'Nanum Pen Script',cursive;text-shadow:0 1px 3px #0007}
+  .zoom-bar{position:absolute;left:14px;bottom:14px;display:flex;align-items:center;gap:3px;background:var(--paper-card);border:1px solid var(--line);border-radius:8px;padding:3px}
+  .zoom-bar button{border:none;background:none;color:var(--ink-sub);font-size:13px;cursor:pointer;padding:3px 7px;border-radius:6px}
+  .zoom-bar .zoom-v{font-size:11px;font-family:'SF Mono',monospace;color:var(--ink-sub);min-width:38px;text-align:center}
+  .zoom-bar .fit{font-size:11px;font-weight:600}
+  /* 필름 = 중앙 하단 */
+  .ed-film{border-top:1px solid var(--line2);padding:9px 14px;background:var(--bg);display:flex;align-items:center;gap:12px;flex:none}
+  .filmstrip{list-style:none;display:flex;gap:12px;overflow-x:auto;flex:1}
+  .filmstrip li{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .film{width:38px;height:67px;border-radius:5px;overflow:hidden;position:relative;border:2px solid transparent;cursor:pointer;padding:0;background:none}
+  .film.on{border-color:var(--accent)}
+  .film .ph{position:absolute;inset:0}
+  .film .done{position:absolute;right:2px;bottom:2px;background:#5b7a52;color:var(--on-fill);font-size:8px;font-weight:800;border-radius:3px;padding:0 3px}
+  .fcap{font-size:9.5px;font-weight:700}
+  .fcap.done{color:#5b7a52}.fcap.edit{color:var(--ink-faint)}
+  .film-info{font-size:11.5px;color:var(--ink-sub);font-weight:600;flex:none}
+  /* 우 패널 */
+  .ed-right{flex:0 0 272px;border-left:1px solid var(--line2);display:flex;flex-direction:column;overflow:auto}
+  .ed-right .section{padding:13px 15px;border-bottom:1px solid var(--line2)}
+  .ed-right h3{font-size:12px;font-weight:800;color:var(--ink-sub);margin-bottom:10px}
+  .ed-right h3 .muted{color:var(--ink-faint);font-weight:400}
+  .ed-right .ctl-lbl{font-size:11.5px;font-weight:700;color:var(--ink-sub);display:block;margin-bottom:6px}
+  .ed-right .muted.small{font-size:10.5px;color:var(--ink-faint);margin-top:7px;line-height:1.5}
+  .ed-right .row{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-sub);margin:8px 0}
+  .stepper{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .stepper .step{width:24px;height:24px;border:1px solid var(--line);background:var(--on-fill);border-radius:6px;cursor:pointer;color:var(--ink-sub)}
+  .stepper input[type=range]{flex:1}
+  .num{width:46px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:11px;background:var(--on-fill)}
+  .rd{display:flex;align-items:center;gap:3px}
+  /* 레이어 — 정돈 */
+  .layers-head{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .layers-head h3{margin:0}.layers-head .grow{flex:1}
+  .all-vis{font-size:11px;color:var(--ink-sub);display:flex;align-items:center;gap:4px}
+  .bulk-bar{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .bulk-bar button{font-size:11px;border:1px solid var(--line);background:var(--on-fill);border-radius:6px;padding:4px 9px;cursor:pointer;color:var(--ink-sub)}
+  .bulk-bar .bulk-n{font-size:10px;color:var(--ink-faint)}
+  .layer-list{list-style:none;display:flex;flex-direction:column;gap:1px}
+  .layer-list li{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px}
+  .layer-list li:hover{background:var(--bg)}
+  .layer-list li.active{background:#fbf2ea}
+  .layer-list li.off{opacity:.48}
+  .layer-list .eye{border:none;background:none;color:var(--ink-faint);cursor:pointer;display:grid;place-items:center;padding:0;flex:none}
+  .layer-list .eye svg{width:15px;height:15px;display:block}
+  .layer-list .sel-ck{flex:none;accent-color:var(--accent)}
+  .layer-list .layer{flex:1;min-width:0;border:none;background:none;display:flex;align-items:center;gap:7px;cursor:pointer;text-align:left;padding:0}
+  .layer-list li.active .layer-name{color:var(--accent);font-weight:700}
+  .layer-list .lno{width:16px;height:16px;border-radius:50%;background:var(--ink);color:var(--on-fill);font-size:9px;font-weight:800;display:grid;place-items:center;flex:none}
+  .layer-list .layer-name{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .layer-list .tag{font-size:9.5px;color:var(--ink-faint);border:1px solid var(--line);border-radius:4px;padding:1px 5px;flex:none}
+  .layer-list .del-one{border:none;background:none;color:var(--ink-faint);cursor:pointer;font-size:11px;flex:none;opacity:0}
+  .layer-list li:hover .del-one{opacity:1}
+
+  .doc-note{max-width:1160px;margin:30px auto 0;padding:14px 22px;color:var(--ink-faint);font-size:12px;
+    background:#fff8;border:1px dashed var(--line);border-radius:10px}
+  .doc-note b{color:var(--ink-sub)} .doc-note ul{margin:6px 0 0;padding-left:17px} .doc-note li{margin:2.5px 0}
+  .doc-note .k{color:var(--accent);font-weight:700}
+  .ph-a{background:radial-gradient(80% 70% at 60% 35%,#caa06a,#8a5a36 60%,#4e3220)}
+  .ph-b{background:linear-gradient(150deg,#9a8b6f,#5a4a32)}
+  .ph-c{background:linear-gradient(150deg,#7c9a8e,#3f5a50)}
+  .ph-d{background:linear-gradient(150deg,#b0936a,#6a5320)}
+  .ph-e{background:radial-gradient(70% 70% at 40% 40%,#a98a72,#5a4030)}
+</style>
+</head>
+<body>
+  <p class="pagehead"><b>LOGS — 다녀옴 미리보기(사진 배치) · 카드 에디터</b> · design-system 재사용. 카드 에디터 = 실제 CardEditor 구조 + 토큰.</p>
+
+  <!-- ① 다녀옴 미리보기 팝업 — 사진 배치 -->
+  <div class="seclbl">① 다녀옴 미리보기 팝업 — 사진 배치 <span>— DAY 탭 / stop별 사진 1칸(정상·초과·빈) + 빼기(✕)·드래그앤드롭 / 미배치 트레이</span></div>
+  <div class="scene">
+    <div class="dim"><div class="ghost-ttl">나의 여행</div><div class="grid6"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="scrim">
+      <div class="modal rec">
+        <div class="pv-head">
+          <span class="badge past">다녀옴</span>
+          <div class="ttl">교토 단풍 기행</div>
+          <div class="pv-stamp stage-2">
+            <svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 2단계 기록 중">
+              <circle class="ring" cx="100" cy="100" r="88" stroke-width="3"/>
+              <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.5" stroke-dasharray="1.5 4"/>
+              <text class="glyph" x="100" y="60" text-anchor="middle" font-size="34">✈</text>
+              <text x="100" y="100" text-anchor="middle" font-size="26" font-weight="800" letter-spacing="2">교토</text>
+              <text class="glyph" x="40" y="95" text-anchor="middle" font-size="15">★</text>
+              <text class="glyph" x="160" y="95" text-anchor="middle" font-size="15">★</text>
+            </svg>
+            <div class="cap">눌러 추억 만들기</div>
+          </div>
+          <button class="x">✕</button>
+        </div>
+        <div class="pv-meta">
+          <span class="chip-meta">교토</span><span class="chip-meta">사찰</span><span class="chip-meta">2023.11.07 – 11.09 · 3일</span>
+          <span class="chip-meta">사진 8 · 카드 1</span>
+        </div>
+        <div class="pv-body">
+          <div class="pv-map"><div class="map"><div class="grid"></div>
+            <div class="route" style="left:28%;top:48%;width:26%;transform:rotate(16deg)"></div>
+            <div class="route" style="left:54%;top:42%;width:18%;transform:rotate(58deg)"></div>
+            <div class="pin" style="left:30%;top:52%"><span>1</span></div>
+            <div class="pin" style="left:56%;top:42%"><span>2</span></div>
+            <div class="pin" style="left:48%;top:70%"><span>3</span></div>
+            <div class="pin" style="left:66%;top:66%"><span>4</span></div>
+            <div class="legend">교토 · DAY 1 경로</div>
+          </div></div>
+          <div class="pv-plan">
+            <div class="day-tabs">
+              <span class="d on">DAY 1</span><span class="d">DAY 2</span><span class="d">DAY 3</span>
+              <span class="dt">11.07 · 4곳 · 사진 5</span>
+            </div>
+            <div class="drag-hint">⠿ 사진을 끌어 다른 장소로 옮길 수 있어요</div>
+            <div class="pstop">
+              <span class="tcol">09:00</span><span class="lcol"><span class="dot"></span></span>
+              <div class="bcol"><div class="info"><span class="nm">기요미즈데라</span><span class="ty">사찰</span></div>
+                <div class="ph-group"><div class="ph"><div class="photo-th ph-a"><span class="rm">✕</span></div></div></div></div>
+            </div>
+            <div class="pstop">
+              <span class="tcol">11:00</span><span class="lcol"><span class="dot"></span></span>
+              <div class="bcol"><div class="info"><span class="nm">니넨자카</span></div>
+                <div class="ph-group"><div class="ph"><div class="photo-th ph-b"><span class="alert-dot"></span><span class="rm">✕</span></div><div class="photo-th ph-c"><span class="alert-dot"></span><span class="rm">✕</span></div></div></div></div>
+            </div>
+            <div class="pstop">
+              <span class="tcol">13:00</span><span class="lcol"><span class="dot"></span></span>
+              <div class="bcol"><div class="info"><span class="nm">아라시야마 대나무길</span></div>
+                <div class="ph-group"><div class="ph"><div class="ph-add">＋ 사진</div></div></div></div>
+            </div>
+            <div class="pstop">
+              <span class="tcol">15:30</span><span class="lcol"><span class="dot"></span></span>
+              <div class="bcol"><div class="info"><span class="nm">% 아라비카 커피</span><span class="ty">카페</span></div>
+                <div class="ph-group"><div class="ph"><div class="photo-th ph-d"><span class="rm">✕</span></div></div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="pv-tray">
+          <div class="tt">미배치 1장<small>촬영 시각 없음 · 끌어 배치</small></div>
+          <div class="ph"><div class="photo-th ph-e"><span class="rm">✕</span></div></div>
+          <button class="add">＋ 사진 올리기</button>
+        </div>
+        <div class="m-foot">
+          <span class="left">⚠ 장소당 사진은 1장만 가능해요</span>
+          <button class="btn ghost">정보 수정</button>
+          <button class="btn pri disabled">추억 만들러 가기 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc-note">
+    <b>LOGS 다녀옴 미리보기 팝업 (사진 배치) — 논의용</b>
+    <ul>
+      <li><span class="k">같은 팝업 재사용</span> 보기 팝업 → 사진 올리고 배치까지. DAY 탭(여러 날). 별도 화면 없음</li>
+      <li><span class="k">장소당 1장</span> stop=사진 1칸. 정상 / 초과(왼쪽 위 빨간 점) / 빈("＋ 사진"). ✕로 빼기, 드래그앤드롭 이동. 시각=라벨·간격 균등</li>
+      <li><span class="k">초과/진행</span> 초과 있으면 하단 "장소당 1장만" + "추억 만들러 가기" 비활성. 완료 → 카드 에디터</li>
+    </ul>
+  </div>
+
+  <!-- ② 카드 에디터 (작업 화면) — 실제 CardEditor 구조 + 토큰 -->
+  <div class="seclbl">② 카드 에디터 (작업 화면) <span>— 실제 CardEditor 구조 + 토큰. 좌·우 패널 전체 높이 / 필름은 캔버스 아래만 / 저장=완성 / 레이어 정돈</span></div>
+  <div class="editor">
+    <div class="ed-top">
+      <button class="back">‹ 고르기</button>
+      <span class="title">카드 1 / 4</span>
+      <span class="grow"></span>
+      <fieldset><legend>출력 형식</legend><label><input type="radio" checked> 원본 비율</label><label><input type="radio"> 9:16</label></fieldset>
+      <fieldset><legend>전체 보정</legend><label class="tone-lbl">톤 낮춤 <input type="range" min="0" max="50" value="18"></label></fieldset>
+      <button class="btn pri sm">저장</button>
+      <button class="btn sm">완료</button>
+    </div>
+    <div class="ed-mid">
+      <nav class="ed-rail">
+        <button class="rail-btn on"><span class="rail-ic">✨</span><span class="rail-lb">AI</span></button>
+        <button class="rail-btn"><span class="rail-ic">T</span><span class="rail-lb">텍스트</span></button>
+        <button class="rail-btn"><span class="rail-ic">／</span><span class="rail-lb">선</span></button>
+        <button class="rail-btn"><span class="rail-ic">✦</span><span class="rail-lb">장식</span></button>
+      </nav>
+      <div class="ed-center">
+        <section class="ed-stage">
+          <div class="stage-modes"><button class="on">↖ 선택</button><button>＋ 생성</button></div>
+          <div class="card-canvas">
+            <div class="photo" style="background:radial-gradient(80% 60% at 55% 35%,#caa06a,#8a5a36 55%,#3a2418)"></div>
+            <div class="tone"></div>
+            <div class="outline sel" style="left:66px;top:198px;width:114px;height:122px"></div>
+            <div class="onum sel" style="left:60px;top:192px">1</div>
+            <div class="outline" style="left:22px;top:96px;width:58px;height:50px"></div>
+            <div class="onum" style="left:16px;top:90px">2</div>
+            <div class="ov" style="left:14px;top:16px;font-size:16px;line-height:1.3">2023.11.08 ☀<br><span style="font-size:12px">📍 교토, 난젠지</span></div>
+            <div class="ov" style="right:12px;top:150px;font-size:17px;text-align:right;line-height:1.2">교토식 유도후 🍲<br>담백해요 ♡</div>
+            <div class="ov" style="left:0;right:0;bottom:18px;text-align:center;font-size:18px">또 오고 싶다.. ♡</div>
+          </div>
+          <div class="zoom-bar"><button>−</button><span class="zoom-v">100%</span><button>＋</button><button class="fit">맞춤</button></div>
+        </section>
+        <footer class="ed-film">
+          <ul class="filmstrip">
+            <li><button class="film on"><span class="ph" style="background:radial-gradient(70% 60% at 55% 35%,#caa06a,#3a2418)"></span></button><span class="fcap edit">편집 중</span></li>
+            <li><button class="film"><span class="ph" style="background:linear-gradient(150deg,#9a8b6f,#5a4a32)"></span><span class="done">✓</span></button><span class="fcap done">완성</span></li>
+            <li><button class="film"><span class="ph" style="background:linear-gradient(150deg,#b0936a,#6a5320)"></span></button><span class="fcap edit">편집 전</span></li>
+            <li><button class="film"><span class="ph" style="background:linear-gradient(150deg,#7c9a8e,#3f5a50)"></span></button><span class="fcap edit">편집 전</span></li>
+          </ul>
+          <span class="film-info">1 / 4 완성</span>
+        </footer>
+      </div>
+      <aside class="ed-right">
+        <div class="section">
+          <h3>상세 설정</h3>
+          <label class="ctl-lbl">외곽선 두께</label>
+          <div class="stepper"><button class="step">−</button><input type="range" min="0.3" max="8" value="2"><button class="step">＋</button><input class="num" value="2.0"></div>
+          <div class="row"><span>선 스타일</span><label class="rd"><input type="radio" checked> 실선</label><label class="rd"><input type="radio"> 점선</label></div>
+          <button class="btn block sm" style="margin-top:6px">✨ 문구 생성</button>
+          <p class="muted small">피사체 외곽선 2개 인식. 레이어에서 켜고 끄기.</p>
+        </div>
+        <div class="section">
+          <div class="layers-head"><h3>레이어 <span class="muted">· 4</span></h3><span class="grow"></span><label class="all-vis"><input type="checkbox"> 전체 선택</label></div>
+          <div class="bulk-bar"><button>숨기기</button><button>보이기</button><span class="bulk-n">선택 후 숨기기/보이기</span></div>
+          <ul class="layer-list">
+            <li class="active"><button class="eye"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button><input class="sel-ck" type="checkbox"><button class="layer"><span class="lno">1</span><span class="layer-name">접시</span></button><span class="tag">문구</span></li>
+            <li class="off"><button class="eye"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/></svg></button><input class="sel-ck" type="checkbox"><button class="layer"><span class="lno">2</span><span class="layer-name">단풍</span></button><span class="tag">외곽선</span></li>
+            <li><button class="eye"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button><input class="sel-ck" type="checkbox"><button class="layer"><span class="layer-name">교토식 유도후…</span></button><span class="tag">텍스트</span><button class="del-one">✕</button></li>
+            <li><button class="eye"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button><input class="sel-ck" type="checkbox"><button class="layer"><span class="layer-name">또 오고 싶다…</span></button><span class="tag">텍스트</span><button class="del-one">✕</button></li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="doc-note">
+    <b>LOGS 카드 에디터 (작업 화면) — 실제 구조 + 토큰</b>
+    <ul>
+      <li><span class="k">실제 구현 기준</span> components/log/CardEditor.vue 레이아웃 그대로, 색·폰트만 토큰. UI/UX 재설계 안 함</li>
+      <li><span class="k">레이아웃</span> 좌 도구·우 레이어 = <b>전체 높이</b>, 필름은 <b>캔버스 아래(중앙)만</b> — 양쪽 패널 안 가림</li>
+      <li><span class="k">완성 = 저장</span> "저장" 누르면 그 카드 완성(추억에 들어감). 필름에 "완성/편집 중·전" 표시. PNG 파일은 추억 상세에서 묶음 저장(별개)</li>
+      <li><span class="k">좌 도구</span> AI·텍스트·선·장식(실제 TOOLS). 외곽선 보정(탭/박스/refine)은 #114 PR2 별도</li>
+      <li><span class="k">우</span> 상세 설정 + 레이어(눈=숨김 아이콘·체크=일괄·hover 시 ✕). 눈은 아이콘(이모지 아님)</li>
+    </ul>
+  </div>
+
+</body>
+</html>
