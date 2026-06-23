@@ -13,6 +13,8 @@ import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import com.triplog.user.domain.User;
 import com.triplog.user.mapper.UserMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,8 @@ import java.util.Map;
 
 @Service
 public class OAuthLoginService {
+
+    private static final Logger log = LoggerFactory.getLogger(OAuthLoginService.class);
 
     private final Map<OAuthProvider, OAuthProviderClient> clients;
     private final OAuthStateCodec stateCodec;
@@ -49,8 +53,15 @@ public class OAuthLoginService {
     }
 
     public URI authorizationUri(String providerPath, String redirectPath) {
-        OAuthProvider provider = OAuthProvider.fromPath(providerPath);
-        return client(provider).authorizationUri(stateCodec.encode(provider, redirectPath));
+        try {
+            OAuthProvider provider = OAuthProvider.fromPath(providerPath);
+            return client(provider).authorizationUri(stateCodec.encode(provider, redirectPath));
+        } catch (BusinessException e) {
+            return redirects.failure(reason(e.getErrorCode()));
+        } catch (Exception e) {
+            log.warn("OAuth authorization failed. providerPath={}", providerPath, e);
+            return redirects.failure("failed");
+        }
     }
 
     public URI callbackUri(String providerPath, String code, String state, String error) {
@@ -70,6 +81,9 @@ public class OAuthLoginService {
             return redirects.success(tokens, decodedState.redirectPath());
         } catch (BusinessException e) {
             return redirects.failure(reason(e.getErrorCode()));
+        } catch (Exception e) {
+            log.warn("OAuth callback failed. providerPath={}", providerPath, e);
+            return redirects.failure("failed");
         }
     }
 

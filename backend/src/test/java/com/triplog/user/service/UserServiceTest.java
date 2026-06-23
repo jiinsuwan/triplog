@@ -69,6 +69,33 @@ class UserServiceTest {
     }
 
     @Test
+    void withdraw_rejects_blank_password_for_password_user_without_cleanup_or_delete() {
+        User user = user(1L, "encoded-password");
+        when(userMapper.findByIdForUpdate(1L)).thenReturn(user);
+
+        assertThatThrownBy(() -> userService.withdraw(1L, new WithdrawUserRequest(" ")))
+                .isInstanceOfSatisfying(BusinessException.class, e ->
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
+
+        verify(passwordEncoder, never()).matches(" ", "encoded-password");
+        verify(photoTripCleanup, never()).scheduleFileCleanupForUser(1L);
+        verify(userMapper, never()).deleteById(1L);
+    }
+
+    @Test
+    void withdraw_social_only_user_without_password_check() {
+        User user = user(1L, null);
+        when(userMapper.findByIdForUpdate(1L)).thenReturn(user);
+        when(userMapper.deleteById(1L)).thenReturn(1);
+
+        userService.withdraw(1L, new WithdrawUserRequest(null));
+
+        verify(passwordEncoder, never()).matches(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(photoTripCleanup).scheduleFileCleanupForUser(1L);
+        verify(userMapper).deleteById(1L);
+    }
+
+    @Test
     void withdraw_rejects_missing_user() {
         when(userMapper.findByIdForUpdate(1L)).thenReturn(null);
 

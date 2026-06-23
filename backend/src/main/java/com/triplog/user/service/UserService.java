@@ -47,8 +47,13 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new BusinessException(ErrorCode.USER_PASSWORD_MISMATCH);
+        if (hasText(user.getPassword())) {
+            if (request == null || !hasText(request.password())) {
+                throw new BusinessException(ErrorCode.INVALID_INPUT);
+            }
+            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+                throw new BusinessException(ErrorCode.USER_PASSWORD_MISMATCH);
+            }
         }
 
         photoTripCleanup.scheduleFileCleanupForUser(userId);
@@ -64,5 +69,9 @@ public class UserService {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
         return user;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

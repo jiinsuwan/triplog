@@ -6,6 +6,7 @@ import com.triplog.auth.mapper.SocialAccountMapper;
 import com.triplog.auth.oauth.OAuthProvider;
 import com.triplog.auth.oauth.OAuthProviderClient;
 import com.triplog.auth.oauth.OAuthRedirects;
+import com.triplog.auth.oauth.OAuthState;
 import com.triplog.auth.oauth.OAuthStateCodec;
 import com.triplog.auth.oauth.OAuthUserInfo;
 import com.triplog.common.BusinessException;
@@ -67,6 +68,15 @@ class OAuthLoginServiceTest {
     }
 
     @Test
+    void authorization_unsupported_provider_redirects_to_failure() {
+        when(redirects.failure("provider")).thenReturn(URI.create("http://front/login?oauthError=provider"));
+
+        URI uri = service.authorizationUri("unknown", "/profile");
+
+        assertThat(uri).isEqualTo(URI.create("http://front/login?oauthError=provider"));
+    }
+
+    @Test
     void existing_social_account_reuses_internal_jwt_issue_flow() {
         SocialAccount existing = new SocialAccount();
         existing.setUserId(12L);
@@ -122,6 +132,24 @@ class OAuthLoginServiceTest {
 
         verify(userMapper, never()).insert(any());
         verify(socialAccountMapper, never()).insert(any());
+    }
+
+    @Test
+    void callback_unexpected_exception_redirects_to_failure() {
+        when(stateCodec.decode("state")).thenReturn(new OAuthState(OAuthProvider.KAKAO, "/trips", 1L, "nonce"));
+        when(socialAccountMapper.findByProviderAndProviderUserId("KAKAO", "kakao-user")).thenReturn(null);
+        doAnswer(invocation -> {
+            invocation.getArgument(0, User.class).setId(99L);
+            return 1;
+        }).when(userMapper).insert(any(User.class));
+        when(redirects.failure("failed")).thenReturn(URI.create("http://front/login?oauthError=failed"));
+        org.mockito.Mockito.doThrow(new RuntimeException("duplicate"))
+                .when(socialAccountMapper).insert(any(SocialAccount.class));
+
+        URI uri = service.callbackUri("kakao", "kakao@example.com", "state", null);
+
+        assertThat(uri).isEqualTo(URI.create("http://front/login?oauthError=failed"));
+        verify(authService, never()).issueTokens(any());
     }
 
     private OAuthProviderClient fakeClient(OAuthProvider provider) {
