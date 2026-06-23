@@ -1,18 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const postMock = vi.hoisted(() => vi.fn())
+const deleteMock = vi.hoisted(() => vi.fn())
 
 vi.mock('./instance', () => ({
   default: {
     post: postMock,
+    delete: deleteMock,
   },
 }))
 
-import { confirmPasswordReset, requestPasswordReset } from './authApi'
+import { confirmPasswordReset, requestPasswordReset, withdraw } from './authApi'
 
 describe('authApi password reset', () => {
   beforeEach(() => {
     postMock.mockReset()
+    deleteMock.mockReset()
   })
 
   it('requests a password reset and unwraps the ApiResponse payload', async () => {
@@ -38,6 +41,19 @@ describe('authApi password reset', () => {
     expect(postMock).toHaveBeenCalledWith('/auth/password-reset/confirm', {
       token: 'token',
       newPassword: 'new-password123',
+    })
+  })
+
+  it('withdraws the current user with password confirmation', async () => {
+    deleteMock.mockResolvedValueOnce({ data: { code: 'SUCCESS', data: null } })
+
+    await expect(withdraw('password123')).resolves.toEqual({
+      code: 'SUCCESS',
+      data: null,
+    })
+
+    expect(deleteMock).toHaveBeenCalledWith('/users/me', {
+      data: { password: 'password123' },
     })
   })
 })

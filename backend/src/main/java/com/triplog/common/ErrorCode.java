@@ -33,6 +33,7 @@ public enum ErrorCode {
     // --- USER ---
     EMAIL_ALREADY_EXISTS("USER_001", HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
     USER_NOT_FOUND("USER_002", HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
+    USER_PASSWORD_MISMATCH("USER_003", HttpStatus.FORBIDDEN, "비밀번호가 올바르지 않습니다."),
 
     // --- TRIP ---
     TRIP_NOT_FOUND("TRIP_001", HttpStatus.NOT_FOUND, "Trip not found."),

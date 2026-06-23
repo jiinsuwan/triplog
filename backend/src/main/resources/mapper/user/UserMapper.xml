@@ -31,6 +31,21 @@
         WHERE id = #{id}
     </select>
 
+    <select id="findByIdForUpdate" resultMap="UserResultMap">
+        SELECT id, email, password, nickname, profile_img, created_at
+        FROM users
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <select id="existsById" resultType="int">
+        SELECT EXISTS(
+            SELECT 1
+            FROM users
+            WHERE id = #{id}
+        )
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO users (email, password, nickname, profile_img)
         VALUES (#{email}, #{password}, #{nickname}, #{profileImg})
@@ -48,4 +63,9 @@
         SET password = #{password}
         WHERE id = #{id}
     </update>
+
+    <delete id="deleteById">
+        DELETE FROM users
+        WHERE id = #{id}
+    </delete>
 </mapper>

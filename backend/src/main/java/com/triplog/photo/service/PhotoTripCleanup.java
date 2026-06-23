@@ -33,7 +33,15 @@ public class PhotoTripCleanup {
 
     /** 여행에 연결된 사진 파일을 커밋 후 삭제하도록 예약한다. trips 삭제 *전에* 호출할 것. */
     public void scheduleFileCleanupForTrip(Long tripId) {
-        List<String> storedNames = photoMapper.findStoredFilenamesByTrip(tripId);
+        scheduleFileCleanup(photoMapper.findStoredFilenamesByTrip(tripId));
+    }
+
+    /** 회원 탈퇴 시 소유한 모든 사진 파일을 커밋 후 삭제하도록 예약한다. users 삭제 *전에* 호출할 것. */
+    public void scheduleFileCleanupForUser(Long userId) {
+        scheduleFileCleanup(photoMapper.findStoredFilenamesByUser(userId));
+    }
+
+    private void scheduleFileCleanup(List<String> storedNames) {
         if (storedNames.isEmpty()) {
             return;
         }

@@ -61,6 +61,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // 회원 탈퇴: 서버 삭제가 성공한 뒤에만 클라이언트 세션을 비운다.
+  async function withdraw(password) {
+    await authApi.withdraw(password)
+    clearSession()
+  }
+
   // 현재 사용자 프로필 로드.
   async function fetchMe() {
     user.value = await authApi.getMe()
@@ -97,6 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     signup,
     logout,
+    withdraw,
     fetchMe,
     refresh,
   }
