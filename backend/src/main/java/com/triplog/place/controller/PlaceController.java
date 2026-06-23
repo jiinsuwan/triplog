@@ -31,8 +31,8 @@ public class PlaceController {
     @GetMapping
     public ApiResponse<PlaceListResponse> list(@RequestParam(required = false) String region1,
                                                @RequestParam(required = false) String region2,
-                                               @Parameter(description = "Content type code. Examples: ATTRACTION, LODGING, CULTURE, EVENT, TRAVEL_COURSE, SHOPPING, RESTAURANT. Defaults to the public tourist catalog when omitted.")
-                                               @RequestParam(required = false) String placeType,
+                                               @Parameter(name = "placeType", description = "Content type code. Examples: ATTRACTION, LODGING, CULTURE, EVENT, TRAVEL_COURSE, SHOPPING, RESTAURANT. Defaults to the public tourist catalog when omitted.")
+                                               @RequestParam(name = "placeType", required = false) String placeType,
                                                @RequestParam(required = false) String category,
                                                @RequestParam(required = false) String keyword,
                                                @RequestParam(required = false) Integer page,
