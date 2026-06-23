@@ -24,6 +24,40 @@
   .board .polaroid:hover{transform:translateY(-4px)}
   .board .polaroid.empty .ph-plus{color:var(--ink-faint);font-size:.85em;text-align:center;line-height:1.5;font-weight:700}
   .hint{text-align:center;color:var(--ink-faint);font-size:11.5px;margin-top:34px}
+  /* ② 추억 상세 — 폴라로이드 클릭 시 팝업 (카드 갤러리) */
+  .seclbl{max-width:1080px;margin:36px auto 9px;padding:0 22px;font-size:12.5px;font-weight:700;color:var(--ink-sub)}
+  .seclbl span{color:var(--ink-faint);font-weight:500}
+  .scene{position:relative;max-width:1080px;margin:0 auto;border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+  .scene .dim{position:absolute;inset:0;filter:saturate(.9);background:var(--paper-card);padding:20px 24px;overflow:hidden}
+  .scene .dim-board{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;opacity:.4}
+  .scene .dim-board i{aspect-ratio:200/268;border-radius:6px;background:var(--line2);display:block}
+  .scene .scrim{position:relative;background:rgba(40,30,20,.42);display:grid;place-items:center;padding:28px;min-height:330px}
+  .modal{--ds-surface:var(--paper)}
+  .modal.mem{width:540px}
+  .mem-top{display:flex;align-items:center;gap:14px;padding:18px 22px 15px;border-bottom:1px solid var(--line2)}
+  .mem-top .stamp{flex:none}.mem-top .stamp .stamp-svg{width:64px;height:64px}
+  .mem-top .info{flex:1;min-width:0}
+  .mem-top h2{font-size:18px;font-weight:800;letter-spacing:-.3px}
+  .mem-top .meta{font-size:12.5px;color:var(--ink-sub);margin-top:3px}
+  .mem-top .meta .dot{color:var(--ink-faint);margin:0 6px}
+  .mem-top .acts{display:flex;gap:7px;flex:none}
+  .mem-top .x{border:none;background:none;color:var(--ink-faint);font-size:19px;cursor:pointer;flex:none;align-self:flex-start}
+  /* 메인 카드 크게(확대뷰) + 하단 콤팩트 썸네일 한 줄 */
+  .mem-view{padding:18px 22px 18px}
+  .stage{display:flex;align-items:center;justify-content:center;gap:14px}
+  .stage .nav{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--paper-card);color:var(--ink-sub);font-size:17px;cursor:pointer;display:grid;place-items:center;flex:none}
+  .big-card{width:248px;border-radius:14px;overflow:hidden;position:relative;box-shadow:0 12px 32px -10px rgba(40,25,10,.5);background:#cabfa8}
+  .big-card .photo{position:absolute;inset:0}
+  .big-card .tone{position:absolute;inset:0;background:linear-gradient(transparent 52%,#0000006b)}
+  .big-card .ov{position:absolute;color:var(--on-fill);font-family:'Nanum Pen Script',cursive;text-shadow:0 1px 3px #0008}
+  .big-card .bdate{top:12px;left:14px;font-size:15px}
+  .big-card .bcap{bottom:13px;left:12px;right:12px;text-align:center;font-size:19px;line-height:1.2}
+  .idx{text-align:center;font-size:11px;color:var(--ink-faint);font-family:'SF Mono',monospace;margin:11px 0 12px}
+  .thumb-row{display:flex;gap:7px;justify-content:center;overflow-x:auto;padding-bottom:2px}
+  .thumb{height:50px;border-radius:5px;overflow:hidden;position:relative;cursor:pointer;border:2px solid transparent;flex:none;background:#cabfa8}
+  .thumb.on{border-color:var(--accent)}
+  .thumb .photo{position:absolute;inset:0}
+
   .doc-note{max-width:1080px;margin:30px auto 0;padding:14px 22px;color:var(--ink-faint);font-size:12px;
     background:#fff8;border:1px dashed var(--line);border-radius:10px}
   .doc-note b{color:var(--ink-sub)} .doc-note ul{margin:6px 0 0;padding-left:17px} .doc-note li{margin:2.5px 0}
@@ -67,11 +101,80 @@
     <div class="doc-note">
       <b>LOGS 추억 목록 — 디자인 정의</b> (이 목업이 구현 정본)
       <ul>
-        <li>추억(여행 1개) = 폴라로이드 한 장. 클릭 = 추억 상세(memory-viewer 팝업)로</li>
+        <li>추억(여행 1개) = 폴라로이드 한 장. 클릭 = 추억 상세 <b>팝업</b>(아래 ②)로</li>
         <li>상태 = COMPLETE 도장/빈 유무: 완성 = COMPLETE / 기록 중 = 없음 / 미생성 = 빈 폴라로이드(추억 만들기)</li>
         <li>컴포넌트 = design-system.css의 `.polaroid`(+`.empty`·`.done-stamp`)·`.topbar` 재사용. 화면 전용 = 그리드·헤더·필터뿐</li>
       </ul>
     </div>
   </div>
+
+  <!-- ② 추억 상세 — 폴라로이드 클릭 시 팝업 (카드 갤러리) -->
+  <div class="seclbl">② 추억 상세 — 폴라로이드 클릭 시 팝업 <span>— 그 여행 카드들을 한눈에(갤러리) + 도장·PNG 묶음 저장. 좌우 넘김 슬라이더 폐기</span></div>
+  <div class="scene">
+    <div class="dim"><div class="dim-board"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    <div class="scrim">
+      <div class="modal mem">
+        <div class="mem-top">
+          <div class="stamp stage-3">
+            <svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="완성 도장">
+              <circle class="bg" cx="100" cy="100" r="88"/>
+              <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+              <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+              <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+              <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+              <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+              <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
+              <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+              <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+              <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
+              <g transform="rotate(-12 100 100)">
+                <rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/>
+                <text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text>
+              </g>
+            </svg>
+          </div>
+          <div class="info"><h2>교토 단풍 기행</h2><div class="meta">교토<span class="dot">·</span>2023.11.07–11.09<span class="dot">·</span>카드 7장</div></div>
+          <div class="acts">
+            <button class="btn sm">✎ 수정</button>
+            <button class="btn pri sm">⤓ PNG 묶음 저장</button>
+          </div>
+          <button class="x">✕</button>
+        </div>
+        <div class="mem-view">
+          <div class="stage">
+            <button class="nav">‹</button>
+            <div class="big-card" style="aspect-ratio:4/5">
+              <div class="photo" style="background:radial-gradient(80% 60% at 55% 35%,#caa06a,#8a5a36 55%,#4e3220)"></div>
+              <div class="tone"></div>
+              <div class="ov bdate">2023.11.07 ☀</div>
+              <div class="ov bcap">청수사의 가을 ♡</div>
+            </div>
+            <button class="nav">›</button>
+          </div>
+          <div class="idx">1 / 7</div>
+          <div class="thumb-row">
+            <div class="thumb on" style="aspect-ratio:4/5"><div class="photo" style="background:radial-gradient(80% 60% at 55% 35%,#caa06a,#4e3220)"></div></div>
+            <div class="thumb" style="aspect-ratio:9/16"><div class="photo" style="background:linear-gradient(150deg,#9a8b6f,#4a3a22)"></div></div>
+            <div class="thumb" style="aspect-ratio:1/1"><div class="photo" style="background:linear-gradient(150deg,#b0936a,#5a4320)"></div></div>
+            <div class="thumb" style="aspect-ratio:3/4"><div class="photo" style="background:radial-gradient(70% 60% at 45% 40%,#a98a72,#4a3326)"></div></div>
+            <div class="thumb" style="aspect-ratio:4/5"><div class="photo" style="background:linear-gradient(150deg,#7c9a8e,#2f4a40)"></div></div>
+            <div class="thumb" style="aspect-ratio:1/1"><div class="photo" style="background:linear-gradient(150deg,#c08a6a,#5a3520)"></div></div>
+            <div class="thumb" style="aspect-ratio:9/16"><div class="photo" style="background:linear-gradient(150deg,#8a7a9e,#3a2d50)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc-note">
+    <b>LOGS 추억 상세 — 폴라로이드 클릭 팝업 (카드 갤러리)</b>
+    <ul>
+      <li><span style="color:var(--accent);font-weight:700">팝업</span> 추억 목록 폴라로이드 클릭 → 그 여행 추억 상세가 팝업으로(브라우즈 안의 보기). 페이지 아님</li>
+      <li><span style="color:var(--accent);font-weight:700">메인 카드 + 썸네일 줄</span> 카드 1장 크게(확대뷰) + 좌우 넘김(‹ ›) + 하단 <b>콤팩트한 썸네일 한 줄</b>(현재 강조, 클릭 전환). <b>카드 비율은 사진마다 다름</b>(원본 비율)</li>
+      <li><span style="color:var(--accent);font-weight:700">헤더</span> 도장(완성=stage-3) + 제목·날짜·카드 수 + <b>수정(→카드 에디터)</b>·PNG 묶음 저장. 공유는 PNG 묶음 저장으로 갈음(제거)</li>
+      <li>기존 memory-viewer(페이지) 폐기 — 이 팝업으로 대체. design-progress 12번 갱신 필요</li>
+    </ul>
+  </div>
+
 </body>
 </html>
