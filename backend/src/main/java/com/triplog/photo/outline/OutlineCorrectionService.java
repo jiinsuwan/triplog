@@ -170,13 +170,59 @@ public class OutlineCorrectionService {
         return max + 1;
     }
 
+    // 사용자 보정 item 은 자동검출 item 과 같은 shape(bbox/center/area/anchors/polygons)으로 저장해
+    // 렌더(center 배지 등) 계약을 깨지 않는다. 단 anchors 는 사이드카가 saliency 로 계산하는 값이라
+    // BE 가 재현할 수 없으므로 빈 배열로 둔다(문구 후보 제외 = CardCaptionController 에서 src="user" 필터).
     private ObjectNode userItem(int id, JsonNode polygons) {
         ObjectNode it = objectMapper.createObjectNode();
         it.put("id", id);
         it.put("label", USER_SRC);
         it.put("src", USER_SRC);
+        addGeometry(it, polygons);
+        it.set("anchors", objectMapper.createArrayNode());
         it.set("polygons", polygons);
         return it;
+    }
+
+    // polygons(0~1 정규화 루프 배열)에서 bbox·center·area 를 산출해 자동검출 item 과 같은 키로 채운다.
+    private void addGeometry(ObjectNode it, JsonNode polygons) {
+        double minX = 1.0;
+        double minY = 1.0;
+        double maxX = 0.0;
+        double maxY = 0.0;
+        double area = 0.0;
+        boolean any = false;
+        for (JsonNode loop : polygons) {
+            double shoelace = 0.0;
+            int n = loop.size();
+            for (int i = 0; i < n; i++) {
+                JsonNode p = loop.get(i);
+                double x = p.path(0).asDouble();
+                double y = p.path(1).asDouble();
+                any = true;
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+                JsonNode q = loop.get((i + 1) % n);
+                shoelace += x * q.path(1).asDouble() - q.path(0).asDouble() * y;
+            }
+            area += Math.abs(shoelace) / 2.0;
+        }
+        if (!any) {
+            minX = minY = maxX = maxY = 0.0;
+        }
+        ArrayNode bbox = objectMapper.createArrayNode();
+        bbox.add(round4(minX)).add(round4(minY)).add(round4(maxX)).add(round4(maxY));
+        it.set("bbox", bbox);
+        ArrayNode center = objectMapper.createArrayNode();
+        center.add(round4((minX + maxX) / 2.0)).add(round4((minY + maxY) / 2.0));
+        it.set("center", center);
+        it.put("area", round4(area));
+    }
+
+    private static double round4(double v) {
+        return Math.round(v * 10000.0) / 10000.0;
     }
 
     private String writeJson(JsonNode node) {

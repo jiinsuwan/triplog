@@ -92,8 +92,16 @@ class OutlineCorrectionServiceTest {
         verify(outlineMapper).updateCorrection(eq(PHOTO), itemsCap.capture(), eq("img-7"));
         JsonNode merged = json(itemsCap.getValue());
         assertThat(merged).hasSize(2);
-        assertThat(merged.get(1).get("id").asInt()).isEqualTo(1);
-        assertThat(merged.get(1).get("src").asText()).isEqualTo("user");
+        JsonNode added = merged.get(1);
+        assertThat(added.get("id").asInt()).isEqualTo(1);
+        assertThat(added.get("src").asText()).isEqualTo("user");
+        // 자동검출 item 과 같은 shape: bbox/center/area + 빈 anchors(렌더 계약 보존, P1-2)
+        assertThat(added.get("center").isArray()).isTrue();
+        assertThat(added.get("center")).hasSize(2);
+        assertThat(added.has("bbox")).isTrue();
+        assertThat(added.has("area")).isTrue();
+        assertThat(added.get("anchors").isArray()).isTrue();
+        assertThat(added.get("anchors")).isEmpty();
     }
 
     @Test

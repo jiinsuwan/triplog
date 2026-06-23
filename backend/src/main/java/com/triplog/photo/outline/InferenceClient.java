@@ -60,12 +60,17 @@ public class InferenceClient {
     private String register(byte[] image, String filename) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new NamedByteArrayResource(image, filename));
-        String resp = restClient.post()
-                .uri("/v1/images")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(body)
-                .retrieve()
-                .body(String.class);
+        String resp;
+        try {
+            resp = restClient.post()
+                    .uri("/v1/images")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(body)
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientException e) {                 // 5xx·연결불가·타임아웃 → 503 으로 흡수되도록 래핑
+            throw new InferenceException("register 호출 실패", e);
+        }
         JsonNode node = readTree(resp, "register");
         String jobId = node.path("job_id").asText(null);
         if (jobId == null || jobId.isBlank()) {
@@ -78,7 +83,12 @@ public class InferenceClient {
         long deadline = System.nanoTime() + props.getPollTimeout().toNanos();
         long intervalMs = props.getPollInterval().toMillis();
         while (System.nanoTime() < deadline) {
-            String resp = restClient.get().uri("/v1/jobs/{id}", jobId).retrieve().body(String.class);
+            String resp;
+            try {
+                resp = restClient.get().uri("/v1/jobs/{id}", jobId).retrieve().body(String.class);
+            } catch (RestClientException e) {             // 5xx·연결불가·타임아웃 → 503 으로 흡수되도록 래핑
+                throw new InferenceException("job 조회 실패", e);
+            }
             JsonNode node = readTree(resp, "job");
             String status = node.path("status").asText("");
             if ("done".equals(status)) {
@@ -113,7 +123,13 @@ public class InferenceClient {
         } catch (RestClientException e) {
             throw new InferenceException("보정 호출 실패: " + path, e);
         }
-        return readTree(resp, "outline").path("polygons");
+        // 200 이라도 polygons 가 배열이 아니면(에러 바디·schema drift) 계약 위반 → 실패로 본다.
+        // "객체 못 찾음"은 polygons:[](빈 배열)뿐이고, 그 no-op 판정은 호출측(OutlineCorrectionService)이 한다.
+        JsonNode polygons = readTree(resp, "outline").path("polygons");
+        if (!polygons.isArray()) {
+            throw new InferenceException("보정 응답에 polygons 배열 없음: " + path);
+        }
+        return polygons;
     }
 
     private JsonNode readTree(String body, String where) {
