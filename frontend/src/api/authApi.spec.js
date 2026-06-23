@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const postMock = vi.hoisted(() => vi.fn())
 const deleteMock = vi.hoisted(() => vi.fn())
+const assignMock = vi.hoisted(() => vi.fn())
 
 vi.mock('./instance', () => ({
   default: {
@@ -10,12 +11,13 @@ vi.mock('./instance', () => ({
   },
 }))
 
-import { confirmPasswordReset, requestPasswordReset, withdraw } from './authApi'
+import { confirmPasswordReset, oauthAuthorizeUrl, requestPasswordReset, startOAuthLogin, withdraw } from './authApi'
 
 describe('authApi password reset', () => {
   beforeEach(() => {
     postMock.mockReset()
     deleteMock.mockReset()
+    assignMock.mockReset()
   })
 
   it('requests a password reset and unwraps the ApiResponse payload', async () => {
@@ -54,6 +56,31 @@ describe('authApi password reset', () => {
 
     expect(deleteMock).toHaveBeenCalledWith('/users/me', {
       data: { password: 'password123' },
+    })
+  })
+
+  it('builds OAuth authorize URLs through the backend', () => {
+    expect(oauthAuthorizeUrl('google', '/profile')).toBe(
+      'http://localhost:8080/auth/oauth/google/authorize?redirect=%2Fprofile',
+    )
+  })
+
+  it('starts OAuth login by navigating to the backend authorize URL', () => {
+    const originalAssign = window.location.assign
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign: assignMock },
+    })
+
+    startOAuthLogin('naver', '/trips')
+
+    expect(assignMock).toHaveBeenCalledWith(
+      'http://localhost:8080/auth/oauth/naver/authorize?redirect=%2Ftrips',
+    )
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign: originalAssign },
     })
   })
 })

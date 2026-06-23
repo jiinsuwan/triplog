@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.triplog.auth.mapper.SocialAccountMapper">
+
+    <resultMap id="SocialAccountResultMap" type="com.triplog.auth.domain.SocialAccount">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="provider" column="provider"/>
+        <result property="providerUserId" column="provider_user_id"/>
+        <result property="email" column="email"/>
+        <result property="nickname" column="nickname"/>
+        <result property="profileImg" column="profile_img"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findByProviderAndProviderUserId" resultMap="SocialAccountResultMap">
+        SELECT id, user_id, provider, provider_user_id, email, nickname, profile_img, created_at, updated_at
+        FROM social_accounts
+        WHERE provider = #{provider}
+          AND provider_user_id = #{providerUserId}
+    </select>
+
+    <select id="countByEmail" resultType="int">
+        SELECT COUNT(*)
+        FROM social_accounts
+        WHERE email = #{email}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO social_accounts (user_id, provider, provider_user_id, email, nickname, profile_img)
+        VALUES (#{userId}, #{provider}, #{providerUserId}, #{email}, #{nickname}, #{profileImg})
+    </insert>
+</mapper>

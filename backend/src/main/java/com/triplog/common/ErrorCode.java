@@ -29,6 +29,10 @@ public enum ErrorCode {
     INVALID_CREDENTIALS("AUTH_005", HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     REFRESH_TOKEN_REUSED("AUTH_006", HttpStatus.UNAUTHORIZED, "이미 사용된 리프레시 토큰입니다."),
     PASSWORD_RESET_FAILED("AUTH_007", HttpStatus.BAD_REQUEST, "비밀번호 재설정을 완료할 수 없습니다."),
+    OAUTH_PROVIDER_UNSUPPORTED("AUTH_008", HttpStatus.BAD_REQUEST, "지원하지 않는 소셜 로그인 제공자입니다."),
+    OAUTH_STATE_INVALID("AUTH_009", HttpStatus.BAD_REQUEST, "소셜 로그인 요청이 유효하지 않습니다."),
+    OAUTH_PROVIDER_FAILURE("AUTH_010", HttpStatus.BAD_GATEWAY, "소셜 로그인 제공자 연동에 실패했습니다."),
+    OAUTH_EMAIL_CONFLICT("AUTH_011", HttpStatus.CONFLICT, "이미 다른 방식으로 가입된 이메일입니다."),
 
     // --- USER ---
     EMAIL_ALREADY_EXISTS("USER_001", HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),

@@ -6,6 +6,7 @@ import com.triplog.auth.dto.LoginRequest;
 import com.triplog.auth.dto.SignupRequest;
 import com.triplog.auth.jwt.JwtTokenProvider;
 import com.triplog.auth.mapper.RefreshTokenMapper;
+import com.triplog.auth.mapper.SocialAccountMapper;
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import com.triplog.user.domain.User;
@@ -23,17 +24,20 @@ public class AuthService {
 
     private final UserMapper userMapper;
     private final RefreshTokenMapper refreshTokenMapper;
+    private final SocialAccountMapper socialAccountMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final Clock clock;
 
     public AuthService(UserMapper userMapper,
                        RefreshTokenMapper refreshTokenMapper,
+                       SocialAccountMapper socialAccountMapper,
                        PasswordEncoder passwordEncoder,
                        JwtTokenProvider tokenProvider,
                        Clock clock) {
         this.userMapper = userMapper;
         this.refreshTokenMapper = refreshTokenMapper;
+        this.socialAccountMapper = socialAccountMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenProvider = tokenProvider;
         this.clock = clock;
@@ -41,7 +45,7 @@ public class AuthService {
 
     @Transactional
     public UserProfileResponse signup(SignupRequest request) {
-        if (userMapper.countByEmail(request.email()) > 0) {
+        if (userMapper.countByEmail(request.email()) > 0 || socialAccountMapper.countByEmail(request.email()) > 0) {
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
@@ -56,7 +60,8 @@ public class AuthService {
     @Transactional
     public AuthTokenResponse login(LoginRequest request) {
         User user = userMapper.findByEmail(request.email());
-        if (user == null || !passwordEncoder.matches(request.password(), user.getPassword())) {
+        if (user == null || user.getPassword() == null
+                || !passwordEncoder.matches(request.password(), user.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         return issueTokens(user.getId());
@@ -97,7 +102,7 @@ public class AuthService {
         refreshTokenMapper.revokeByToken(refreshTokenValue, now());
     }
 
-    private AuthTokenResponse issueTokens(Long userId) {
+    AuthTokenResponse issueTokens(Long userId) {
         String accessToken = tokenProvider.createAccessToken(userId);
         String refreshTokenValue = tokenProvider.createRefreshToken(userId);
 

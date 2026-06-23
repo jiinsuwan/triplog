@@ -5,6 +5,7 @@ import com.triplog.auth.dto.LoginRequest;
 import com.triplog.auth.dto.SignupRequest;
 import com.triplog.auth.jwt.JwtTokenProvider;
 import com.triplog.auth.mapper.RefreshTokenMapper;
+import com.triplog.auth.mapper.SocialAccountMapper;
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
 import com.triplog.user.domain.User;
@@ -42,6 +43,9 @@ class AuthServiceTest {
     private RefreshTokenMapper refreshTokenMapper;
 
     @Mock
+    private SocialAccountMapper socialAccountMapper;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -51,13 +55,27 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userMapper, refreshTokenMapper, passwordEncoder, tokenProvider, FIXED_CLOCK);
+        authService = new AuthService(
+                userMapper, refreshTokenMapper, socialAccountMapper, passwordEncoder, tokenProvider, FIXED_CLOCK);
     }
 
     @Test
     void signup_rejects_duplicate_email() {
         SignupRequest request = new SignupRequest("me@example.com", "password123", "tester");
         when(userMapper.countByEmail("me@example.com")).thenReturn(1);
+
+        assertThatThrownBy(() -> authService.signup(request))
+                .isInstanceOfSatisfying(BusinessException.class, e ->
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS));
+
+        verify(userMapper, never()).insert(any());
+    }
+
+    @Test
+    void signup_rejects_email_already_used_by_social_account() {
+        SignupRequest request = new SignupRequest("social@example.com", "password123", "tester");
+        when(userMapper.countByEmail("social@example.com")).thenReturn(0);
+        when(socialAccountMapper.countByEmail("social@example.com")).thenReturn(1);
 
         assertThatThrownBy(() -> authService.signup(request))
                 .isInstanceOfSatisfying(BusinessException.class, e ->

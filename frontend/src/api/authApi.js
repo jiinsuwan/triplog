@@ -1,4 +1,5 @@
 import instance from './instance'
+import { API_BASE_URL } from './config'
 
 // 인증/프로필 API 함수 (architecture §3, core 공유 영역).
 // 백엔드 계약: AuthController(/auth/*), UserController(/users/me).
@@ -7,6 +8,18 @@ import instance from './instance'
 // POST /auth/login → AuthTokenResponse { accessToken, refreshToken, tokenType }
 export function login(email, password) {
   return instance.post('/auth/login', { email, password }).then((res) => res.data.data)
+}
+
+export function oauthAuthorizeUrl(provider, redirect) {
+  const url = new URL(`/auth/oauth/${provider}/authorize`, API_BASE_URL)
+  if (redirect) {
+    url.searchParams.set('redirect', redirect)
+  }
+  return url.toString()
+}
+
+export function startOAuthLogin(provider, redirect) {
+  window.location.assign(oauthAuthorizeUrl(provider, redirect))
 }
 
 // POST /auth/signup → UserProfileResponse (토큰 미발급 — 가입 후 로그인 필요)

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { startOAuthLogin } from '@/api/authApi'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
@@ -19,6 +20,13 @@ const loading = ref(false)
 const justRegistered = route.query.registered === '1'
 const justReset = route.query.reset === '1'
 const justWithdrawn = route.query.withdrawn === '1'
+const oauthError = route.query.oauthError
+
+const socialProviders = [
+  { id: 'kakao', label: '카카오로 계속하기', class: 'kakao' },
+  { id: 'google', label: '구글로 계속하기', class: 'google' },
+  { id: 'naver', label: '네이버로 계속하기', class: 'naver' },
+]
 
 async function onSubmit() {
   error.value = ''
@@ -34,6 +42,18 @@ async function onSubmit() {
     loading.value = false
   }
 }
+
+function onSocialLogin(provider) {
+  const redirect =
+    typeof route.query.redirect === 'string' ? route.query.redirect : AUTHENTICATED_ENTRY_PATH
+  startOAuthLogin(provider, redirect)
+}
+
+function oauthErrorMessage(reason) {
+  if (reason === 'cancelled') return '소셜 로그인이 취소되었습니다.'
+  if (reason === 'email_conflict') return '이미 같은 이메일로 가입된 계정이 있습니다.'
+  return '소셜 로그인에 실패했습니다. 다시 시도해주세요.'
+}
 </script>
 
 <template>
@@ -47,6 +67,9 @@ async function onSubmit() {
     </Message>
     <Message v-if="justWithdrawn" severity="success" :closable="false">
       회원 탈퇴가 완료되었습니다.
+    </Message>
+    <Message v-if="oauthError" severity="error" :closable="false">
+      {{ oauthErrorMessage(oauthError) }}
     </Message>
     <form @submit.prevent="onSubmit">
       <label>
@@ -68,6 +91,16 @@ async function onSubmit() {
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Button type="submit" label="로그인" :loading="loading" />
     </form>
+    <div class="social-login" aria-label="소셜 로그인">
+      <Button
+        v-for="provider in socialProviders"
+        :key="provider.id"
+        type="button"
+        :label="provider.label"
+        :class="['social-button', provider.class]"
+        @click="onSocialLogin(provider.id)"
+      />
+    </div>
     <p>계정이 없으신가요? <RouterLink to="/signup">회원가입</RouterLink></p>
   </main>
 </template>
@@ -95,5 +128,29 @@ async function onSubmit() {
 }
 .forgot-link:hover {
   text-decoration: underline;
+}
+.social-login {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.social-button {
+  width: 100%;
+}
+.social-button.kakao {
+  background: #fee500;
+  border-color: #fee500;
+  color: #191919;
+}
+.social-button.google {
+  background: #ffffff;
+  border-color: #dadce0;
+  color: #202124;
+}
+.social-button.naver {
+  background: #03c75a;
+  border-color: #03c75a;
+  color: #ffffff;
 }
 </style>
