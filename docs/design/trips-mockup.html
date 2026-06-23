@@ -18,10 +18,10 @@
   .scene .grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:14px;opacity:.5}
   .scene .grid6 i{height:128px;border-radius:14px;background:var(--line2);display:block}
   .scene .ghost-ttl{font-size:19px;font-weight:800;color:var(--ink-faint)}
-  .scene .scrim{position:relative;background:rgba(44,41,38,.5);display:grid;place-items:center;padding:30px;min-height:330px}
+  .scene .scrim{position:relative;background:rgba(40,30,20,.42);display:grid;place-items:center;padding:30px;min-height:330px}
 
   /* 모달 공통 */
-  .modal{--ds-surface:var(--paper-card);background:var(--paper-card)}
+  .modal{--ds-surface:var(--paper)}
   .m-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 22px 14px;border-bottom:1px solid var(--line2)}
   .m-head .ey{font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.3px}
   .m-head .ttl{font-size:18px;font-weight:800;letter-spacing:-.3px;margin-top:3px}
@@ -32,17 +32,17 @@
   .col2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 
   /* 입력 폼 룩 */
-  .inp{border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:#fff;font-size:13.5px;color:var(--ink)}
+  .inp{border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:var(--on-fill);font-size:13.5px;color:var(--ink)}
   .inp.ph{color:var(--ink-faint)}
   .inp.on{border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,105,63,.13)}
   /* 해시태그 입력 */
-  .tags-inp{border:1px solid var(--line);border-radius:9px;padding:8px 11px;background:#fff;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .tags-inp{border:1px solid var(--line);border-radius:9px;padding:8px 11px;background:var(--on-fill);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .tchip{font-family:'Nanum Pen Script',cursive;font-size:15px;color:var(--accent);background:#f7eee4;border:1px solid var(--line);border-radius:14px;padding:1px 10px}
   .tchip .x{color:var(--ink-faint);margin-left:3px;cursor:pointer}
   .tags-inp .cue{color:var(--ink-faint);font-size:12.5px}
 
   /* 범위 캘린더 */
-  .cal{border:1px solid var(--line);border-radius:12px;background:#fff;padding:13px 14px}
+  .cal{border:1px solid var(--line);border-radius:12px;background:var(--on-fill);padding:13px 14px}
   .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;font-size:13px;font-weight:700}
   .cal-nav .a{color:var(--ink-faint);cursor:pointer;font-size:14px}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
@@ -51,8 +51,8 @@
   .cal-grid .dy{height:31px;display:grid;place-items:center;border-radius:8px;font-size:12.5px;color:var(--ink)}
   .cal-grid .dy.mut{color:transparent}
   .cal-grid .dy.r-mid{background:#f3e3d7;border-radius:0}
-  .cal-grid .dy.r-s{background:var(--accent);color:#fff;font-weight:700;border-radius:8px 0 0 8px}
-  .cal-grid .dy.r-e{background:var(--accent);color:#fff;font-weight:700;border-radius:0 8px 8px 0}
+  .cal-grid .dy.r-s{background:var(--accent);color:var(--on-fill);font-weight:700;border-radius:8px 0 0 8px}
+  .cal-grid .dy.r-e{background:var(--accent);color:var(--on-fill);font-weight:700;border-radius:0 8px 8px 0}
 
   /* 미리보기 팝업 */
   .modal.preview{width:680px}
@@ -66,8 +66,8 @@
   .pv-map{border:1px solid var(--line);border-radius:14px;overflow:hidden;position:relative;min-height:270px}
   .pv-plan{display:flex;flex-direction:column;min-height:270px}
   .day-tabs{display:flex;gap:5px;margin-bottom:12px;align-items:center}
-  .day-tabs .d{font-size:11.5px;font-weight:700;background:#fff;color:var(--ink-sub);border:1px solid var(--line);border-radius:7px;padding:5px 12px;cursor:pointer}
-  .day-tabs .d.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .day-tabs .d{font-size:11.5px;font-weight:700;background:var(--on-fill);color:var(--ink-sub);border:1px solid var(--line);border-radius:7px;padding:5px 12px;cursor:pointer}
+  .day-tabs .d.on{background:var(--ink);color:var(--on-fill);border-color:var(--ink)}
   .day-tabs .dt{margin-left:auto;font-size:11px;color:var(--ink-faint)}
   .plan-list{overflow:auto;flex:1}
   .pstop{display:flex;align-items:flex-start}
@@ -92,10 +92,10 @@
   .map .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(120,100,60,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(120,100,60,.05) 1px,transparent 1px);background-size:40px 40px}
   .map .route{position:absolute;height:0;border-top:2px dashed var(--accent);opacity:.6;transform-origin:left center}
   .map .pin{position:absolute;width:24px;height:24px;transform:translate(-50%,-100%) rotate(-45deg);
-    border:2px solid #fff;border-radius:50% 50% 50% 0;box-shadow:0 3px 7px rgba(0,0,0,.25);display:grid;place-items:center}
+    border:2px solid var(--on-fill);border-radius:50% 50% 50% 0;box-shadow:0 3px 7px rgba(0,0,0,.25);display:grid;place-items:center}
   .map .pin.db{background:var(--t-sage)}.map .pin.food{background:var(--t-burgundy)}.map .pin.cafe{background:var(--t-plum)}
   .map .pin.num{background:var(--accent)}
-  .map .pin span{transform:rotate(45deg);color:#fff;font-size:11px;font-weight:700}
+  .map .pin span{transform:rotate(45deg);color:var(--on-fill);font-size:11px;font-weight:700}
   .map .plabel{position:absolute;transform:translate(-50%,-100%);background:var(--paper-card);border:1px solid var(--line);
     border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.1);white-space:nowrap}
   .map .legend{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--ink-sub);background:var(--paper-card);
@@ -110,7 +110,7 @@
   .topbar2 .crumb .cur{color:var(--ink-sub);font-weight:400}
   .steps{display:flex;align-items:center;gap:5px;margin-left:auto;font-size:12px;font-weight:700}
   .steps .on{color:var(--accent)}.steps .off{color:var(--ink-faint)}.steps .sep{color:var(--line)}
-  .next-btn{background:var(--accent);color:#fff;font-weight:700;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;cursor:pointer;box-shadow:0 3px 10px -3px rgba(194,105,63,.5)}
+  .next-btn{background:var(--accent);color:var(--on-fill);font-weight:700;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;cursor:pointer;box-shadow:0 3px 10px -3px rgba(194,105,63,.5)}
 
   /* ⑥ 탐색 = 좌 결과 / 중앙 지도 / 우 보관함 (실제 구현 3단) */
   .work3{display:grid;grid-template-columns:328px 1fr 280px;height:600px}
@@ -120,21 +120,21 @@
   .wc-head small{font-size:11px;color:var(--ink-faint);font-weight:400}
   .wc-scroll{overflow:auto;flex:1;padding:12px 14px}
   .searchbar{display:flex;gap:7px;margin-bottom:11px}
-  .searchbar .field-inp{flex:1;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:#fff;font-size:12.5px;color:var(--ink-faint);display:flex;align-items:center;gap:7px}
+  .searchbar .field-inp{flex:1;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:var(--on-fill);font-size:12.5px;color:var(--ink-faint);display:flex;align-items:center;gap:7px}
   .cat-row{display:flex;gap:5px;margin-bottom:12px}
-  .cat-row .c{font-size:11.5px;font-weight:600;color:var(--ink-sub);border:1px solid var(--line);background:#fff;border-radius:18px;padding:5px 12px;cursor:pointer}
-  .cat-row .c.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .cat-row .c{font-size:11.5px;font-weight:600;color:var(--ink-sub);border:1px solid var(--line);background:var(--on-fill);border-radius:18px;padding:5px 12px;cursor:pointer}
+  .cat-row .c.on{background:var(--accent);border-color:var(--accent);color:var(--on-fill)}
   .res{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line2)}
   .res .pic{width:42px;height:42px;border-radius:8px;flex:none}
   .res .info{flex:1;min-width:0}
   .res .nm{font-size:13px;font-weight:700}
   .res .sub{font-size:10.5px;color:var(--ink-sub);margin-top:2px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
   .res .src{font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-faint)}
-  .add-btn{border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:7px;font-size:12px;font-weight:700;padding:5px 11px;cursor:pointer;flex:none}
+  .add-btn{border:1px solid var(--accent);background:var(--on-fill);color:var(--accent);border-radius:7px;font-size:12px;font-weight:700;padding:5px 11px;cursor:pointer;flex:none}
   .add-btn.done{border-color:var(--line);background:var(--bg);color:var(--ink-sub)}
   .pager{display:flex;justify-content:center;gap:5px;margin-top:12px}
   .pager span{width:24px;height:24px;display:grid;place-items:center;font-size:12px;border-radius:6px;color:var(--ink-sub);cursor:pointer}
-  .pager span.on{background:var(--ink);color:#fff;font-weight:700}
+  .pager span.on{background:var(--ink);color:var(--on-fill);font-weight:700}
   .mapcol{position:relative}
   .map-tool{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:5;background:var(--paper-card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-sub);box-shadow:0 2px 8px rgba(0,0,0,.12);cursor:pointer}
   .zoom{position:absolute;left:14px;bottom:14px;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:30px;background:var(--paper-card)}
@@ -151,8 +151,8 @@
   .tl-col{border-right:1px solid var(--line2);display:flex;flex-direction:column;background:var(--paper-card)}
   /* DAY 탭 = 좌측 상단(제목과 타임라인 사이) */
   .daysel{display:flex;gap:5px;padding:13px 15px 10px;border-bottom:1px solid var(--line2);align-items:center}
-  .daysel .d{font-size:12px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:5px 13px;cursor:pointer}
-  .daysel .d.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .daysel .d{font-size:12px;background:var(--on-fill);border:1px solid var(--line);border-radius:7px;padding:5px 13px;cursor:pointer}
+  .daysel .d.on{background:var(--ink);color:var(--on-fill);border-color:var(--ink)}
   .daysel .d.add{color:var(--ink-faint)}
   .tl-meta{padding:11px 15px 4px;display:flex;align-items:center;justify-content:space-between}
   .tl-meta .dh{font-size:12.5px;font-weight:700;color:var(--accent)}
@@ -165,7 +165,7 @@
   .tl .hr{position:absolute;left:0;right:0;height:0}
   .tl .hr .hl{position:absolute;left:0;top:-7px;width:38px;text-align:right;font-size:10.5px;color:var(--ink-faint);font-family:'SF Mono',monospace}
   .tl .hr .hb{position:absolute;left:42px;right:0;top:0;border-top:1px solid var(--line2)}
-  .tl .stop{position:absolute;left:40px;right:2px;border:1px solid var(--line);border-radius:9px;background:#fff;
+  .tl .stop{position:absolute;left:40px;right:2px;border:1px solid var(--line);border-radius:9px;background:var(--on-fill);
     box-shadow:0 1px 4px rgba(80,60,30,.07);overflow:hidden;display:flex;cursor:grab}
   .tl .stop .bar{width:4px;flex:none}
   .tl .stop .bar.db{background:var(--t-sage)}.tl .stop .bar.food{background:var(--t-burgundy)}.tl .stop .bar.cafe{background:var(--t-plum)}.tl .stop .bar.stay{background:var(--t-blue)}
@@ -214,14 +214,14 @@
 </style>
 </head>
 <body>
-  <p class="pagehead"><b>TRIPS — 여행 생성·미리보기·탐색·일정</b> · 데스크톱 · 0623 시안 + 실제 프론트 구조/문구. 이 목업이 구현 정본.</p>
+  <p class="pagehead"><b>TRIPS — 여행 생성·미리보기·탐색·일정</b> · 데스크톱 · 디자인 시안 + 실제 프론트 구조/문구. 이 목업이 구현 정본.</p>
 
   <!-- ⓪ 여행 목록 -->
   <div class="seclbl">⓪ 여행 목록 <span>— /trips. 티켓 그리드(클릭 = 미리보기 팝업). 계획·예정 = 온전한 티켓 / 다녀옴 = 뜯긴 티켓 + 도장</span></div>
   <div class="page">
     <div class="topbar">
       <div class="logo">Trip<b>Log</b></div>
-      <div class="tabs"><a class="on" href="#">여행</a><a href="#">추억</a></div>
+      <div class="tabs"><a href="#">HOME</a><a class="on" href="#">TRIPS</a><a href="#">LOGS</a></div>
       <div class="search">장소·여행 검색</div>
       <div class="avatar">지</div>
     </div>
@@ -280,9 +280,9 @@
               <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
               <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
               <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
-              <text x="100" y="121" text-anchor="middle" font-size="11.5">2023.11.07</text>
-              <text x="100" y="135" text-anchor="middle" font-size="12.5">~</text>
-              <text x="100" y="149" text-anchor="middle" font-size="11.5">2023.11.09</text>
+              <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.07</text>
+              <text x="100" y="135" text-anchor="middle" font-size="12.5" letter-spacing="0.5">~</text>
+              <text x="100" y="149" text-anchor="middle" font-size="11.5" letter-spacing="0.5">2023.11.09</text>
               <g transform="rotate(-12 100 100)">
                 <rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2"/>
                 <text class="complete" x="100" y="173" text-anchor="middle" font-size="13.5" font-weight="800" letter-spacing="3">COMPLETE</text>
@@ -342,7 +342,7 @@
     <div class="scrim">
       <div class="modal preview">
         <div class="pv-head">
-          <span class="badge" style="background:#f7ecd6;color:#c4892e">계획 중</span>
+          <span class="badge plan">계획 중</span>
           <div class="ttl">제주, 바람의 사흘</div>
           <button class="x">✕</button>
         </div>
@@ -386,7 +386,7 @@
     <div class="scrim">
       <div class="modal preview" style="width:520px">
         <div class="pv-head">
-          <span class="badge" style="background:#f7ecd6;color:#c4892e">계획 중</span>
+          <span class="badge plan">계획 중</span>
           <div class="ttl">제주 가을 힐링</div>
           <button class="x">✕</button>
         </div>
@@ -414,16 +414,16 @@
     <div class="scrim">
       <div class="modal preview">
         <div class="pv-head">
-          <span class="badge" style="background:#e7efe4;color:#5b7a52">다녀옴</span>
+          <span class="badge past">다녀옴</span>
           <div class="ttl">교토 단풍 기행</div>
           <div class="pv-stamp stage-2" style="margin-left:auto">
             <svg class="stamp-svg" viewBox="0 0 200 200" role="img" aria-label="도장 2단계 기록 중">
-              <circle class="ring" cx="100" cy="100" r="88" stroke-width="3"/>
-              <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.5" stroke-dasharray="1.5 4"/>
-              <text class="glyph" x="100" y="60" text-anchor="middle" font-size="34">✈</text>
-              <text x="100" y="100" text-anchor="middle" font-size="26" font-weight="800" letter-spacing="2">교토</text>
-              <text class="glyph" x="40" y="95" text-anchor="middle" font-size="15">★</text>
-              <text class="glyph" x="160" y="95" text-anchor="middle" font-size="15">★</text>
+              <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5"/>
+              <circle class="ring" cx="100" cy="100" r="77" stroke-width="1.2" stroke-dasharray="1.5 4"/>
+              <text class="glyph" x="100" y="54" text-anchor="middle" font-size="30">✈</text>
+              <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">교토</text>
+              <text class="glyph" x="42" y="87" text-anchor="middle" font-size="14">★</text>
+              <text class="glyph" x="158" y="87" text-anchor="middle" font-size="14">★</text>
             </svg>
             <div class="cap">눌러 추억 만들기</div>
           </div>
@@ -607,7 +607,7 @@
   </div>
 
   <div class="doc-note">
-    <b>TRIPS — 디자인 정의</b> (Sprint 4 · 이 목업이 구현 정본 · 0623 시안 + 실제 프론트 구조/문구)
+    <b>TRIPS — 디자인 정의</b> (Sprint 4 · 이 목업이 구현 정본 · 디자인 시안 + 실제 프론트 구조/문구)
     <ul>
       <li><span class="k">진입</span> 목록(티켓) → 미리보기 팝업(여행 개요) → 탐색(① 장소 담기) → 일정(② 배치). 둘은 같은 `/trips/:id/places`, 상단 단계 표시로 이동</li>
       <li><span class="k">① 새 여행 / ⑤ 정보 수정</span> 지역·테마 = <b>자유 입력</b>, 해시태그 = <b>태그 입력</b>(칩+Enter). 새 여행·정보 수정 동일 필드. 상태는 날짜로 자동(입력 없음). 백엔드가 태그 미지원이면 지역·테마를 태그로 노출(폴백)</li>

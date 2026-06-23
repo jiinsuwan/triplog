@@ -9,7 +9,7 @@
 - **색**: 종이 베이지 `#ece4d6` / 표면 `#fbf7ee` / 잉크 `#2c2926` / 도장 남색 `#2f4a5c` / 주 액션 테라코타 `#c2693f` / COMPLETE 적색 `#c0392b` / 티켓 빈티지 팔레트(테라·머스타드·세이지·블루·버건디·카키·플럼)
 - **타이포**: 본문 Pretendard / 감성·해시태그 Nanum Pen Script
 - **시스템 정본**: `design-system.css`(토큰 + 컴포넌트) · `design-system.html`(컴포넌트 카탈로그) ← 모든 화면이 이걸 재사용
-- **화면 목업**: `auth-mockup.html` · `profile-mockup.html` · `home-mockup.html` · `ticket-stamp-mockup.html` · `trips-mockup.html` · `memory-list-mockup.html` · `memory-viewer-mockup.html`
+- **화면 목업**: `auth-mockup.html` · `profile-mockup.html` · `home-mockup.html` · `trips-mockup.html` · `memory-list-mockup.html` · `memory-viewer-mockup.html` (티켓·도장·폴라로이드 컴포넌트 정본·카탈로그 = `design-system.html`)
 
 ## 화면 (14) — 상태
 
@@ -22,7 +22,7 @@
 | 3 | 인증 | 비밀번호 찾기·재설정 | `/forgot-password`·`/reset-password` | ✅ `auth-mockup.html` |
 | 4 | 계정 | 프로필/마이페이지 | `/profile` (팝업) | ✅ `profile-mockup.html` |
 | 5 | 홈 | 홈 대시보드 | `/` | ✅ `home-mockup.html` |
-| 6 | TRIPS | 여행 목록 | `/trips` | ✅ `trips-mockup.html` (티켓·도장 컴포넌트 = `ticket-stamp-mockup.html`) |
+| 6 | TRIPS | 여행 목록 | `/trips` | ✅ `trips-mockup.html` (티켓·도장 컴포넌트 정본 = `design-system.html`) |
 | 7 | TRIPS | 여행 생성·수정 | `/trips/new` (모달) | ✅ `trips-mockup.html` |
 | 8 | TRIPS | 여행 개요(상세) | 미리보기 팝업 (개요 흡수) | ✅ `trips-mockup.html` |
 | 9 | TRIPS | 관광지 탐색 | `/trips/:id/places` (담기 모드) | ✅ `trips-mockup.html` |
