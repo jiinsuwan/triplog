@@ -70,6 +70,22 @@ class PlaceControllerIntegrationTest {
     }
 
     @Test
+    void flyway_seed_excludes_tourapi_places_with_out_of_korea_coordinates() {
+        Long invalidCoordinateCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM places
+                        WHERE source = 'TOUR_API'
+                          AND (
+                              latitude < 32 OR latitude > 39
+                              OR longitude < 124 OR longitude > 132
+                          )
+                        """,
+                Long.class);
+
+        assertThat(invalidCoordinateCount).isZero();
+    }
+
+    @Test
     void list_places_without_auth_and_filter_by_region_category_keyword() throws Exception {
         mockMvc.perform(get("/places")
                         .param("region1", "서울특별시")

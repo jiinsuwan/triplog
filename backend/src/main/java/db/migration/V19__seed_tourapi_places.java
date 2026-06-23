@@ -70,6 +70,11 @@ public class V19__seed_tourapi_places extends BaseJavaMigration {
                     continue;
                 }
                 JsonNode place = objectMapper.readTree(line);
+                BigDecimal latitude = decimal(place, "latitude");
+                BigDecimal longitude = decimal(place, "longitude");
+                if (!isKoreaCoordinate(latitude, longitude)) {
+                    continue;
+                }
                 statement.setString(1, text(place, "source"));
                 statement.setString(2, text(place, "sourceId"));
                 statement.setString(3, text(place, "placeType"));
@@ -79,8 +84,8 @@ public class V19__seed_tourapi_places extends BaseJavaMigration {
                 setNullableString(statement, 7, text(place, "region2"));
                 setNullableString(statement, 8, text(place, "address"));
                 setNullableString(statement, 9, text(place, "roadAddress"));
-                statement.setBigDecimal(10, decimal(place, "latitude"));
-                statement.setBigDecimal(11, decimal(place, "longitude"));
+                statement.setBigDecimal(10, latitude);
+                statement.setBigDecimal(11, longitude);
                 setNullableString(statement, 12, text(place, "phone"));
                 setNullableString(statement, 13, text(place, "summary"));
                 setNullableString(statement, 14, text(place, "description"));
@@ -195,6 +200,13 @@ public class V19__seed_tourapi_places extends BaseJavaMigration {
             throw new IllegalStateException("Missing decimal field: " + field);
         }
         return value.decimalValue();
+    }
+
+    private boolean isKoreaCoordinate(BigDecimal latitude, BigDecimal longitude) {
+        return latitude.compareTo(BigDecimal.valueOf(32)) >= 0
+                && latitude.compareTo(BigDecimal.valueOf(39)) <= 0
+                && longitude.compareTo(BigDecimal.valueOf(124)) >= 0
+                && longitude.compareTo(BigDecimal.valueOf(132)) <= 0;
     }
 
     private String json(JsonNode node) throws IOException {

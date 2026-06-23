@@ -50,6 +50,8 @@ data/tourapi/out/jeju-detailed/
 
 `places.jsonl`의 `placeType`과 `category`는 우선 ASCII 코드값(`LODGING`, `CULTURE` 등)으로 저장한다. 한글 표시명은 DB 적재/프론트 표시 단계에서 매핑한다.
 
+좌표는 지도 표시 품질을 위해 한국 대략 경계(`latitude` 32~39, `longitude` 124~132) 안에 있는 항목만 저장한다. TourAPI 응답에 placeholder/비정상 좌표가 섞일 수 있으므로, 수집 스크립트와 DB seed migration이 같은 기준으로 방어한다.
+
 ## 중복 및 이어받기
 
 - `-Resume`이면 기존 `places.jsonl`을 읽어 이미 저장된 `sourceId`를 건너뛴다.

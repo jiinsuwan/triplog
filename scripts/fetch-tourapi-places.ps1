@@ -673,6 +673,18 @@ function To-NumberOrNull {
     return $null
 }
 
+function Test-KoreaCoordinate {
+    param(
+        [object]$Latitude,
+        [object]$Longitude
+    )
+
+    if ($null -eq $Latitude -or $null -eq $Longitude) {
+        return $false
+    }
+    return $Latitude -ge 32 -and $Latitude -le 39 -and $Longitude -ge 124 -and $Longitude -le 132
+}
+
 function Get-AreaIndex {
     param([int]$OnlyAreaCode = 0)
 
@@ -1054,6 +1066,7 @@ $counts = [ordered]@{}
 $skipped = 0
 $duplicateSkipped = 0
 $failedDetailSkipped = 0
+$invalidCoordinateSkipped = 0
 $totalSaved = 0
 
 foreach ($contentTypeId in $ContentTypeIds) {
@@ -1165,6 +1178,14 @@ foreach ($contentTypeId in $ContentTypeIds) {
                 $skipped++
                 continue
             }
+            if (-not (Test-KoreaCoordinate $candidate.latitude $candidate.longitude)) {
+                if ($contentId) {
+                    $existingIds.Add($contentId) | Out-Null
+                }
+                $invalidCoordinateSkipped++
+                Write-Warning "Skipping out-of-Korea coordinate contentId=$contentId contentTypeId=$contentTypeId latitude=$($candidate.latitude) longitude=$($candidate.longitude)"
+                continue
+            }
 
             $candidate | ConvertTo-Json -Depth 20 -Compress | Add-Content -LiteralPath $OutputPath -Encoding UTF8
             if ($contentId) {
@@ -1211,6 +1232,7 @@ $summary = [ordered]@{
     skipped = $skipped
     duplicateSkipped = $duplicateSkipped
     failedDetailSkipped = $failedDetailSkipped
+    invalidCoordinateSkipped = $invalidCoordinateSkipped
     resume = $Resume.IsPresent
     forceReset = $ForceReset.IsPresent
     retryFailedIds = $RetryFailedIds.IsPresent
@@ -1231,5 +1253,5 @@ $summary = [ordered]@{
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $SummaryPath -Encoding UTF8
 
-Write-Host "Done. saved=$totalSaved skipped=$skipped duplicateSkipped=$duplicateSkipped failedDetailSkipped=$failedDetailSkipped"
+Write-Host "Done. saved=$totalSaved skipped=$skipped duplicateSkipped=$duplicateSkipped failedDetailSkipped=$failedDetailSkipped invalidCoordinateSkipped=$invalidCoordinateSkipped"
 Write-Host "Summary: $SummaryPath"
