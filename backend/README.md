@@ -31,6 +31,8 @@ Spring Boot 3.5 · Java 21 · Maven · MyBatis · Flyway · Spring Security(JWT)
 | `JWT_SECRET` | JWT 서명 키 (HS256, **32바이트 이상**) |
 | `UPLOAD_DIR` | 사진 로컬 저장 경로 (기본 `./uploads`) |
 | `CORS_ALLOWED_ORIGINS` | 허용 Origin (기본 `http://localhost:5173`) |
+| `OAUTH_KAKAO_*` / `OAUTH_GOOGLE_*` / `OAUTH_NAVER_*` | 소셜 로그인 client id·secret·redirect URI |
+| `OAUTH_FRONTEND_SUCCESS_URI` / `OAUTH_FRONTEND_FAILURE_URI` | 소셜 로그인 완료/실패 후 프론트 이동 경로 |
 
 > `application.yml`은 값을 직접 담지 않고 env로 주입받는다. `.env`는 절대 커밋하지 않는다.
 

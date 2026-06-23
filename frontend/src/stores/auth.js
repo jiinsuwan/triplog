@@ -44,6 +44,12 @@ export const useAuthStore = defineStore('auth', () => {
     return tokens
   }
 
+  async function completeOAuthLogin(tokens) {
+    setTokens(tokens.accessToken, tokens.refreshToken)
+    await fetchMe().catch(() => {})
+    return tokens
+  }
+
   // 회원가입: 백엔드가 토큰을 주지 않으므로 자동 로그인하지 않는다(가입 → 로그인 유도).
   async function signup(email, password, nickname) {
     return authApi.signup(email, password, nickname)
@@ -101,6 +107,7 @@ export const useAuthStore = defineStore('auth', () => {
     setTokens,
     clearSession,
     login,
+    completeOAuthLogin,
     signup,
     logout,
     withdraw,

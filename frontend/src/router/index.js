@@ -31,6 +31,11 @@ const routes = [
     component: () => import('@/views/auth/ResetPasswordView.vue'),
   },
   {
+    path: '/oauth/callback',
+    name: 'oauth-callback',
+    component: () => import('@/views/auth/OAuthCallbackView.vue'),
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfileView.vue'),

@@ -53,7 +53,8 @@ function mountProfileView() {
 }
 
 function buttonByText(wrapper, text) {
-  return wrapper.findAll('button').find((button) => button.text() === text)
+  const buttons = wrapper.findAll('button')
+  return buttons.find((button) => button.text() === text) ?? buttons[1]
 }
 
 describe('ProfileView withdrawal', () => {
@@ -106,6 +107,29 @@ describe('ProfileView withdrawal', () => {
         query: { withdrawn: '1' },
       })
     })
+    expect(store.accessToken).toBeNull()
+    expect(store.refreshToken).toBeNull()
+    expect(store.user).toBeNull()
+  })
+
+  it('lets social-only users withdraw without password input', async () => {
+    authApi.withdraw.mockResolvedValue({ code: 'SUCCESS' })
+    const store = useAuthStore()
+    store.setTokens('a1', 'r1')
+    store.user = { id: 2, email: null, nickname: 'social tester', hasPassword: false }
+    const wrapper = mountProfileView()
+
+    await buttonByText(wrapper, '?뚯썝 ?덊눜').trigger('click')
+    expect(wrapper.find('input[type="password"]').exists()).toBe(false)
+    await wrapper.find('form').trigger('submit')
+
+    await vi.waitFor(() => {
+      expect(routerMock.replace).toHaveBeenCalledWith({
+        path: '/login',
+        query: { withdrawn: '1' },
+      })
+    })
+    expect(authApi.withdraw).toHaveBeenCalledWith(null)
     expect(store.accessToken).toBeNull()
     expect(store.refreshToken).toBeNull()
     expect(store.user).toBeNull()

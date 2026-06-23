@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.triplog.auth.dto.LoginRequest;
 import com.triplog.auth.dto.RefreshTokenRequest;
+import com.triplog.auth.jwt.JwtTokenProvider;
 import com.triplog.user.dto.WithdrawUserRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,8 +57,11 @@ class UserWithdrawalIntegrationTest {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private PasswordEncoder passwordEncoder;
+    @Autowired
+    private JwtTokenProvider tokenProvider;
 
     private final List<String> emails = new ArrayList<>();
+    private final List<Long> socialUserIds = new ArrayList<>();
 
     @BeforeEach
     void setUp() throws IOException {
@@ -68,6 +72,9 @@ class UserWithdrawalIntegrationTest {
     void tearDown() throws IOException {
         for (String email : emails) {
             jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
+        }
+        for (Long userId : socialUserIds) {
+            jdbcTemplate.update("DELETE FROM users WHERE id = ?", userId);
         }
         clearUploadDir();
     }
@@ -174,6 +181,27 @@ class UserWithdrawalIntegrationTest {
         assertThat(count("users", "id", owner.userId())).isEqualTo(1);
     }
 
+    @Test
+    void social_only_user_can_withdraw_without_password() throws Exception {
+        UserSession owner = createSocialUser();
+
+        mockMvc.perform(get("/users/me").header(HttpHeaders.AUTHORIZATION, bearer(owner.accessToken())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(owner.userId()))
+                .andExpect(jsonPath("$.data.email").value(nullValue()))
+                .andExpect(jsonPath("$.data.hasPassword").value(false));
+
+        mockMvc.perform(delete("/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner.accessToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"));
+
+        assertThat(count("users", "id", owner.userId())).isZero();
+        assertThat(count("social_accounts", "user_id", owner.userId())).isZero();
+    }
+
     private UserSession createUser(String email) throws Exception {
         emails.add(email);
         jdbcTemplate.update("""
@@ -190,6 +218,24 @@ class UserWithdrawalIntegrationTest {
                 userId,
                 loginBody.at("/data/accessToken").asText(),
                 loginBody.at("/data/refreshToken").asText());
+    }
+
+    private UserSession createSocialUser() {
+        String providerUserId = "social-withdraw-" + UUID.randomUUID();
+        jdbcTemplate.update("""
+                        INSERT INTO users (email, password, nickname)
+                        VALUES (NULL, NULL, ?)
+                        """,
+                "social tester");
+        Long userId = jdbcTemplate.queryForObject(
+                "SELECT id FROM users WHERE nickname = ? ORDER BY id DESC LIMIT 1", Long.class, "social tester");
+        socialUserIds.add(userId);
+        jdbcTemplate.update("""
+                        INSERT INTO social_accounts (user_id, provider, provider_user_id, email, nickname)
+                        VALUES (?, 'KAKAO', ?, 'social@example.com', 'social tester')
+                        """,
+                userId, providerUserId);
+        return new UserSession(userId, tokenProvider.createAccessToken(userId), null);
     }
 
     private long insertTrip(long userId) {

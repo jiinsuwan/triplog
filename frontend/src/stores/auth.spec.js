@@ -75,6 +75,17 @@ describe('auth 스토어', () => {
     expect(store.user).toBeNull()
   })
 
+  it('completeOAuthLogin 은 토큰 저장 후 프로필을 로드한다', async () => {
+    authApi.getMe.mockResolvedValue({ id: 7, email: null, nickname: '소셜 사용자' })
+    const store = useAuthStore()
+
+    await store.completeOAuthLogin({ accessToken: 'oauth-a', refreshToken: 'oauth-r', tokenType: 'Bearer' })
+
+    expect(store.accessToken).toBe('oauth-a')
+    expect(store.refreshToken).toBe('oauth-r')
+    expect(store.user).toEqual({ id: 7, email: null, nickname: '소셜 사용자' })
+  })
+
   // --- signup ---
   it('signup 은 가입만 하고 자동 로그인하지 않는다(토큰 미저장)', async () => {
     authApi.signup.mockResolvedValue({ id: 1, email: 'a@a.com', nickname: '지인' })

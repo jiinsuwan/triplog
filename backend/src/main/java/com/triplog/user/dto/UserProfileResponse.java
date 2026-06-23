@@ -9,7 +9,8 @@ public record UserProfileResponse(
         String email,
         String nickname,
         String profileImg,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        boolean hasPassword
 ) {
 
     public static UserProfileResponse from(User user) {
@@ -18,7 +19,8 @@ public record UserProfileResponse(
                 user.getEmail(),
                 user.getNickname(),
                 user.getProfileImg(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getPassword() != null && !user.getPassword().isBlank()
         );
     }
 }

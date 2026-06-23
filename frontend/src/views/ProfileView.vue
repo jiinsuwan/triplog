@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
@@ -15,6 +15,7 @@ const withdrawVisible = ref(false)
 const withdrawPassword = ref('')
 const withdrawError = ref('')
 const withdrawing = ref(false)
+const requiresWithdrawPassword = computed(() => auth.user?.hasPassword !== false)
 
 onMounted(() => {
   if (!auth.user) auth.fetchMe().catch(() => {})
@@ -42,7 +43,7 @@ async function onWithdraw() {
   withdrawError.value = ''
   withdrawing.value = true
   try {
-    await auth.withdraw(withdrawPassword.value)
+    await auth.withdraw(requiresWithdrawPassword.value ? withdrawPassword.value : null)
     withdrawVisible.value = false
     withdrawPassword.value = ''
     router.replace({ path: '/login', query: { withdrawn: '1' } })
@@ -80,8 +81,9 @@ async function onWithdraw() {
       @hide="closeWithdraw"
     >
       <form class="withdraw-form" @submit.prevent="onWithdraw">
-        <p>탈퇴하려면 현재 비밀번호를 입력하세요.</p>
-        <label>
+        <p v-if="requiresWithdrawPassword">탈퇴하려면 현재 비밀번호를 입력하세요.</p>
+        <p v-else>소셜 로그인 계정은 현재 로그인 상태를 확인한 뒤 탈퇴합니다.</p>
+        <label v-if="requiresWithdrawPassword">
           <span>현재 비밀번호</span>
           <Password
             v-model="withdrawPassword"
