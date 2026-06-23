@@ -64,6 +64,9 @@ public class CardCaptionController {
         }
         List<CardCaptionItem> items =
                 objectMapper.convertValue(outline.items(), new TypeReference<List<CardCaptionItem>>() {});
+        // 사용자 보정으로 추가한 외곽선(src="user")은 saliency 앵커가 없어 문구 자리를 못 잡는다 —
+        // 자동검출 객체만 문구 후보로 넘긴다(S4-LOG-01, ANCHOR_OUT_OF_RANGE·렌더 fallback 방지).
+        items = items.stream().filter(it -> !"user".equals(it.src())).toList();
         // 인식된 피사체가 0개면 문구를 만들 객체가 없다 — LLM(GMS) 호출 전 차단(크레딧 보호).
         if (items.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,

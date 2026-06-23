@@ -104,6 +104,41 @@ class CardCaptionControllerTest {
     }
 
     @Test
+    void 사용자_보정_item_src_user_은_문구_후보에서_제외된다() throws Exception {
+        // 자동검출(det) + 사용자 보정(user) 혼재 → user 는 anchors 가 없어 후보에서 빠진다(S4-LOG-01).
+        JsonNode items = mapper.readTree(
+                "[{\"id\":0,\"label\":\"dish\",\"src\":\"det\",\"center\":[0.5,0.5],\"area\":0.2,\"anchors\":[[0.5,0.3,0.9]]},"
+                        + "{\"id\":1,\"label\":\"user\",\"src\":\"user\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[]}]");
+        when(photoService.getOutline(1L, 7L))
+                .thenReturn(new PhotoOutlineResponse(7L, OutlineStatus.READY, items));
+        CardCaptionResult result = new CardCaptionResult(
+                new CardCaptionResponse(List.of(new CardCaptionObject(0, 0, List.of("맛있다"))), null),
+                List.of());
+        when(cardCaptionService.generate(anyList())).thenReturn(result);
+
+        controller.caption(1L, 7L);
+
+        verify(cardCaptionService).generate(itemsCaptor.capture());
+        List<CardCaptionItem> derived = itemsCaptor.getValue();
+        assertThat(derived).hasSize(1);
+        assertThat(derived.get(0).src()).isEqualTo("det");
+    }
+
+    @Test
+    void 보정_item_만_있으면_문구_생성_없이_INVALID_INPUT_을_던진다() throws Exception {
+        JsonNode items = mapper.readTree(
+                "[{\"id\":0,\"label\":\"user\",\"src\":\"user\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[]}]");
+        when(photoService.getOutline(1L, 7L))
+                .thenReturn(new PhotoOutlineResponse(7L, OutlineStatus.READY, items));
+
+        assertThatThrownBy(() -> controller.caption(1L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e ->
+                        assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
+        verifyNoInteractions(cardCaptionService);
+    }
+
+    @Test
     void READY_이지만_items_가_배열이_아니면_INVALID_INPUT_을_던진다() throws Exception {
         // 계약 위반(NullNode 등 비배열)도 NPE/500 이 아니라 4xx 로 끊고 LLM 호출에 도달하지 않는다.
         when(photoService.getOutline(1L, 7L))

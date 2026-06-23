@@ -7,6 +7,7 @@
     <resultMap id="photoOutline" type="com.triplog.photo.domain.PhotoOutline">
         <id property="photoId" column="photo_id"/>
         <result property="status" column="status"/>
+        <result property="imageId" column="image_id"/>
         <result property="items" column="items"/>
         <result property="error" column="error"/>
         <result property="createdAt" column="created_at"/>
@@ -19,9 +20,16 @@
     </insert>
 
     <select id="findByPhotoId" resultMap="photoOutline">
-        SELECT photo_id, status, items, error, created_at, updated_at
+        SELECT photo_id, status, image_id, items, error, created_at, updated_at
         FROM photo_outline
         WHERE photo_id = #{photoId}
+    </select>
+
+    <select id="findByPhotoIdForUpdate" resultMap="photoOutline">
+        SELECT photo_id, status, image_id, items, error, created_at, updated_at
+        FROM photo_outline
+        WHERE photo_id = #{photoId}
+        FOR UPDATE
     </select>
 
     <select id="findPendingPhotoIds" resultType="long">
@@ -34,7 +42,13 @@
 
     <update id="markReady">
         UPDATE photo_outline
-        SET status = 'READY', items = #{items}, error = NULL
+        SET status = 'READY', items = #{items}, image_id = #{imageId}, error = NULL
+        WHERE photo_id = #{photoId}
+    </update>
+
+    <update id="updateCorrection">
+        UPDATE photo_outline
+        SET status = 'READY', items = #{items}, image_id = #{imageId}, error = NULL
         WHERE photo_id = #{photoId}
     </update>
 

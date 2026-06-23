@@ -64,8 +64,8 @@ public class OutlinePreprocessor {
                 return;
             }
             byte[] bytes = readBytes(photo.getStoredFilename());
-            String items = inferenceClient.preprocess(bytes, photo.getStoredFilename());
-            outlineMapper.markReady(photoId, items);
+            InferenceClient.PreprocessResult result = inferenceClient.preprocess(bytes, photo.getStoredFilename());
+            outlineMapper.markReady(photoId, result.items(), result.imageId());
         } catch (Exception e) {
             // 추론 서버 다운·타임아웃·읽기 실패 모두 흡수 → FAILED. 업로드·카드 기본 동작엔 영향 없음.
             log.warn("윤곽선 전처리 실패 photoId={}: {}", photoId, e.getMessage());

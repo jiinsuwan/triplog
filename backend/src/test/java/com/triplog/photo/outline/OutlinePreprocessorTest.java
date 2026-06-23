@@ -56,11 +56,12 @@ class OutlinePreprocessorTest {
         when(outlineMapper.findPendingPhotoIds(1)).thenReturn(List.of(7L));
         when(photoMapper.findById(7L)).thenReturn(photo(7L));
         when(photoStorage.load("stored-7.jpg")).thenReturn(new ByteArrayResource(new byte[]{1, 2, 3}));
-        when(inferenceClient.preprocess(any(), eq("stored-7.jpg"))).thenReturn("[{\"id\":0}]");
+        when(inferenceClient.preprocess(any(), eq("stored-7.jpg")))
+                .thenReturn(new InferenceClient.PreprocessResult("[{\"id\":0}]", "img-7"));
 
         preprocessor().processPending();
 
-        verify(outlineMapper).markReady(7L, "[{\"id\":0}]");
+        verify(outlineMapper).markReady(7L, "[{\"id\":0}]", "img-7");
         verify(outlineMapper, never()).markFailed(anyLong(), any());
     }
 
@@ -74,7 +75,7 @@ class OutlinePreprocessorTest {
         preprocessor().processPending();
 
         verify(outlineMapper).markFailed(eq(7L), any());
-        verify(outlineMapper, never()).markReady(anyLong(), any());
+        verify(outlineMapper, never()).markReady(anyLong(), any(), any());
     }
 
     @Test
