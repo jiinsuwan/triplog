@@ -48,6 +48,12 @@
             <if test="region2 != null">
                 AND region2 = #{region2}
             </if>
+            <if test="placeTypes != null and placeTypes.size > 0">
+                AND place_type IN
+                <foreach collection="placeTypes" item="placeType" open="(" separator="," close=")">
+                    #{placeType}
+                </foreach>
+            </if>
             <if test="category != null">
                 AND category = #{category}
             </if>

@@ -12,12 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class PlaceService {
 
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 100;
+    private static final List<String> DEFAULT_PUBLIC_PLACE_TYPES = List.of("ATTRACTION", "TOURIST_COMPLEX");
 
     private final PlaceMapper placeMapper;
 
@@ -26,7 +28,7 @@ public class PlaceService {
     }
 
     @Transactional(readOnly = true)
-    public PlaceListResponse list(String region1, String region2, String category,
+    public PlaceListResponse list(String region1, String region2, String placeType, String category,
                                   String keyword, Integer page, Integer size) {
         int normalizedPage = normalizePage(page);
         int normalizedSize = normalizeSize(size);
@@ -34,14 +36,16 @@ public class PlaceService {
 
         String normalizedRegion1 = normalizeText(region1);
         String normalizedRegion2 = normalizeText(region2);
+        List<String> normalizedPlaceTypes = normalizePlaceTypes(placeType);
         String normalizedCategory = normalizeText(category);
         String normalizedKeyword = normalizeText(keyword);
 
-        var items = placeMapper.find(normalizedRegion1, normalizedRegion2, normalizedCategory,
+        var items = placeMapper.find(normalizedRegion1, normalizedRegion2, normalizedPlaceTypes, normalizedCategory,
                         normalizedKeyword, normalizedSize, offset).stream()
                 .map(PlaceResponse::from)
                 .toList();
-        long total = placeMapper.count(normalizedRegion1, normalizedRegion2, normalizedCategory, normalizedKeyword);
+        long total = placeMapper.count(normalizedRegion1, normalizedRegion2, normalizedPlaceTypes, normalizedCategory,
+                normalizedKeyword);
         return new PlaceListResponse(items, normalizedPage, total);
     }
 
@@ -74,6 +78,14 @@ public class PlaceService {
             return null;
         }
         return value.trim();
+    }
+
+    private List<String> normalizePlaceTypes(String value) {
+        String normalized = normalizeText(value);
+        if (normalized == null) {
+            return DEFAULT_PUBLIC_PLACE_TYPES;
+        }
+        return List.of(normalized.toUpperCase(Locale.ROOT));
     }
 
     private int normalizePage(Integer page) {

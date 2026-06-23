@@ -10,6 +10,7 @@ public interface PlaceMapper {
 
     List<Place> find(@Param("region1") String region1,
                      @Param("region2") String region2,
+                     @Param("placeTypes") List<String> placeTypes,
                      @Param("category") String category,
                      @Param("keyword") String keyword,
                      @Param("limit") int limit,
@@ -17,6 +18,7 @@ public interface PlaceMapper {
 
     long count(@Param("region1") String region1,
                @Param("region2") String region2,
+               @Param("placeTypes") List<String> placeTypes,
                @Param("category") String category,
                @Param("keyword") String keyword);
 

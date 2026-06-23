@@ -25,12 +25,13 @@ describe('placeApi', () => {
       },
     })
 
-    const result = await fetchPlaces({ keyword: '전주', category: '', size: 20 })
+    const result = await fetchPlaces({ keyword: '전주', placeType: 'LODGING', category: '', size: 20 })
 
     expect(result.items).toHaveLength(1)
     expect(instance.get).toHaveBeenCalledWith('/places', {
       params: {
         keyword: '전주',
+        placeType: 'LODGING',
         page: 0,
         size: 20,
       },
