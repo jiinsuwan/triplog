@@ -1,6 +1,8 @@
 package com.triplog.photo.service;
 
 import com.triplog.trip.service.TripService;
+import com.triplog.user.dto.WithdrawUserRequest;
+import com.triplog.user.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -37,6 +40,7 @@ class PhotoTransactionSyncTest {
 
     private static final long UPLOAD_USER_ID = 3001L;
     private static final long CASCADE_USER_ID = 4001L;
+    private static final long WITHDRAW_USER_ID = 5001L;
 
     private static final Path UPLOAD_DIR = createTempDir();
 
@@ -50,9 +54,13 @@ class PhotoTransactionSyncTest {
     @Autowired
     private TripService tripService;
     @Autowired
+    private UserService userService;
+    @Autowired
     private PlatformTransactionManager transactionManager;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     private TransactionTemplate tx;
 
@@ -61,14 +69,17 @@ class PhotoTransactionSyncTest {
         tx = new TransactionTemplate(transactionManager);
         insertUser(UPLOAD_USER_ID, "rollback@example.com");
         insertUser(CASCADE_USER_ID, "cascade@example.com");
+        insertUser(WITHDRAW_USER_ID, "withdraw-rollback@example.com");
         clearUploadDir();
     }
 
     @AfterEach
     void tearDown() throws IOException {
         // 실커밋이라 자동 롤백되지 않으므로 직접 정리(users 삭제 → trips/photos CASCADE).
-        jdbcTemplate.update("DELETE FROM photos WHERE user_id IN (?, ?)", UPLOAD_USER_ID, CASCADE_USER_ID);
-        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?)", UPLOAD_USER_ID, CASCADE_USER_ID);
+        jdbcTemplate.update("DELETE FROM photos WHERE user_id IN (?, ?, ?)",
+                UPLOAD_USER_ID, CASCADE_USER_ID, WITHDRAW_USER_ID);
+        jdbcTemplate.update("DELETE FROM users WHERE id IN (?, ?, ?)",
+                UPLOAD_USER_ID, CASCADE_USER_ID, WITHDRAW_USER_ID);
         clearUploadDir();
     }
 
@@ -137,6 +148,25 @@ class PhotoTransactionSyncTest {
         assertThat(countTripPhotos(tripId)).isEqualTo(1);
     }
 
+    @Test
+    void rolled_back_user_withdrawal_preserves_linked_and_unlinked_photo_files_and_rows() throws IOException {
+        long tripId = insertTrip(WITHDRAW_USER_ID);
+        Path linkedFile = createStoredFile();
+        Path unlinkedFile = createStoredFile();
+        insertPhoto(WITHDRAW_USER_ID, tripId, linkedFile.getFileName().toString());
+        insertPhoto(WITHDRAW_USER_ID, null, unlinkedFile.getFileName().toString());
+
+        tx.executeWithoutResult(status -> {
+            userService.withdraw(WITHDRAW_USER_ID, new WithdrawUserRequest("password"));
+            status.setRollbackOnly();
+        });
+
+        assertThat(countUserPhotos(WITHDRAW_USER_ID)).isEqualTo(2);
+        assertThat(countUsers(WITHDRAW_USER_ID)).isEqualTo(1);
+        assertThat(Files.exists(linkedFile)).isTrue();
+        assertThat(Files.exists(unlinkedFile)).isTrue();
+    }
+
     // ---- helpers ----
 
     private void insertUser(long id, String email) {
@@ -144,7 +174,7 @@ class PhotoTransactionSyncTest {
                         INSERT INTO users (id, email, password, nickname)
                         VALUES (?, ?, ?, ?)
                         """,
-                id, email, "{noop}password", "tester");
+                id, email, passwordEncoder.encode("password"), "tester");
     }
 
     private long insertTrip(long userId) {
@@ -157,7 +187,7 @@ class PhotoTransactionSyncTest {
                 "SELECT id FROM trips WHERE user_id = ? ORDER BY id DESC LIMIT 1", Long.class, userId);
     }
 
-    private void insertPhoto(long userId, long tripId, String storedName) {
+    private void insertPhoto(long userId, Long tripId, String storedName) {
         jdbcTemplate.update("""
                         INSERT INTO photos (user_id, original_filename, stored_filename, content_type, size_bytes, trip_id)
                         VALUES (?, 'o.jpg', ?, 'image/jpeg', 1, ?)
@@ -175,6 +205,18 @@ class PhotoTransactionSyncTest {
     private int countTripPhotos(long tripId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM photos WHERE trip_id = ?", Integer.class, tripId);
+        return count == null ? 0 : count;
+    }
+
+    private int countUserPhotos(long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM photos WHERE user_id = ?", Integer.class, userId);
+        return count == null ? 0 : count;
+    }
+
+    private int countUsers(long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE id = ?", Integer.class, userId);
         return count == null ? 0 : count;
     }
 

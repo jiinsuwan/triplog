@@ -11,6 +11,10 @@ public interface UserMapper {
 
     User findById(Long id);
 
+    User findByIdForUpdate(Long id);
+
+    int existsById(Long id);
+
     int insert(User user);
 
     int updateProfile(@Param("id") Long id,
@@ -18,4 +22,6 @@ public interface UserMapper {
                       @Param("profileImg") String profileImg);
 
     int updatePassword(@Param("id") Long id, @Param("password") String password);
+
+    int deleteById(Long id);
 }

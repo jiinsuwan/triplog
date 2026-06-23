@@ -18,6 +18,7 @@ const error = ref('')
 const loading = ref(false)
 const justRegistered = route.query.registered === '1'
 const justReset = route.query.reset === '1'
+const justWithdrawn = route.query.withdrawn === '1'
 
 async function onSubmit() {
   error.value = ''
@@ -43,6 +44,9 @@ async function onSubmit() {
     </Message>
     <Message v-if="justReset" severity="success" :closable="false">
       비밀번호가 재설정되었습니다. 새 비밀번호로 로그인해 주세요.
+    </Message>
+    <Message v-if="justWithdrawn" severity="success" :closable="false">
+      회원 탈퇴가 완료되었습니다.
     </Message>
     <form @submit.prevent="onSubmit">
       <label>

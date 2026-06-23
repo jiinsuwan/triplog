@@ -15,5 +15,7 @@ public interface PhotoMapper {
 
     List<String> findStoredFilenamesByTrip(Long tripId);
 
+    List<String> findStoredFilenamesByUser(Long userId);
+
     int updateTripId(@Param("id") Long id, @Param("tripId") Long tripId);
 }

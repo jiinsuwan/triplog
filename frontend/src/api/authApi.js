@@ -27,6 +27,11 @@ export function logout(refreshToken) {
   return instance.post('/auth/logout', { refreshToken }).then((res) => res.data)
 }
 
+// DELETE /users/me (보호) → 비밀번호 확인 후 회원 탈퇴
+export function withdraw(password) {
+  return instance.delete('/users/me', { data: { password } }).then((res) => res.data)
+}
+
 // GET /users/me (보호) → UserProfileResponse { id, email, nickname, profileImg, createdAt }
 export function getMe() {
   return instance.get('/users/me').then((res) => res.data.data)

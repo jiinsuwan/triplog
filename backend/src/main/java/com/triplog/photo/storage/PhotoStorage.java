@@ -49,7 +49,11 @@ public class PhotoStorage {
     /** 저장 도중 실패 시 이미 쓴 파일을 정리한다(고아 파일 방지, best-effort). */
     public void delete(String storedName) {
         try {
-            Files.deleteIfExists(root.resolve(storedName).normalize());
+            Path target = root.resolve(storedName).normalize();
+            if (!target.startsWith(root)) {
+                return;
+            }
+            Files.deleteIfExists(target);
         } catch (IOException ignored) {
             // best-effort: 정리 실패는 업로드 자체를 막지 않는다.
         }

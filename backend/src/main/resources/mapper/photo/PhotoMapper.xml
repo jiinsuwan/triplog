@@ -44,6 +44,10 @@
         SELECT stored_filename FROM photos WHERE trip_id = #{tripId}
     </select>
 
+    <select id="findStoredFilenamesByUser" resultType="string">
+        SELECT stored_filename FROM photos WHERE user_id = #{userId}
+    </select>
+
     <update id="updateTripId">
         UPDATE photos SET trip_id = #{tripId} WHERE id = #{id}
     </update>

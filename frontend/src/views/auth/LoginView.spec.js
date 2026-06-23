@@ -83,4 +83,11 @@ describe('LoginView', () => {
       expect(routerMock.push).toHaveBeenCalledWith('/profile')
     })
   })
+
+  it('회원 탈퇴 완료 query가 있으면 안내 메시지를 보여준다', () => {
+    routerMock.routeQuery = { withdrawn: '1' }
+    const wrapper = mountLoginView()
+
+    expect(wrapper.text()).toContain('회원 탈퇴가 완료되었습니다.')
+  })
 })
