@@ -24,10 +24,10 @@ defineEmits(['action'])
 </script>
 
 <template>
-  <section class="empty-state">
-    <div class="ic" aria-hidden="true">{{ icon }}</div>
-    <div class="et">{{ title }}</div>
-    <div v-if="description" class="ed">{{ description }}</div>
+  <section class="ds-empty-state">
+    <div class="ds-empty-state__icon" aria-hidden="true">{{ icon }}</div>
+    <div class="ds-empty-state__title">{{ title }}</div>
+    <div v-if="description" class="ds-empty-state__description">{{ description }}</div>
     <BaseButton v-if="actionLabel" variant="primary" @click="$emit('action')">
       {{ actionLabel }}
     </BaseButton>

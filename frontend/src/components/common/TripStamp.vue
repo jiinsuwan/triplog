@@ -25,40 +25,44 @@ const props = defineProps({
   },
   label: {
     type: String,
-    default: 'TRIP',
+    default: '✈',
+  },
+  sideGlyph: {
+    type: String,
+    default: '★',
   },
 })
 
-const stageClass = computed(() => `stage-${props.stage}`)
+const stageClass = computed(() => `ds-stamp-stage-${props.stage}`)
 const showDetails = computed(() => props.stage >= 2)
 const showComplete = computed(() => props.complete || props.stage === 3)
 </script>
 
 <template>
   <span :class="stageClass">
-    <svg class="stamp-svg" viewBox="0 0 200 200" role="img" :aria-label="`${title} 여행 스탬프`">
-      <circle v-if="showComplete" class="bg" cx="100" cy="100" r="88" />
-      <circle class="ring" cx="100" cy="100" r="88" stroke-width="2.5" />
+    <svg class="ds-stamp" viewBox="0 0 200 200" role="img" :aria-label="`${title} 여행 스탬프`">
+      <circle v-if="showComplete" class="ds-stamp__bg" cx="100" cy="100" r="88" />
+      <circle class="ds-stamp__ring" cx="100" cy="100" r="88" stroke-width="2.5" />
       <circle
         v-if="showDetails"
-        class="ring"
+        class="ds-stamp__ring"
         cx="100"
         cy="100"
         r="77"
         stroke-width="1.2"
         stroke-dasharray="1.5 4"
       />
-      <text class="glyph" x="100" y="54" text-anchor="middle" font-size="19" font-weight="800">
+      <text class="ds-stamp__glyph" x="100" y="54" text-anchor="middle" font-size="30">
         {{ label }}
       </text>
-      <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800">
+      <text x="100" y="92" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2">
         {{ title }}
       </text>
-      <text v-if="showDetails" class="glyph" x="42" y="87" text-anchor="middle" font-size="14">
-        IN
+      <text v-if="showDetails" class="ds-stamp__glyph" x="42" y="87" text-anchor="middle" font-size="14">
+        {{ sideGlyph }}
       </text>
-      <text v-if="showDetails" class="glyph" x="158" y="87" text-anchor="middle" font-size="14">
-        OUT
+      <text v-if="showDetails" class="ds-stamp__glyph" x="158" y="87" text-anchor="middle" font-size="14">
+        {{ sideGlyph }}
       </text>
       <text x="100" y="121" text-anchor="middle" font-size="11.5" letter-spacing="0.5">
         {{ startDate }}
@@ -68,9 +72,9 @@ const showComplete = computed(() => props.complete || props.stage === 3)
         {{ endDate }}
       </text>
       <g v-if="showComplete" transform="rotate(-12 100 100)">
-        <rect class="complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2" />
+        <rect class="ds-stamp__complete-box" x="42" y="158" width="116" height="23" rx="4" stroke-width="2" />
         <text
-          class="complete"
+          class="ds-stamp__complete"
           x="100"
           y="173"
           text-anchor="middle"

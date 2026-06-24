@@ -75,28 +75,30 @@ const stampTitle = computed(() => props.stampTitle || props.region || 'TRIP')
 </script>
 
 <template>
-  <article class="ticket" :class="{ torn }" :style="ticketStyle">
-    <div class="stub-l"><span class="serial">{{ serial }}</span></div>
-    <div class="perf-l"></div>
-    <div class="body">
-      <div class="label">{{ status || 'TRIP TICKET' }}</div>
-      <div class="ttl">{{ title }}</div>
-      <div class="meta">
+  <article class="ds-ticket" :class="{ 'ds-ticket--torn': torn }" :style="ticketStyle">
+    <div class="ds-ticket__stub-left"><span class="ds-ticket__serial">{{ serial }}</span></div>
+    <div class="ds-ticket__perf-left"></div>
+    <div class="ds-ticket__body">
+      <div class="ds-ticket__label">{{ status || 'TRIP TICKET' }}</div>
+      <div class="ds-ticket__title">{{ title }}</div>
+      <div class="ds-ticket__meta">
         <span>{{ region || '지역 미정' }}</span>
-        <span class="dot">·</span>
+        <span class="ds-ticket__dot">·</span>
         <span>{{ dates }}</span>
       </div>
-      <div v-if="tagText" class="tags">{{ tagText }}</div>
-      <div v-if="torn" class="stamp-slot">
+      <div v-if="tagText" class="ds-ticket__tags">{{ tagText }}</div>
+      <div v-if="torn" class="ds-ticket__stamp-slot">
         <TripStamp :stage="stampStage" :title="stampTitle" complete />
       </div>
     </div>
-    <div class="perf-r"></div>
-    <div v-if="!torn" class="stub-r">
-      <div class="barcode" aria-hidden="true"></div>
-      <div class="dday">
-        <div class="k">{{ ddayLabel }}</div>
-        <div class="v" :class="{ muted: isDdayMuted }">{{ ddayText }}</div>
+    <div class="ds-ticket__perf-right"></div>
+    <div v-if="!torn" class="ds-ticket__stub-right">
+      <div class="ds-ticket__barcode" aria-hidden="true"></div>
+      <div class="ds-ticket__dday">
+        <div class="ds-ticket__dday-label">{{ ddayLabel }}</div>
+        <div class="ds-ticket__dday-value" :class="{ 'is-muted': isDdayMuted }">
+          {{ ddayText }}
+        </div>
       </div>
     </div>
   </article>

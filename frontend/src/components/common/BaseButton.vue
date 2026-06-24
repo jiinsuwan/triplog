@@ -25,13 +25,13 @@ defineEmits(['click'])
 
 <template>
   <button
-    class="btn"
+    class="ds-btn"
     :class="{
-      pri: variant === 'primary',
-      ghost: variant === 'ghost',
-      danger: variant === 'danger',
-      sm: size === 'small',
-      block,
+      'ds-btn--primary': variant === 'primary',
+      'ds-btn--ghost': variant === 'ghost',
+      'ds-btn--danger': variant === 'danger',
+      'ds-btn--small': size === 'small',
+      'ds-btn--block': block,
     }"
     :type="type"
     @click="$emit('click', $event)"

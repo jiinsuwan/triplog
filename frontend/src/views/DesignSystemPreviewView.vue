@@ -35,7 +35,7 @@ const tokens = [
 
     <main class="ds-catalog">
       <header class="ds-catalog__hero">
-        <p class="tag-hand">Sprint 4 design foundation</p>
+        <p class="ds-tag-hand">Sprint 4 design foundation</p>
         <h1>TripLog 디자인 시스템 프리뷰</h1>
         <p>
           docs/design의 HTML 정본을 Vue 공통 컴포넌트로 옮긴 첫 토대입니다. 여기서 모양을
@@ -43,8 +43,8 @@ const tokens = [
         </p>
       </header>
 
-      <section class="panel">
-        <div class="ph">Tokens</div>
+      <section class="ds-panel">
+        <div class="ds-panel__header">Tokens</div>
         <div class="token-grid">
           <div v-for="[name, color] in tokens" :key="name" class="token-chip">
             <span :style="{ background: color }"></span>
@@ -54,8 +54,8 @@ const tokens = [
         </div>
       </section>
 
-      <section class="panel">
-        <div class="ph">Buttons</div>
+      <section class="ds-panel">
+        <div class="ds-panel__header">Buttons</div>
         <div class="preview-row">
           <BaseButton variant="primary">주 액션</BaseButton>
           <BaseButton>보조</BaseButton>
@@ -65,8 +65,8 @@ const tokens = [
         </div>
       </section>
 
-      <section class="panel ticket-panel">
-        <div class="ph">Trip Tickets</div>
+      <section class="ds-panel ticket-panel">
+        <div class="ds-panel__header">Trip Tickets</div>
         <div class="ticket-stack">
           <TripTicket
             title="전주, 다시 한 번"
@@ -101,8 +101,8 @@ const tokens = [
         </div>
       </section>
 
-      <section class="panel">
-        <div class="ph">Stamps</div>
+      <section class="ds-panel">
+        <div class="ds-panel__header">Stamps</div>
         <div class="stamp-row">
           <div>
             <TripStamp title="제주" :stage="1" />
@@ -119,8 +119,8 @@ const tokens = [
         </div>
       </section>
 
-      <section class="panel">
-        <div class="ph">Polaroids</div>
+      <section class="ds-panel">
+        <div class="ds-panel__header">Polaroids</div>
         <div class="preview-row">
           <TripPolaroid
             title="교토 단풍 기록"
@@ -138,37 +138,48 @@ const tokens = [
         </div>
       </section>
 
-      <section class="panel">
-        <div class="ph">Forms / Feedback</div>
+      <section class="ds-panel">
+        <div class="ds-panel__header">Forms / Feedback</div>
         <div class="feedback-grid">
-          <form class="form-narrow" @submit.prevent>
-            <div class="field">
+          <form class="ds-form-narrow" @submit.prevent>
+            <div class="ds-field">
               <label for="preview-email">이메일</label>
-              <input id="preview-email" class="input" placeholder="you@triplog.kr" />
+              <input id="preview-email" class="ds-input" placeholder="you@triplog.kr" />
             </div>
-            <div class="field">
+            <div class="ds-field">
               <label for="preview-password">비밀번호</label>
-              <input id="preview-password" class="input" type="password" placeholder="8자 이상" />
+              <input
+                id="preview-password"
+                class="ds-input"
+                type="password"
+                placeholder="8자 이상"
+              />
             </div>
             <BaseButton variant="primary" block>확인</BaseButton>
           </form>
 
           <div class="feedback-stack">
-            <div class="toast success">저장되었습니다.</div>
-            <div class="toast error">다시 시도해 주세요.</div>
+            <div class="ds-toast ds-toast--success">
+              <span class="ds-toast__icon" aria-hidden="true">✓</span>
+              저장되었습니다.
+            </div>
+            <div class="ds-toast ds-toast--error">
+              <span class="ds-toast__icon" aria-hidden="true">✕</span>
+              다시 시도해 주세요.
+            </div>
             <div class="loading-sample">
-              <div class="spinner"></div>
+              <div class="ds-spinner"></div>
               <div>
-                <div class="skeleton skeleton-title"></div>
-                <div class="skeleton skeleton-line"></div>
+                <div class="ds-skeleton skeleton-title"></div>
+                <div class="ds-skeleton skeleton-line"></div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="panel">
-        <div class="ph">Empty State / Modal</div>
+      <section class="ds-panel">
+        <div class="ds-panel__header">Empty State / Modal</div>
         <EmptyState
           title="아직 여행이 없어요"
           description="첫 여행 티켓을 만들고 계획을 시작해 보세요."
@@ -217,7 +228,7 @@ const tokens = [
   margin-top: 4px;
 }
 
-.ds-catalog__hero p:not(.tag-hand) {
+.ds-catalog__hero p:not(.ds-tag-hand) {
   color: var(--ink-sub);
   font-size: 14px;
   max-width: 680px;

@@ -50,24 +50,36 @@ const tagText = computed(() => props.tags.map((tag) => (tag.startsWith('#') ? ta
 </script>
 
 <template>
-  <article class="polaroid" :class="{ empty }">
-    <div class="photo" :style="photoStyle">
-      <span v-if="empty">{{ placeholder }}</span>
+  <article class="ds-polaroid" :class="{ 'ds-polaroid--empty': empty }">
+    <div class="ds-polaroid__photo" :style="photoStyle">
+      <span v-if="empty" class="ds-polaroid__placeholder">
+        <span class="ds-polaroid__placeholder-mark" aria-hidden="true">＋</span>
+        {{ placeholder }}
+      </span>
     </div>
-    <div class="cap">
-      <div class="name">{{ title }}</div>
-      <div v-if="subtitle" class="meta">{{ subtitle }}</div>
-      <div v-if="tagText" class="tags">{{ tagText }}</div>
-      <span v-if="completed" class="done-stamp">COMPLETE</span>
+    <div class="ds-polaroid__caption">
+      <div class="ds-polaroid__name">{{ title }}</div>
+      <div v-if="subtitle" class="ds-polaroid__meta">{{ subtitle }}</div>
+      <div v-if="tagText" class="ds-polaroid__tags">{{ tagText }}</div>
+      <span v-if="completed" class="ds-polaroid__done-stamp">COMPLETE</span>
     </div>
   </article>
 </template>
 
 <style scoped>
-.photo span {
+.ds-polaroid__placeholder {
+  align-items: center;
   color: var(--ink-faint);
+  display: grid;
   font-size: 12px;
+  font-weight: 700;
+  gap: 2px;
   line-height: 1.4;
   text-align: center;
+}
+
+.ds-polaroid__placeholder-mark {
+  font-size: 18px;
+  line-height: 1;
 }
 </style>
