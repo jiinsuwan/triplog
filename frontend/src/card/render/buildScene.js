@@ -126,6 +126,7 @@ export function buildScene({ items = [], captions = {}, canvas, photo, style = {
       anchor: [anx * W, any * H], // 캔버스 픽셀
       center: [cnx * W, cny * H],
       r: rPx,
+      rotation: Number.isFinite(obj.rotation) ? obj.rotation : 0, // 문구 기울기(°). 외곽선은 회전 안 함.
       lines,
       outlines,
     });
@@ -134,7 +135,9 @@ export function buildScene({ items = [], captions = {}, canvas, photo, style = {
   // 마무리 한 줄 — 별도 레이어(좌표·폰트는 renderCore 가 하단에 고정 배치)
   const closingText = captions.closing && typeof captions.closing.text === 'string' ? captions.closing.text.trim() : '';
   if (closingText) {
-    layers.push({ kind: 'closing', itemId: 'closing', visible: true, text: closingText });
+    const cpos = captions.closing && captions.closing.position ? captions.closing.position : null;
+    const crot = captions.closing && Number.isFinite(captions.closing.rotation) ? captions.closing.rotation : 0;
+    layers.push({ kind: 'closing', itemId: 'closing', visible: true, text: closingText, position: cpos, rotation: crot });
   }
 
   return { canvas: { W, H }, tone, layers };

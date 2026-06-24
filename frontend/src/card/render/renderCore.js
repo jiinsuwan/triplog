@@ -39,7 +39,8 @@ export function renderCard(ctx, scene, assets = {}, opts = {}) {
   const noteFont = opts.noteFont || 'Ownglyph ooa';
   const closingFont = opts.closingFont || 'Ownglyph ooa';
   const skipLuminance = !!opts.skipLuminance; // 드래그 중 getImageData 생략(성능)
-  const noteSize = Math.round(W * NOTE_SIZE_RATIO);
+  const scale = opts.scale || 1; // 사진별 전역 글씨 크기 배율
+  const noteSize = Math.round(W * NOTE_SIZE_RATIO * scale);
   const margin = Math.round(W * MARGIN_RATIO);
 
   ctx.clearRect(0, 0, W, H); // 매 렌더 초기화(재호출 시 합성 잔여 방지 — 비파괴 보장)
@@ -48,7 +49,7 @@ export function renderCard(ctx, scene, assets = {}, opts = {}) {
   for (const layer of scene.layers) {
     if (layer.visible === false) continue;
     if (layer.kind === 'note') drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font: noteFont, skipLuminance });
-    else if (layer.kind === 'closing') drawClosingLayer(ctx, layer, { W, H, font: closingFont });
+    else if (layer.kind === 'closing') drawClosingLayer(ctx, layer, { W, H, font: closingFont, scale });
   }
 }
 
@@ -106,8 +107,8 @@ function drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font, skipLuminance
   const boxW = Math.max(...lines.map((l) => ctx.measureText(l).width));
   const boxH = lines.length * lh;
 
-  // 배치점(anchor)을 박스 중심으로 두고, 캔버스 안으로 클램프. 하단은 마무리 한 줄 자리 확보.
-  const yMax = H - margin - Math.round(W * CLOSING_SIZE_RATIO) * 2.4;
+  // 배치점(anchor)을 박스 중심으로 두고, 캔버스 안으로 클램프. 마무리도 이동 가능한 요소라 하단 예약은 두지 않는다.
+  const yMax = H - margin;
   const [ax, ay] = layer.anchor;
   let x0 = ax - boxW / 2;
   let y0 = ay - boxH / 2;
@@ -141,15 +142,12 @@ function drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font, skipLuminance
     drawSketchOutline(ctx, { pts: o.pts, alpha: 0.9, width: 2.2, smooth: 1, offset: W * 0.012, dash: o.dash ? [10, 9] : null });
   }
 
-  // 화살표 — 노트 박스의 객체쪽 변 → 객체 가장자리.
-  const toObj = unit([ox - bcx, oy - bcy]);
-  const halfSpanA = 0.5 * (Math.abs(toObj[0]) * boxW + Math.abs(toObj[1]) * boxH);
-  const from = [bcx + toObj[0] * (halfSpanA + 6), bcy + toObj[1] * (halfSpanA + 6)];
-  const r = layer.r || 0;
-  const to = [ox - toObj[0] * r * 0.92, oy - toObj[1] * r * 0.92];
-  if (Math.hypot(to[0] - from[0], to[1] - from[1]) > 24) {
-    drawCurvedArrow(ctx, { from, to, width: 2, dash: [2, 7], head: 12, alpha: 0.9 });
-  }
+  // (객체↔문구 자동 화살표 제거 — 사용자 피드백. 문구는 드래그로 직접 배치한다.)
+
+  // 문구(+장식)는 텍스트처럼 기울일 수 있다(박스 중심 기준 회전). 외곽선·음영은 객체를 따르므로 회전 제외.
+  //   rot=0(기본)이면 변환을 전혀 걸지 않아 기존 렌더와 동일하다.
+  const rot = ((layer.rotation || 0) * Math.PI) / 180;
+  if (rot) { ctx.save(); ctx.translate(bcx, bcy); ctx.rotate(rot); ctx.translate(-bcx, -bcy); }
 
   drawNote(ctx, { lines, x: nx, y: ny, size: noteSize, align, font });
 
@@ -159,15 +157,24 @@ function drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font, skipLuminance
     const dx = align === 'right' ? x0 + boxW + noteSize * 0.5 : x0 + lastW + noteSize * 0.5;
     drawDoodle(ctx, { type: layer.deco, x: Math.min(W - margin, dx), y: y0 + boxH - noteSize * 0.3, s: noteSize * 0.34, alpha: 0.9 });
   }
+
+  if (rot) ctx.restore();
 }
 
 // ---------- 마무리 한 줄 — 하단 중앙(가독 음영 포함) ----------
-function drawClosingLayer(ctx, layer, { W, H, font }) {
-  const cs = Math.round(W * CLOSING_SIZE_RATIO);
+function drawClosingLayer(ctx, layer, { W, H, font, scale = 1 }) {
+  const cs = Math.round(W * CLOSING_SIZE_RATIO * scale);
   ctx.font = `${cs}px "${font}"`;
   const cw = ctx.measureText(layer.text).width;
-  drawLocalDarken(ctx, { x: W / 2 - cw / 2 - cs * 0.7, y: H - cs * 2.3, w: cw + cs * 1.4, h: cs * 1.7, strength: 0.22 });
-  drawClosing(ctx, { text: layer.text, cx: W / 2, y: H - cs * 1.5, size: cs, font });
+  // 위치 override(사용자 드래그, 콘텐츠 0~1) 우선, 없으면 하단 중앙 기본.
+  const px = layer.position && Number.isFinite(layer.position.x) ? layer.position.x * W : W / 2;
+  const py = layer.position && Number.isFinite(layer.position.y) ? layer.position.y * H : H - cs * 1.5;
+  const rot = ((layer.rotation || 0) * Math.PI) / 180; // 마무리도 텍스트처럼 기울일 수 있다(앵커 기준 회전).
+  ctx.save();
+  if (rot) { ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py); }
+  drawLocalDarken(ctx, { x: px - cw / 2 - cs * 0.7, y: py - cs * 0.8, w: cw + cs * 1.4, h: cs * 1.7, strength: 0.22 });
+  drawClosing(ctx, { text: layer.text, cx: px, y: py, size: cs, font });
+  ctx.restore();
 }
 
 // ---------- 국소 평균 밝기(0..1) — 캔버스에 이미 그려진 사진을 직접 샘플 ----------

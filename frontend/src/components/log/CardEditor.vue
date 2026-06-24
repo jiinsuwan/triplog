@@ -56,22 +56,11 @@ const outlineWidth = ref(1)
 const outlineStyle = ref('solid') // 'solid' | 'dashed'
 const dashLen = ref(12) // 점선 길이·간격(× W*0.001)
 const dashGap = ref(9)
-function bumpWidth(d) {
-  const v = Math.round((outlineWidth.value + d) * 10) / 10
-  outlineWidth.value = Math.min(8, Math.max(0.3, v))
-}
 const selectedItemId = ref(null)
+const selectedKind = ref(null) // 객체 선택 시 종류: 'outline' | 'caption' (외곽선·문구 독립 선택)
 // 선택 상태(객체/텍스트/선)는 loadCurrent 가 사진 전환 때 초기화하므로 먼저 선언한다(TDZ 방지).
 const selectedTextId = ref(null)
 const selectedLineId = ref(null)
-// 레이어 다중 선택(체크박스) — 전체/일부 선택 후 일괄 숨기기/보이기. 사진 전환 때 초기화(loadCurrent).
-const bulkSelected = ref(new Set())
-function toggleBulk(key) {
-  const s = new Set(bulkSelected.value)
-  s.has(key) ? s.delete(key) : s.add(key)
-  bulkSelected.value = s
-}
-
 // 9:16 고정 포맷의 여백 채움(사진을 자르지 않고 contain 후 남는 공간을 채운다).
 const padFill = ref('blur') // 'blur' | 'solid'
 const padColor = ref('#fdf8ee')
@@ -159,6 +148,52 @@ const getCaptionPos = (id) => captionPos[keyOf(id)] ?? null
 function setCaptionPos(id, x, y) {
   captionPos[keyOf(id)] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
 }
+// 문구 기울기(°) override — 사진별. 텍스트의 rotation 과 동일 개념(외곽선만 회전 제외). 없으면 0.
+const captionRot = reactive({})
+const getCaptionRot = (id) => captionRot[keyOf(id)] ?? 0
+function setCaptionRot(id, deg) {
+  captionRot[keyOf(id)] = Math.max(-180, Math.min(180, Math.round(deg)))
+}
+// 문구 객체에 사용자 override(위치·기울기)를 입혀 buildScene 입력으로 만든다. 미리보기·export 공용.
+//   position 은 콘텐츠 캔버스 정규화(0~1), rotation 은 도(°). 둘 다 없으면 원본 그대로(자동 배치).
+function applyCaptionOverrides(o, cr, cd) {
+  const p = getCaptionPos(o.itemId)
+  const rot = getCaptionRot(o.itemId)
+  let out = o
+  if (p) out = { ...out, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } }
+  if (rot) out = { ...out, rotation: rot }
+  return out
+}
+// 외곽선 선 모양 — 객체별 개별 적용(키 photoId:itemId). override 없으면 전역 기본(outlineWidth/Style/dash)을 따른다.
+const outlineOverride = reactive({})
+const applyOutlineAll = ref(false) // 켜면 한 외곽선 수정이 이 사진 모든 외곽선에 함께 적용된다.
+function outlineStyleOf(id) {
+  return (
+    outlineOverride[keyOf(id)] ?? {
+      width: outlineWidth.value,
+      style: outlineStyle.value,
+      dashLen: dashLen.value,
+      dashGap: dashGap.value,
+    }
+  )
+}
+function setOutlineStyle(id, patch) {
+  const next = { ...outlineStyleOf(id), ...patch }
+  if (applyOutlineAll.value) {
+    // 전체 적용: 기본값까지 갱신해 새로 보정된 객체도 같은 모양을 따르게 한다.
+    outlineWidth.value = next.width
+    outlineStyle.value = next.style
+    dashLen.value = next.dashLen
+    dashGap.value = next.dashGap
+    for (const it of items.value) outlineOverride[keyOf(it.id)] = { ...next }
+  } else {
+    outlineOverride[keyOf(id)] = next
+  }
+}
+function setOutlineAll(on) {
+  applyOutlineAll.value = on
+  if (on && selectedItemId.value != null) setOutlineStyle(selectedItemId.value, {}) // 선택 외곽선 모양을 전체로 전파
+}
 // 마무리(closing) 표시/숨김 — 사진별.
 const hiddenClosing = ref(new Set())
 const isClosingOn = computed(() => !hiddenClosing.value.has(currentId.value))
@@ -166,6 +201,37 @@ function toggleClosing() {
   const s = new Set(hiddenClosing.value)
   s.has(currentId.value) ? s.delete(currentId.value) : s.add(currentId.value)
   hiddenClosing.value = s
+}
+// 마무리 위치 override — 사진별(캔버스 0~1). 캡션과 동일하게 드래그로 이동. 없으면 하단 중앙 기본.
+const closingPos = reactive({})
+const getClosingPos = () => closingPos[currentId.value] ?? null
+function setClosingPos(x, y) {
+  closingPos[currentId.value] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
+}
+// 마무리 기울기(°) override — 사진별. 텍스트·문구와 동일 개념.
+const closingRot = reactive({})
+const getClosingRot = () => closingRot[currentId.value] ?? 0
+function setClosingRot(deg) {
+  closingRot[currentId.value] = Math.max(-180, Math.min(180, Math.round(deg)))
+}
+// 마무리에 위치·기울기 override(콘텐츠 정규화)를 입혀 buildScene 입력으로 만든다. 미리보기·export 공용.
+function closingForScene(cr, cd) {
+  if (!isClosingOn.value || !closing.value) return null
+  const p = getClosingPos()
+  const rot = getClosingRot()
+  let out = closing.value
+  if (p) out = { ...out, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } }
+  if (rot) out = { ...out, rotation: rot }
+  return out
+}
+// 마무리 멘트 내용 수정 — 사용자가 직접 바꿀 수 있다(store.captions.closing.text 갱신).
+function updateClosingText(text) {
+  const existing = card.captions[currentId.value]
+  if (!existing?.response) return
+  card.setCaption(currentId.value, {
+    ...existing,
+    response: { ...existing.response, closing: { ...(existing.response.closing || {}), text } },
+  })
 }
 // (통합 레이어 목록 layerRows 는 texts/lines 선언 뒤에 정의 — 아래.)
 
@@ -222,7 +288,6 @@ async function loadCurrent() {
   selectedItemId.value = null
   selectedTextId.value = null
   selectedLineId.value = null
-  bulkSelected.value = new Set()
   try {
     const img = await decode(await load(id))
     if (!disposed && seq === reqSeq) photoImg.value = img
@@ -238,13 +303,10 @@ const scene = computed(() => {
   const cd = canvasDims.value
   const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? [])
     .filter((o) => isCaptionOn(o.itemId))
-    .map((o) => {
-      const p = getCaptionPos(o.itemId)
-      return p ? { ...o, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } } : o
-    })
+    .map((o) => applyCaptionOverrides(o, cr, cd))
   return buildScene({
     items: items.value,
-    captions: { objects: visibleObjects, closing: isClosingOn.value ? closing.value : null },
+    captions: { objects: visibleObjects, closing: closingForScene(cr, cd) },
     canvas: { W: contentRect.value.cw, H: contentRect.value.ch },
     photo: { w: img.naturalWidth, h: img.naturalHeight },
     // 외곽선은 에디터 paintOutlines 가 전담(두께·점선·흰색·visibility 조절) — renderCore sketch 외곽선 끔.
@@ -269,16 +331,17 @@ function paintOutlines(ctx, img, frameW, frameH, { forExport = false } = {}) {
   for (const item of items.value) {
     no += 1 // 레이어 목록과 같은 번호(숨겨도 번호 유지)
     if (!isObjectOn(item.id)) continue
-    const sel = !forExport && item.id === selectedItemId.value
+    const sel = !forExport && item.id === selectedItemId.value && selectedKind.value === 'outline'
     // 외곽선은 카드 최종처럼 흰색. (편집 미리보기에서) 선택된 것만 빨강으로 구분.
     const color = sel ? 'rgba(240,68,82,0.95)' : 'rgba(255,255,255,0.96)'
+    const st = outlineStyleOf(item.id) // 객체별 선 모양(없으면 전역 기본)
 
     ctx.save()
-    ctx.lineWidth = base * outlineWidth.value
+    ctx.lineWidth = base * st.width
     ctx.strokeStyle = color
     ctx.shadowColor = 'rgba(0,0,0,0.45)'
     ctx.shadowBlur = base
-    ctx.setLineDash(outlineStyle.value === 'dashed' ? [W * 0.001 * dashLen.value, W * 0.001 * dashGap.value] : [])
+    ctx.setLineDash(st.style === 'dashed' ? [W * 0.001 * st.dashLen, W * 0.001 * st.dashGap] : [])
     for (const loop of Array.isArray(item.polygons) ? item.polygons : []) {
       if (!Array.isArray(loop) || loop.length < 3) continue
       ctx.beginPath()
@@ -371,14 +434,16 @@ function redraw() {
     // fixed: 여백 채움 → 콘텐츠를 별도 캔버스에 그려 가운데 얹는다(export 와 동일).
     drawPadding(ctx, img, fw, fh)
     const content = getContentCanvas(cw, ch)
-    renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img }, { skipLuminance: !!drag })
+    renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img }, { skipLuminance: !!drag, noteFont: fontFamily.value, closingFont: fontFamily.value, scale: fontScale.value })
     ctx.drawImage(content, dx, dy)
   } else {
-    renderCard(ctx, sc, { photo: img }, { skipLuminance: !!drag }) // native: 프레임 전체가 콘텐츠
+    renderCard(ctx, sc, { photo: img }, { skipLuminance: !!drag, noteFont: fontFamily.value, closingFont: fontFamily.value, scale: fontScale.value }) // native: 프레임 전체가 콘텐츠
   }
   paintOutlines(ctx, img, fw, fh)
   drawLines(ctx, { W: fw, H: fh })
   drawTexts(ctx, { W: fw, H: fh })
+  if (selectedCaption.value) drawCaptionBox(ctx, fw, fh)
+  if (selectedKind.value === 'closing') drawClosingBox(ctx, fw, fh)
 }
 
 // 리드로 코얼레스 — 슬라이더 드래그 등 빠른 변경은 프레임당 1회만 그린다(이벤트마다 X).
@@ -396,7 +461,19 @@ onScopeDispose(() => {
 
 // --- 사진별 편집 설정 독립 ---
 // 전역 ref로 두면 사진1의 톤·외곽선·출력형식·여백 설정이 사진2에 새던 버그 → 전환 때 저장/복원한다.
-const PHOTO_SETTING_REFS = { toneDown, format, outlineWidth, outlineStyle, dashLen, dashGap, padFill, padColor }
+// 사진별 손글씨 폰트(그 사진 모든 글씨에 적용 — 전역). 선택지 = public/fonts 의 온글잎 7종.
+const FONTS = [
+  { label: '온글잎 ooa', family: 'Ownglyph ooa' },
+  { label: '배카연체2', family: 'Ownglyph baekayeon2' },
+  { label: '스물아홉슬기체', family: 'Ownglyph seulgi29' },
+  { label: '원슝', family: 'Ownglyph wonsyung' },
+  { label: '윤우체', family: 'Ownglyph yunwoo' },
+  { label: '콘콘체', family: 'Ownglyph konkon' },
+  { label: '하니 손글씨체', family: 'Ownglyph hani' },
+]
+const fontFamily = ref('Ownglyph ooa')
+const fontScale = ref(1) // 사진별 전역 글씨 크기 배율(그 사진 모든 글씨에 적용)
+const PHOTO_SETTING_REFS = { toneDown, format, outlineWidth, outlineStyle, dashLen, dashGap, padFill, padColor, fontFamily, fontScale }
 const settingsByPhoto = reactive({})
 function captureSettings() {
   const o = {}
@@ -418,12 +495,27 @@ watch(
   { immediate: true },
 )
 watch(
-  [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor, zoom, stageSize],
+  [scene, photoImg, fontReady, hiddenObject, outlineOverride, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, selectedKind, format, padFill, padColor, fontScale, zoom, stageSize],
   scheduleRedraw,
   { flush: 'post' },
 )
+// 폰트 선택·사진 전환으로 폰트가 바뀌면 로드 후 재렌더(폴백 메트릭으로 굳지 않게).
+watch(fontFamily, async (f) => {
+  try {
+    await document.fonts.load(`40px "${f}"`)
+    await document.fonts.ready
+  } catch {
+    /* 폴백 폰트 */
+  }
+  if (!disposed) scheduleRedraw()
+})
 
-const selectedCaption = computed(() => captionByItem.value[selectedItemId.value] ?? null)
+const selectedOutline = computed(() =>
+  selectedKind.value === 'outline' ? (items.value.find((it) => it.id === selectedItemId.value) ?? null) : null,
+)
+const selectedCaption = computed(() =>
+  selectedKind.value === 'caption' ? (captionByItem.value[selectedItemId.value] ?? null) : null,
+)
 function updateCaptionText(text) {
   const existing = card.captions[currentId.value]
   if (!existing) return
@@ -449,6 +541,9 @@ function generateCaption() {
 }
 function confirmRegen() {
   regenAsk.value = false
+  // 재생성 = 이 사진 텍스트 전체 리셋. 직접 추가한 텍스트도 함께 비운다(경고에 명시).
+  textsByPhoto[currentId.value] = []
+  selectedTextId.value = null
   card.clearCaption(currentId.value) // 캐시 비워 재생성 허용(전체 새로)
   genCaption(currentId.value)
 }
@@ -465,6 +560,24 @@ const textsByPhoto = reactive({})
 let textSeq = 0
 const texts = computed(() => textsByPhoto[currentId.value] ?? [])
 const selectedText = computed(() => texts.value.find((t) => t.id === selectedTextId.value) ?? null)
+
+// 우패널·좌측 도구 하이라이트를 결정하는 단일 컨텍스트. 선택한 요소의 family 가 우선, 없으면 현재 도구.
+//   외곽선→ai / 문구·텍스트→text / 선→line. activeTool(캔버스 생성·선택 동작)은 건드리지 않는다.
+const selectedClosing = computed(() => (selectedKind.value === 'closing' ? closing.value : null))
+const panelContext = computed(() => {
+  if (selectedOutline.value) return 'ai'
+  if (selectedCaption.value || selectedText.value || selectedClosing.value) return 'text'
+  if (selectedLine.value) return 'line'
+  return activeTool.value === 'select' ? 'ai' : activeTool.value
+})
+// 좌측 도구 클릭 = 컨텍스트 전환. 현재 선택을 풀고 그 도구로 들어간다(선택이 컨텍스트를 가리지 않게).
+function pickTool(key) {
+  activeTool.value = key
+  selectedItemId.value = null
+  selectedKind.value = null
+  selectedTextId.value = null
+  selectedLineId.value = null
+}
 
 function addText(x = 0.5, y = 0.5) {
   const list = textsByPhoto[currentId.value] || (textsByPhoto[currentId.value] = [])
@@ -491,8 +604,9 @@ function toggleText(t) {
   t.hidden = !t.hidden
 }
 // 객체/텍스트 선택은 상호 배타.
-function selectItem(id) {
+function selectItem(id, kind = 'outline') {
   selectedItemId.value = id
+  selectedKind.value = id == null ? null : kind
   if (id != null) {
     selectedTextId.value = null
     selectedLineId.value = null
@@ -506,43 +620,12 @@ function selectText(id) {
   }
 }
 
-// --- 레이어 선택 + 표시/숨김(클립스튜디오식). 삭제는 없다(외곽선은 숨길 뿐). ---
-// 전체/일부 선택(체크박스) 후 일괄 숨기기/보이기. 눈 아이콘은 행별 즉시 토글.
-const layerKeys = computed(() =>
-  layerRows.value.filter((r) => r.kind !== 'closing').map((r) => `${r.kind}:${r.id}`),
-)
-const allSelected = computed(
-  () => layerKeys.value.length > 0 && layerKeys.value.every((k) => bulkSelected.value.has(k)),
-)
-function setAllSelected(on) {
-  bulkSelected.value = on ? new Set(layerKeys.value) : new Set()
-}
-function bulkSetVisible(vis) {
-  for (const key of bulkSelected.value) {
-    const i = key.indexOf(':')
-    const type = key.slice(0, i)
-    const idRaw = key.slice(i + 1)
-    if (type === 'text') {
-      const t = texts.value.find((x) => x.id === idRaw)
-      if (t) t.hidden = !vis
-    } else if (type === 'line') {
-      const l = lines.value.find((x) => x.id === idRaw)
-      if (l) l.hidden = !vis
-    } else if (type === 'outline') setObjectVisible(Number(idRaw), vis)
-    else if (type === 'caption') setCaptionVisible(Number(idRaw), vis)
-  }
-}
-function setCaptionVisible(id, vis) {
-  const k = keyOf(id)
-  const s = new Set(hiddenCaption.value)
-  vis ? s.delete(k) : s.add(k)
-  hiddenCaption.value = s
-}
+// --- 레이어 선택 + 표시/숨김(클립스튜디오식). 눈 아이콘으로 행별 즉시 토글(투명도로 상태 표시). ---
 
 const TEXT_LH = 1.4 // 줄 높이 배수(폰트 size 대비)
 // 추가 텍스트를 그린다(편집·export 공용 로직). 손글씨 폰트 + 크기·회전·색 + 여러 줄(\n).
 function paintText(ctx, t, W, H) {
-  const size = Math.round(W * 0.05 * (t.size ?? 1))
+  const size = Math.round(W * 0.05 * fontScale.value)
   const lines = String(t.text ?? '').split('\n')
   const lh = size * TEXT_LH
   ctx.save()
@@ -550,7 +633,7 @@ function paintText(ctx, t, W, H) {
   ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = `${size}px "Ownglyph ooa", sans-serif`
+  ctx.font = `${size}px "${fontFamily.value}", sans-serif`
   ctx.lineWidth = Math.max(2, W * 0.004)
   ctx.strokeStyle = 'rgba(0,0,0,0.45)'
   ctx.fillStyle = t.color ?? '#ffffff'
@@ -564,8 +647,8 @@ function paintText(ctx, t, W, H) {
 }
 // 텍스트 박스 메트릭(중심 기준 반폭/반높이, px). 여러 줄 = 가장 긴 줄 폭 + 줄 수만큼 높이. 회전 핸들 거리 포함.
 function textMetrics(ctx, t, W) {
-  const size = W * 0.05 * (t.size ?? 1)
-  ctx.font = `${Math.round(size)}px "Ownglyph ooa", sans-serif`
+  const size = W * 0.05 * fontScale.value
+  ctx.font = `${Math.round(size)}px "${fontFamily.value}", sans-serif`
   const lines = String(t.text || ' ').split('\n')
   const lh = size * TEXT_LH
   const tw = Math.max(...lines.map((ln) => ctx.measureText(ln || ' ').width))
@@ -613,6 +696,69 @@ function drawTexts(ctx, dims) {
   const st = selectedText.value
   if (st && !st.hidden) drawTextBox(ctx, st, W, H)
 }
+// 공유 선택 박스(점선 + 모서리=크기 핸들 + 위 핸들=회전) — 문구·마무리 공용. box=캔버스 0~1, rotDeg=기울기.
+function drawSelBox(ctx, box, rotDeg, W, H) {
+  const cx = box.cx * W
+  const cy = box.cy * H
+  const hw = box.hw * W
+  const hh = box.hh * H
+  const r = Math.max(6, W * 0.011)
+  const rotOff = Math.max(20, W * 0.032)
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate((rotDeg * Math.PI) / 180)
+  ctx.strokeStyle = '#3182f6'
+  ctx.lineWidth = Math.max(1.5, W * 0.002)
+  ctx.setLineDash([W * 0.006, W * 0.004])
+  ctx.strokeRect(-hw, -hh, hw * 2, hh * 2)
+  ctx.setLineDash([])
+  const rotY = -hh - rotOff
+  ctx.beginPath()
+  ctx.moveTo(0, -hh)
+  ctx.lineTo(0, rotY)
+  ctx.stroke()
+  ctx.fillStyle = '#fff'
+  for (const [hx, hy] of [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]) {
+    ctx.beginPath()
+    ctx.arc(hx, hy, r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
+  ctx.beginPath()
+  ctx.arc(0, rotY, r, 0, Math.PI * 2)
+  ctx.fillStyle = '#3182f6'
+  ctx.fill()
+  ctx.strokeStyle = '#fff'
+  ctx.stroke()
+  ctx.restore()
+}
+// 선택 박스의 핸들 hit-test(공유) — 'rotate' | 'resize' | null. box=캔버스 0~1, rotDeg=기울기.
+function boxHandleAt(box, rotDeg, nx, ny, W, H) {
+  const cx = box.cx * W
+  const cy = box.cy * H
+  const hw = box.hw * W
+  const hh = box.hh * H
+  const rotOff = Math.max(20, W * 0.032)
+  const hr = Math.max(11, W * 0.02)
+  const rad = (rotDeg * Math.PI) / 180
+  const dx = nx * W - cx
+  const dy = ny * H - cy
+  const lx = dx * Math.cos(-rad) - dy * Math.sin(-rad)
+  const ly = dx * Math.sin(-rad) + dy * Math.cos(-rad)
+  if (Math.hypot(lx, ly - (-hh - rotOff)) < hr) return 'rotate'
+  if ([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].some(([hx, hy]) => Math.hypot(lx - hx, ly - hy) < hr)) return 'resize'
+  return null
+}
+// 선택된 문구 박스 — 텍스트와 동일한 박스+회전/크기 핸들(회전은 captionRot 반영).
+function drawCaptionBox(ctx, W, H) {
+  const b = captionBox(selectedItemId.value)
+  if (b) drawSelBox(ctx, b, getCaptionRot(selectedItemId.value), W, H)
+}
+// 선택된 마무리 박스 — 동일한 박스+핸들(회전은 closingRot 반영).
+function drawClosingBox(ctx, W, H) {
+  const b = closingBox()
+  if (b) drawSelBox(ctx, b, getClosingRot(), W, H)
+}
 
 // --- 선 요소(직선/화살표) — 선 도구로 캔버스에 끌어 그린다 ---
 // 사진별 선 { id, x1,y1,x2,y2 (0~1), color, width(배율), style, arrow, hidden }.
@@ -648,8 +794,9 @@ function selectLine(id) {
 }
 
 // 통합 레이어 목록: 텍스트·선·외곽선·문구·마무리를 한 배열로(전체 순번 1..N). 묶지 않는다.
-const LAYER_CHIP = { text: '텍스트', line: '선', outline: '외곽선', caption: '문구', closing: '마무리' }
-const LAYER_CHIP_CLASS = { text: 'text', line: 'line', outline: '', caption: 'object-caption', closing: 'closing' }
+// 문구(AI 생성)와 텍스트(직접 입력)는 같은 "텍스트" 한 종류 — 생성 경로만 다르다. 칩·스타일 동일.
+const LAYER_CHIP = { text: '텍스트', line: '선', outline: '외곽선', caption: '텍스트', closing: '마무리' }
+const LAYER_CHIP_CLASS = { text: 'text', line: 'line', outline: '', caption: 'text', closing: 'closing' }
 const layerRows = computed(() => {
   const rows = []
   for (const t of texts.value) rows.push({ kind: 'text', id: t.id, label: t.text || '(빈 텍스트)' })
@@ -684,16 +831,21 @@ function toggleLayerRow(row) {
 function selectLayerRow(row) {
   if (row.kind === 'text') selectText(row.id)
   else if (row.kind === 'line') selectLine(row.id)
-  else if (row.kind === 'outline' || row.kind === 'caption') selectItem(row.id)
+  else if (row.kind === 'outline') selectItem(row.id, 'outline')
+  else if (row.kind === 'caption') selectItem(row.id, 'caption')
+  else if (row.kind === 'closing') selectItem('closing', 'closing')
 }
 function isLayerActive(row) {
   if (row.kind === 'text') return row.id === selectedTextId.value
   if (row.kind === 'line') return row.id === selectedLineId.value
-  if (row.kind === 'outline' || row.kind === 'caption') return row.id === selectedItemId.value
+  if (row.kind === 'outline') return row.id === selectedItemId.value && selectedKind.value === 'outline'
+  if (row.kind === 'caption') return row.id === selectedItemId.value && selectedKind.value === 'caption'
+  if (row.kind === 'closing') return selectedKind.value === 'closing'
   return false
 }
 function removeLayerRow(row) {
   if (row.kind === 'text') removeText(row.id)
+  else if (row.kind === 'caption') card.removeCaptionObject(currentId.value, row.id) // 문구(=텍스트)도 삭제
   else if (row.kind === 'line') removeLine(row.id)
 }
 // 화살촉.
@@ -810,8 +962,8 @@ function captionBox(itemId) {
   const cw = cr.cw
   const ch = cr.ch
   // 박스 크기(콘텐츠 px) — noteSize 기준 측정.
-  const noteSize = Math.round(cw * 0.027)
-  ctx.font = `${noteSize}px "Ownglyph ooa"`
+  const noteSize = Math.round(cw * 0.027 * fontScale.value)
+  ctx.font = `${noteSize}px "${fontFamily.value}"`
   const boxW = Math.max(...lines.map((l) => ctx.measureText(l).width))
   const boxH = lines.length * noteSize * 1.3
   // 배치점(콘텐츠 px) — override 또는 anchor.
@@ -831,9 +983,9 @@ function captionBox(itemId) {
     ax = anx * cw
     ay = any * ch
   }
-  // renderCore drawNoteLayer 와 동일 클램프(margin·하단 마무리 자리) → hit-test 가 실제 표시 위치와 일치.
+  // renderCore drawNoteLayer 와 동일 클램프(margin만; 마무리도 이동 가능해 하단 예약 없음) → hit-test = 표시 위치 일치.
   const margin = Math.round(cw * 0.035)
-  const yMax = ch - margin - Math.round(cw * 0.046) * 2.4
+  const yMax = ch - margin
   const x0 = Math.min(cw - margin - boxW, Math.max(margin, ax - boxW / 2))
   const y0 = Math.min(yMax - boxH, Math.max(margin, ay - boxH / 2))
   return {
@@ -843,12 +995,41 @@ function captionBox(itemId) {
     hh: boxH / 2 / cd.H,
   }
 }
+// 마무리 박스(캔버스 0~1 중심·반폭). 드래그/선택 hit-test + 박스 표시. 앵커는 drawClosingLayer 와 일치.
+function closingBox() {
+  if (!isClosingOn.value || !closing.value?.text) return null
+  const ctx = canvasEl.value?.getContext('2d')
+  if (!ctx) return null
+  const cr = contentRect.value
+  const cd = canvasDims.value
+  const cw = cr.cw
+  const ch = cr.ch
+  const cs = Math.round(cw * 0.046 * fontScale.value)
+  ctx.font = `${cs}px "${fontFamily.value}"`
+  const tw = ctx.measureText(closing.value.text).width
+  let ax, ay // 앵커(콘텐츠 px) — override(캔버스 0~1) 또는 하단 중앙 기본
+  const p = getClosingPos()
+  if (p) {
+    ax = p.x * cd.W - cr.dx
+    ay = p.y * cd.H - cr.dy
+  } else {
+    ax = cw / 2
+    ay = ch - cs * 1.5
+  }
+  return {
+    cx: (cr.dx + ax) / cd.W,
+    cy: (cr.dy + ay) / cd.H,
+    hw: (tw / 2 + cs * 0.6) / cd.W,
+    hh: (cs * 0.95) / cd.H,
+  }
+}
 function bindCanvasDrag(e) {
   window.addEventListener('pointermove', onCanvasPointerMove)
   window.addEventListener('pointerup', onCanvasPointerUp)
   e.preventDefault()
 }
 function onCanvasPointerDown(e) {
+  if (viewerMode.value) return // 편집 완료(뷰어) 상태에서는 캔버스 편집 차단
   const el = canvasEl.value
   if (!el) return
   const rect = el.getBoundingClientRect()
@@ -873,9 +1054,45 @@ function onCanvasPointerDown(e) {
       return
     }
     if ([[-m.hw, -m.hh], [m.hw, -m.hh], [m.hw, m.hh], [-m.hw, m.hh]].some(([hx, hy]) => Math.hypot(lx - hx, ly - hy) < hr)) {
-      drag = { kind: 'text-resize', id: stx.id, d0: Math.hypot(dx, dy) || 1, s0: stx.size ?? 1 }
+      drag = { kind: 'text-resize', id: stx.id, d0: Math.hypot(dx, dy) || 1, s0: fontScale.value }
       bindCanvasDrag(e)
       return
+    }
+  }
+
+  // 0.5) 선택된 문구의 변형 핸들(회전/크기) — 박스 중심 고정 기준.
+  if (selectedCaption.value) {
+    const b = captionBox(selectedItemId.value)
+    if (b) {
+      const h = boxHandleAt(b, getCaptionRot(selectedItemId.value), nx, ny, W, H)
+      if (h === 'rotate') {
+        drag = { kind: 'caption-rotate', id: selectedItemId.value, cx: b.cx, cy: b.cy }
+        bindCanvasDrag(e)
+        return
+      }
+      if (h === 'resize') {
+        drag = { kind: 'caption-resize', cx: b.cx, cy: b.cy, d0: Math.hypot((nx - b.cx) * W, (ny - b.cy) * H) || 1, s0: fontScale.value }
+        bindCanvasDrag(e)
+        return
+      }
+    }
+  }
+
+  // 0.6) 선택된 마무리의 변형 핸들(회전/크기)
+  if (selectedKind.value === 'closing') {
+    const b = closingBox()
+    if (b) {
+      const h = boxHandleAt(b, getClosingRot(), nx, ny, W, H)
+      if (h === 'rotate') {
+        drag = { kind: 'closing-rotate', cx: b.cx, cy: b.cy }
+        bindCanvasDrag(e)
+        return
+      }
+      if (h === 'resize') {
+        drag = { kind: 'closing-resize', cx: b.cx, cy: b.cy, d0: Math.hypot((nx - b.cx) * W, (ny - b.cy) * H) || 1, s0: fontScale.value }
+        bindCanvasDrag(e)
+        return
+      }
     }
   }
 
@@ -900,8 +1117,8 @@ function onCanvasPointerDown(e) {
   for (let i = texts.value.length - 1; i >= 0; i--) {
     const t = texts.value[i]
     if (t.hidden) continue
-    const fs = W * 0.05 * (t.size ?? 1)
-    ctx.font = `${Math.round(fs)}px "Ownglyph ooa", sans-serif`
+    const fs = W * 0.05 * fontScale.value
+    ctx.font = `${Math.round(fs)}px "${fontFamily.value}", sans-serif`
     const tlines = String(t.text ?? '').split('\n')
     const w = Math.max(...tlines.map((ln) => ctx.measureText(ln || ' ').width)) / W
     const h = (fs * 1.4 * Math.max(1, tlines.length)) / H
@@ -943,11 +1160,19 @@ function onCanvasPointerDown(e) {
     const b = captionBox(item.id)
     if (!b) continue
     if (Math.abs(nx - b.cx) <= b.hw + 0.012 && Math.abs(ny - b.cy) <= b.hh + 0.012) {
-      selectItem(item.id)
+      selectItem(item.id, 'caption')
       drag = { kind: 'caption', id: item.id, dx: nx - b.cx, dy: ny - b.cy }
       bindCanvasDrag(e)
       return
     }
+  }
+  // 5.6) 마무리 멘트 클릭 → 선택 + 드래그 이동(캡션과 동일)
+  const cb = closingBox()
+  if (cb && Math.abs(nx - cb.cx) <= cb.hw + 0.012 && Math.abs(ny - cb.cy) <= cb.hh + 0.012) {
+    selectItem('closing', 'closing')
+    drag = { kind: 'closing', dx: nx - cb.cx, dy: ny - cb.cy }
+    bindCanvasDrag(e)
+    return
   }
   // 6) 빈 곳 클릭(선택 모드 등) → 선택 해제
   selectedItemId.value = null
@@ -980,6 +1205,32 @@ function onCanvasPointerMove(e) {
       Math.min(maxX, Math.max(minX, nx - drag.dx)),
       Math.min(maxY, Math.max(minY, ny - drag.dy)),
     )
+  } else if (drag.kind === 'closing') {
+    // 마무리도 콘텐츠 영역 안으로 제한(캡션과 동일).
+    const cr = contentRect.value
+    const cd = canvasDims.value
+    const minX = cr.dx / cd.W
+    const maxX = (cr.dx + cr.cw) / cd.W
+    const minY = cr.dy / cd.H
+    const maxY = (cr.dy + cr.ch) / cd.H
+    setClosingPos(
+      Math.min(maxX, Math.max(minX, nx - drag.dx)),
+      Math.min(maxY, Math.max(minY, ny - drag.dy)),
+    )
+  } else if (drag.kind === 'caption-rotate') {
+    const { W, H } = canvasDims.value
+    setCaptionRot(drag.id, Math.round((Math.atan2((ny - drag.cy) * H, (nx - drag.cx) * W) * 180) / Math.PI + 90))
+  } else if (drag.kind === 'caption-resize') {
+    const { W, H } = canvasDims.value
+    const dpx = Math.hypot((nx - drag.cx) * W, (ny - drag.cy) * H)
+    fontScale.value = Math.min(3, Math.max(0.4, drag.s0 * (dpx / drag.d0)))
+  } else if (drag.kind === 'closing-rotate') {
+    const { W, H } = canvasDims.value
+    setClosingRot(Math.round((Math.atan2((ny - drag.cy) * H, (nx - drag.cx) * W) * 180) / Math.PI + 90))
+  } else if (drag.kind === 'closing-resize') {
+    const { W, H } = canvasDims.value
+    const dpx = Math.hypot((nx - drag.cx) * W, (ny - drag.cy) * H)
+    fontScale.value = Math.min(3, Math.max(0.4, drag.s0 * (dpx / drag.d0)))
   } else if (drag.kind === 'text-rotate') {
     const t = texts.value.find((x) => x.id === drag.id)
     if (t) {
@@ -991,7 +1242,7 @@ function onCanvasPointerMove(e) {
     if (t) {
       const { W, H } = canvasDims.value
       const dpx = Math.hypot((nx - t.x) * W, (ny - t.y) * H)
-      t.size = Math.min(6, Math.max(0.2, drag.s0 * (dpx / drag.d0)))
+      fontScale.value = Math.min(3, Math.max(0.4, drag.s0 * (dpx / drag.d0))) // 리사이즈 = 전역 크기 조절
     }
   } else if (drag.kind === 'line-ep') {
     const l = lines.value.find((x) => x.id === drag.id)
@@ -1055,6 +1306,8 @@ function toggleDone(id) {
   doneSet.value = s
 }
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
+// 뷰어 모드 = 현재 사진을 "편집 완료"로 표시한 상태. 편집 UI(도구·우패널·캔버스 조작)를 비활성(보기 전용)으로.
+const viewerMode = computed(() => isDone(currentId.value))
 
 // 캔버스 줌(확대/축소/맞춤). 하단 필름스트립 썸네일 크기 배율.
 let stageRo = null
@@ -1123,19 +1376,16 @@ async function exportCurrent() {
     const cd = canvasDims.value
     const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? [])
       .filter((o) => isCaptionOn(o.itemId))
-      .map((o) => {
-        const p = getCaptionPos(o.itemId)
-        return p ? { ...o, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } } : o
-      })
+      .map((o) => applyCaptionOverrides(o, cr, cd))
     const inputs = {
       items: items.value,
-      captions: { objects: visibleObjects, closing: isClosingOn.value ? closing.value : null },
+      captions: { objects: visibleObjects, closing: closingForScene(cr, cd) },
       photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
       // 미리보기 scene 과 동일: 외곽선은 paintOutlines(composeOverlays)가 전담 → buildScene sketch 외곽선 끔.
       // (이게 빠지면 문구 생성된 객체는 buildScene sketch + paintOutlines 가 겹쳐 PNG 외곽선 중복)
       style: { toneDown: toneDown.value, outline: false },
     }
-    const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value })
+    const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value, noteFont: fontFamily.value, closingFont: fontFamily.value, scale: fontScale.value })
     const composed = await composeOverlays(blob)
     if (currentId.value !== exportId) {
       exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
@@ -1164,7 +1414,7 @@ async function composeOverlays(blob) {
   try {
     // 폰트가 아직 안 굳었으면 폴백(sans-serif)으로 구워지므로, 합성 전에 손글씨 폰트를 보장한다.
     try {
-      await document.fonts.load('64px "Ownglyph ooa"')
+      await document.fonts.load(`64px "${fontFamily.value}"`)
     } catch {
       /* 폰트 로드 실패 — 폴백 폰트로 진행 */
     }
@@ -1202,7 +1452,7 @@ watch(
 </script>
 
 <template>
-  <div class="ed">
+  <div class="ed" :class="{ viewer: viewerMode }">
     <!-- 상단: 출력 형식 + 저장/완료 -->
     <header class="ed-top">
       <button class="back" @click="emit('back')">‹ 고르기</button>
@@ -1225,7 +1475,7 @@ watch(
       </fieldset>
       <span v-if="exportNote" class="ok">{{ exportNote }}</span>
       <Button label="PNG 저장" icon="pi pi-download" size="small" severity="secondary" :disabled="exporting || !photoImg" @click="exportCurrent" />
-      <Button label="완료" size="small" @click="emit('back')" />
+      <Button :label="viewerMode ? '수정' : '완료'" size="small" :severity="viewerMode ? 'secondary' : undefined" @click="toggleDone(currentId)" />
     </header>
 
     <div class="ed-mid">
@@ -1235,9 +1485,9 @@ watch(
           v-for="tool in TOOLS"
           :key="tool.key"
           class="rail-btn"
-          :class="{ on: activeTool === tool.key }"
+          :class="{ on: tool.key === panelContext }"
           :title="tool.label"
-          @click="activeTool = tool.key"
+          @click="pickTool(tool.key)"
         >
           <span class="rail-ic">{{ tool.icon }}</span>
           <span class="rail-lb">{{ tool.label }}</span>
@@ -1279,7 +1529,10 @@ watch(
             </button>
           </li>
         </ul>
-        <span class="film-info">{{ doneCount }} / {{ photoIds.length }} 완성</span>
+        <div class="bottom-right">
+          <span class="film-info">{{ doneCount }} / {{ photoIds.length }} 완성</span>
+          <button class="finish-btn" title="에디터를 끝내고 나갑니다" @click="emit('back')">에디터 마무리하기</button>
+        </div>
       </footer>
       </div>
 
@@ -1288,48 +1541,35 @@ watch(
         <div class="section detail">
           <h3>상세 설정</h3>
 
-          <!-- (A) 선택한 객체/텍스트 정밀 편집 (오른쪽 패널의 "선택 대상" 영역) -->
-          <template v-if="selectedCaption">
-            <label class="lbl">문구 (선택 객체)</label>
-            <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
-            <div class="row">
-              <button class="mini" @click="deleteSelectedCaption">문구 삭제</button>
-            </div>          </template>
-          <template v-else-if="selectedText">
-            <label class="lbl">텍스트 (선택)</label>
-            <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
-            <div class="row">
-              <span>크기</span>
-              <input class="num" type="number" min="8" max="200" step="1" :value="Math.round((selectedText.size ?? 1) * 40)" @input="setTextProp('size', Number($event.target.value) / 40)" /><span class="numv">pt</span>
-              <span>기울기</span>
-              <input class="num" type="number" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /><span class="numv">°</span>
-            </div>
-          </template>
-          <template v-else-if="selectedLine">
-            <label class="lbl">선 (선택)</label>
-            <label class="ctl-lbl">굵기</label>
-            <div class="stepper">
-              <button class="step" title="얇게" @click="setLineProp('width', Math.max(0.3, Math.round(((selectedLine.width ?? 1) - 0.1) * 10) / 10))">−</button>
-              <input type="range" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" />
-              <button class="step" title="굵게" @click="setLineProp('width', Math.min(5, Math.round(((selectedLine.width ?? 1) + 0.1) * 10) / 10))">＋</button>
-              <input class="num" type="number" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" />
-            </div>
-            <div class="row">
-              <span>스타일</span>
-              <label class="rd"><input type="radio" :checked="selectedLine.style === 'solid'" @change="setLineProp('style', 'solid')" /> 실선</label>
-              <label class="rd"><input type="radio" :checked="selectedLine.style === 'dashed'" @change="setLineProp('style', 'dashed')" /> 점선</label>
-            </div>
-            <div class="row">
-              <span>화살표</span>
-              <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'none'" @change="setLineProp('arrow', 'none')" /> 없음</label>
-              <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'end'" @change="setLineProp('arrow', 'end')" /> 끝</label>
-              <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'both'" @change="setLineProp('arrow', 'both')" /> 양쪽</label>
-            </div>
-          </template>
+          <!-- 우패널 = 현재 컨텍스트(panelContext) 하나로 결정한다.
+               외곽선→AI / 문구·텍스트→텍스트 / 선→선. 선택한 요소가 있으면 그 개별 편집을
+               컨텍스트의 전역/액션 컨트롤과 함께 보여준다. (선택편집/도구 분리 폐지) -->
 
-          <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
-               객체를 선택해도 사라지지 않아야 한다). 선택 편집(A)과 도구 컨트롤(B)은 별개 블록. -->
-          <div v-if="activeTool === 'ai'" class="tool-block">
+          <!-- AI 컨텍스트: (외곽선 선택 시) 선 모양 개별 편집 + 외곽선 보정·문구 생성 -->
+          <template v-if="panelContext === 'ai'">
+            <template v-if="selectedOutline">
+              <label class="lbl">외곽선 (선택)</label>
+              <label class="ctl-lbl">선 두께</label>
+              <div class="stepper">
+                <button class="step" title="얇게" @click="setOutlineStyle(selectedItemId, { width: Math.max(0.3, Math.round((outlineStyleOf(selectedItemId).width - 0.1) * 10) / 10) })">−</button>
+                <input type="range" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
+                <button class="step" title="굵게" @click="setOutlineStyle(selectedItemId, { width: Math.min(8, Math.round((outlineStyleOf(selectedItemId).width + 0.1) * 10) / 10) })">＋</button>
+                <input class="num" type="number" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
+              </div>
+              <div class="row">
+                <span>선 스타일</span>
+                <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'solid'" @change="setOutlineStyle(selectedItemId, { style: 'solid' })" /> 실선</label>
+                <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'dashed'" @change="setOutlineStyle(selectedItemId, { style: 'dashed' })" /> 점선</label>
+              </div>
+              <div v-if="outlineStyleOf(selectedItemId).style === 'dashed'" class="row dash-row">
+                <span>길이</span>
+                <input type="range" min="2" max="30" step="1" :value="outlineStyleOf(selectedItemId).dashLen" @input="setOutlineStyle(selectedItemId, { dashLen: Number($event.target.value) })" /><span class="numv">{{ outlineStyleOf(selectedItemId).dashLen }}</span>
+                <span>간격</span>
+                <input type="range" min="1" max="30" step="1" :value="outlineStyleOf(selectedItemId).dashGap" @input="setOutlineStyle(selectedItemId, { dashGap: Number($event.target.value) })" /><span class="numv">{{ outlineStyleOf(selectedItemId).dashGap }}</span>
+              </div>
+              <label class="chk"><input type="checkbox" :checked="applyOutlineAll" @change="setOutlineAll($event.target.checked)" /> 모든 외곽선에 같이 적용</label>
+              <hr class="sep" />
+            </template>
             <div class="act-row">
               <button class="act-btn" :disabled="!photoImg" @click="correctionOpen = true">
                 <i class="pi pi-pencil" />외곽선 보정
@@ -1342,26 +1582,8 @@ watch(
                 ✨ {{ hasCaption ? '문구 다시' : '문구 생성' }}
               </button>
             </div>
-            <label class="ctl-lbl">외곽선 두께</label>
-            <div class="stepper">
-              <button class="step" title="얇게" @click="bumpWidth(-0.1)">−</button>
-              <input type="range" min="0.3" max="8" step="0.1" v-model.number="outlineWidth" />
-              <button class="step" title="굵게" @click="bumpWidth(0.1)">＋</button>
-              <input class="num" type="number" min="0.3" max="8" step="0.1" v-model.number="outlineWidth" />
-            </div>
-            <div class="row">
-              <span>선 스타일</span>
-              <label class="rd"><input type="radio" value="solid" v-model="outlineStyle" /> 실선</label>
-              <label class="rd"><input type="radio" value="dashed" v-model="outlineStyle" /> 점선</label>
-            </div>
-            <div v-if="outlineStyle === 'dashed'" class="row dash-row">
-              <span>길이</span>
-              <input type="range" min="2" max="30" step="1" v-model.number="dashLen" /><span class="numv">{{ dashLen }}</span>
-              <span>간격</span>
-              <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span>
-            </div>
             <div v-if="regenAsk" class="regen-ask">
-              <span class="muted small">다시 만들면 지금 문구가 새로 바뀝니다.</span>
+              <span class="muted small">다시 만들면 이 사진의 모든 텍스트(직접 추가한 것 포함)가 지워지고 새로 만들어집니다.</span>
               <div class="regen-btns">
                 <button class="mini primary" @click="confirmRegen">다시 생성</button>
                 <button class="mini" @click="cancelRegen">취소</button>
@@ -1369,22 +1591,83 @@ watch(
             </div>
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
             <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
-          </div>
-          <p v-else-if="activeTool === 'deco' && !selectedCaption && !selectedText && !selectedLine" class="muted small">장식은 곧 제공됩니다.</p>
+          </template>
+
+          <!-- 텍스트 컨텍스트: 전역 글씨(글씨체·크기) + (선택 시) 그 텍스트 내용·기울기·삭제 -->
+          <template v-else-if="panelContext === 'text'">
+            <!-- 전역(사진 공통) 글씨 — 옅은 박스로 묶어 개별 설정과 디자인으로 구분한다. -->
+            <div class="global-type">
+              <label class="ctl-lbl">글씨체</label>
+              <select class="font-sel" v-model="fontFamily">
+                <option v-for="f in FONTS" :key="f.family" :value="f.family">{{ f.label }}</option>
+              </select>
+              <label class="ctl-lbl">글씨 크기</label>
+              <div class="row">
+                <button class="step" title="작게" @click="fontScale = Math.max(0.4, Math.round((fontScale - 0.05) * 100) / 100)">−</button>
+                <input class="num" type="number" min="16" max="120" step="2" :value="Math.round(fontScale * 40)" @input="fontScale = Number($event.target.value) / 40" /><span class="numv">pt</span>
+                <button class="step" title="크게" @click="fontScale = Math.min(2.5, Math.round((fontScale + 0.05) * 100) / 100)">＋</button>
+              </div>
+            </div>
+            <template v-if="selectedCaption || selectedText || selectedClosing">
+              <label class="lbl">{{ selectedClosing ? '마무리 멘트 수정' : '텍스트 수정' }}</label>
+              <template v-if="selectedCaption">
+                <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
+                <div class="row">
+                  <span>기울기</span>
+                  <input class="num" type="number" min="-180" max="180" step="1" :value="getCaptionRot(selectedItemId)" @input="setCaptionRot(selectedItemId, Number($event.target.value))" /><span class="numv">°</span>
+                </div>
+                <button class="del-btn" @click="deleteSelectedCaption"><i class="pi pi-trash" /> 텍스트 삭제</button>
+              </template>
+              <template v-else-if="selectedClosing">
+                <textarea class="cap-edit" :value="selectedClosing.text" rows="2" @input="updateClosingText($event.target.value)" />
+                <div class="row">
+                  <span>기울기</span>
+                  <input class="num" type="number" min="-180" max="180" step="1" :value="getClosingRot()" @input="setClosingRot(Number($event.target.value))" /><span class="numv">°</span>
+                </div>
+              </template>
+              <template v-else>
+                <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
+                <div class="row">
+                  <span>기울기</span>
+                  <input class="num" type="number" min="-180" max="180" step="1" :value="selectedText.rotation ?? 0" @input="setTextProp('rotation', Number($event.target.value))" /><span class="numv">°</span>
+                </div>
+                <button class="del-btn" @click="removeText(selectedTextId)"><i class="pi pi-trash" /> 텍스트 삭제</button>
+              </template>
+            </template>
+          </template>
+
+          <!-- 선 컨텍스트: (선택 시) 굵기·스타일·화살표 -->
+          <template v-else-if="panelContext === 'line'">
+            <template v-if="selectedLine">
+              <label class="lbl">선 (선택)</label>
+              <label class="ctl-lbl">굵기</label>
+              <div class="stepper">
+                <button class="step" title="얇게" @click="setLineProp('width', Math.max(0.3, Math.round(((selectedLine.width ?? 1) - 0.1) * 10) / 10))">−</button>
+                <input type="range" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" />
+                <button class="step" title="굵게" @click="setLineProp('width', Math.min(5, Math.round(((selectedLine.width ?? 1) + 0.1) * 10) / 10))">＋</button>
+                <input class="num" type="number" min="0.3" max="5" step="0.1" :value="selectedLine.width ?? 1" @input="setLineProp('width', Number($event.target.value))" />
+              </div>
+              <div class="row">
+                <span>스타일</span>
+                <label class="rd"><input type="radio" :checked="selectedLine.style === 'solid'" @change="setLineProp('style', 'solid')" /> 실선</label>
+                <label class="rd"><input type="radio" :checked="selectedLine.style === 'dashed'" @change="setLineProp('style', 'dashed')" /> 점선</label>
+              </div>
+              <div class="row">
+                <span>화살표</span>
+                <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'none'" @change="setLineProp('arrow', 'none')" /> 없음</label>
+                <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'end'" @change="setLineProp('arrow', 'end')" /> 끝</label>
+                <label class="rd"><input type="radio" :checked="selectedLine.arrow === 'both'" @change="setLineProp('arrow', 'both')" /> 양쪽</label>
+              </div>
+            </template>
+          </template>
+
+          <!-- 장식 컨텍스트 -->
+          <p v-else-if="panelContext === 'deco'" class="muted small">장식은 곧 제공됩니다.</p>
         </div>
 
         <div class="section layers">
           <div class="layers-head">
             <h3>레이어 <span class="muted">· {{ layerRows.length }}</span></h3>
-            <span class="grow" />
-            <label class="all-vis" title="전체 선택">
-              <input type="checkbox" :checked="allSelected" @change="setAllSelected($event.target.checked)" /> 전체 선택
-            </label>
-          </div>
-          <div class="bulk-bar">
-            <button :disabled="!bulkSelected.size" @click="bulkSetVisible(false)">숨기기</button>
-            <button :disabled="!bulkSelected.size" @click="bulkSetVisible(true)">보이기</button>
-            <span class="bulk-n">{{ bulkSelected.size ? bulkSelected.size + '개 선택' : '선택 후 숨기기/보이기' }}</span>
           </div>
 
           <p v-if="!layerRows.length" class="muted small">레이어가 없습니다.</p>
@@ -1395,35 +1678,22 @@ watch(
               :class="{ off: !layerOn(row), 'row-active': isLayerActive(row) }"
             >
               <button class="eye" :title="layerOn(row) ? '숨기기' : '보이기'" @click="toggleLayerRow(row)">
-                <i :class="layerOn(row) ? 'pi pi-eye' : 'pi pi-eye-slash'" />
+                <i class="pi pi-eye" />
               </button>
-              <input
-                v-if="row.kind !== 'closing'"
-                class="sel-ck"
-                type="checkbox"
-                title="선택"
-                :checked="bulkSelected.has(row.kind + ':' + row.id)"
-                @change="toggleBulk(row.kind + ':' + row.id)"
-              />
-              <span v-else class="ck-sp" />
-              <button
-                class="layer"
-                :class="{ active: isLayerActive(row), static: row.kind === 'closing' }"
-                :disabled="row.kind === 'closing'"
-                @click="selectLayerRow(row)"
-              >
+              <button class="layer" :class="{ active: isLayerActive(row) }" @click="selectLayerRow(row)">
                 <span class="lno">{{ row.no }}</span>
                 <span class="layer-name">{{ row.label }}</span>
               </button>
               <span class="chip tag" :class="LAYER_CHIP_CLASS[row.kind]">{{ LAYER_CHIP[row.kind] }}</span>
               <button
-                v-if="row.kind === 'text' || row.kind === 'line'"
+                v-if="row.kind === 'text' || row.kind === 'caption' || row.kind === 'line'"
                 class="del-one"
                 title="삭제"
                 @click="removeLayerRow(row)"
               >
                 ✕
               </button>
+              <span v-else class="del-sp" />
             </li>
           </ul>
         </div>
@@ -1717,10 +1987,76 @@ watch(
   border-bottom: 0;
 }
 /* 도구 컨트롤 블록 — 선택 편집(A) 블록 아래에 올 때 구분선으로 역할을 분리한다. */
+.font-sel {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--paper-card);
+  color: var(--ink);
+  cursor: pointer;
+}
 .tool-block {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--line2);
+}
+/* 전역(사진 공통) 글씨 — 개별 설정과 디자인으로 구분되게 옅은 박스로 묶는다. */
+.global-type {
+  padding: 8px 10px 10px;
+  margin-bottom: 12px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+}
+.global-type .ctl-lbl {
+  margin-top: 6px;
+}
+.global-type .ctl-lbl:first-child {
+  margin-top: 0;
+}
+/* 전역 글씨 ↔ 선택 내용 구분선 */
+.sep {
+  border: 0;
+  border-top: 1px solid var(--line2);
+  margin: 12px 0;
+}
+/* 외곽선 전체 적용 체크박스 */
+.chk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--ink-sub);
+  cursor: pointer;
+}
+.chk input {
+  cursor: pointer;
+}
+/* 문구 삭제 — 눈에 띄게(빨강 외곽 버튼) */
+.del-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--complete);
+  border-radius: 8px;
+  background: var(--paper-card);
+  color: var(--complete);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.del-btn:hover {
+  background: var(--complete);
+  color: #fff;
 }
 .ed-right h3 {
   margin: 0 0 10px;
@@ -1839,7 +2175,9 @@ watch(
   border-radius: 8px;
   padding: 8px;
   font: inherit;
-  resize: vertical;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: none;
 }
 .layer-list {
   list-style: none;
@@ -1861,43 +2199,7 @@ watch(
 .layers-head h3 {
   margin: 0;
 }
-.layers-head .grow {
-  flex: 1;
-}
-.all-vis {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.78rem;
-  color: var(--ink-sub);
-  cursor: pointer;
-}
-/* 선택 후 일괄 숨기기/보이기 바 */
-.bulk-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.bulk-bar button {
-  border: 1px solid var(--line);
-  background: var(--paper-card);
-  border-radius: 7px;
-  padding: 3px 10px;
-  font-size: 0.76rem;
-  cursor: pointer;
-  color: var(--ink-sub);
-}
-.bulk-bar button:disabled {
-  color: var(--ink-faint);
-  cursor: default;
-}
-.bulk-n {
-  margin-left: auto;
-  font-size: 0.72rem;
-  color: var(--ink-faint);
-}
-/* 행별 가시성 눈 아이콘(클릭 토글) */
+/* 행별 가시성 눈 아이콘(클릭 토글 · 숨김이면 투명도로 흐리게) */
 .eye {
   flex: 0 0 auto;
   width: 22px;
@@ -1910,25 +2212,12 @@ watch(
   cursor: pointer;
   font-size: 0.78rem;
 }
-.eye-sp {
-  flex: 0 0 22px;
-}
-.sel-ck {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  cursor: pointer;
-  margin: 0;
-}
-.ck-sp {
-  flex: 0 0 15px;
-}
-/* 숨긴 레이어 = 흐리게 + 눈 아이콘 회색 */
+/* 숨긴 레이어 = 라벨 흐리게 + 눈 아이콘 투명도 낮춤(흐리게=숨김, 뚜렷=표시) */
 .layer-list li.off .layer {
   opacity: 0.45;
 }
 .layer-list li.off .eye {
-  color: var(--ink-faint);
+  opacity: 0.3;
 }
 /* 태그(외곽선/문구/텍스트/마무리)는 오른쪽으로 — 레이어 버튼(flex:1)이 밀어낸다. */
 .chip.tag {
@@ -1950,6 +2239,10 @@ watch(
 }
 .del-one:hover {
   opacity: 1;
+}
+/* 삭제 불가 행(외곽선·마무리)도 X 자리만큼 폭을 잡아 칩·행이 가지런히 정렬되게 */
+.del-sp {
+  flex: 0 0 18px;
 }
 .layer {
   flex: 1;
@@ -2127,5 +2420,41 @@ watch(
   flex: 0 0 auto;
   font-size: 0.82rem;
   color: var(--ink-faint);
+}
+/* 하단 우측: 완성 카운트 + 에디터 마무리하기(나가기) */
+.bottom-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+}
+/* 에디터 마무리하기 = 진짜 나가기(붉은색, 눈에 띄게) */
+.finish-btn {
+  border: 1px solid var(--complete);
+  background: var(--complete);
+  color: #fff;
+  border-radius: 9px;
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.finish-btn:hover {
+  filter: brightness(1.08);
+}
+/* 편집 완료(뷰어) 상태 = 편집 UI 자리는 그대로 두되 비활성(흐리게 + 조작 차단) */
+.ed.viewer .ed-rail,
+.ed.viewer .ed-right {
+  opacity: 0.45;
+  pointer-events: none;
+  filter: grayscale(0.4);
+}
+.ed.viewer .card-canvas {
+  cursor: default;
 }
 </style>

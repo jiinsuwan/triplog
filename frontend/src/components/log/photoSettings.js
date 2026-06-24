@@ -10,6 +10,8 @@ export const PHOTO_SETTING_DEFAULTS = {
   dashGap: 9,
   padFill: 'blur',
   padColor: '#fdf8ee',
+  fontFamily: 'Ownglyph ooa',
+  fontScale: 1,
 }
 
 // 저장본(부분/없음 가능)을 전체 설정으로 해석한다 — 없는 키는 기본값으로 채운다.

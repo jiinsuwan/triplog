@@ -18,6 +18,8 @@ describe('photoSettings — 사진별 편집 설정 해석', () => {
       dashGap: 4,
       padFill: 'solid',
       padColor: '#000000',
+      fontFamily: 'Ownglyph hani',
+      fontScale: 1.4,
     }
     expect(resolvePhotoSettings(saved)).toEqual(saved)
   })
