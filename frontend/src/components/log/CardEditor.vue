@@ -15,6 +15,7 @@ import { makeCoverFit } from '@/card/render/coverFit'
 import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
 import CorrectionDialog from '@/components/log/CorrectionDialog.vue'
+import { resolvePhotoSettings } from './photoSettings'
 
 const props = defineProps({ photoIds: { type: Array, default: () => [] } })
 const emit = defineEmits(['back'])
@@ -30,12 +31,13 @@ const TOOLS = [
   { key: 'line', icon: '／', label: '선' },
   { key: 'deco', icon: '✦', label: '장식' },
 ]
-const activeTool = ref('select') // 'select'(선택 모드) | 도구 키(생성 모드)
-// 선택/생성 모드 = 캔버스 위 플로팅 토글. 생성 모드는 마지막에 쓰던 도구로 복귀.
-const isSelectMode = computed(() => activeTool.value === 'select')
+const activeTool = ref('ai') // 첫 진입 = AI 도구. 'select'(선택 모드) | 도구 키(생성 모드)
+// 선택/생성 모드 = 캔버스 위 플로팅 토글. 생성 모드는 마지막에 쓰던 도구(text/line)로 복귀.
+// AI 도구는 캔버스에 새로 그리지 않으므로 선택 모드와 함께 취급(첫 진입 = AI + 선택 모드).
+const isSelectMode = computed(() => activeTool.value === 'select' || activeTool.value === 'ai')
 let lastCreateTool = 'text'
 watch(activeTool, (v) => {
-  if (v !== 'select') lastCreateTool = v
+  if (v !== 'select' && v !== 'ai') lastCreateTool = v
 })
 function setMode(m) {
   activeTool.value = m === 'select' ? 'select' : lastCreateTool
@@ -376,7 +378,29 @@ onScopeDispose(() => {
   if (rafId != null) cancelAnimationFrame(rafId)
 })
 
-watch(currentId, loadCurrent, { immediate: true })
+// --- 사진별 편집 설정 독립 ---
+// 전역 ref로 두면 사진1의 톤·외곽선·출력형식·여백 설정이 사진2에 새던 버그 → 전환 때 저장/복원한다.
+const PHOTO_SETTING_REFS = { toneDown, format, outlineWidth, outlineStyle, dashLen, dashGap, padFill, padColor }
+const settingsByPhoto = reactive({})
+function captureSettings() {
+  const o = {}
+  for (const k in PHOTO_SETTING_REFS) o[k] = PHOTO_SETTING_REFS[k].value
+  return o
+}
+function applySettings(saved) {
+  const s = resolvePhotoSettings(saved)
+  for (const k in PHOTO_SETTING_REFS) PHOTO_SETTING_REFS[k].value = s[k]
+}
+// 사진 전환: 이전 사진(prevId) 설정 저장 → 새 사진 설정 복원 → 이미지 로드. prevId 캡처가 핵심.
+watch(
+  currentId,
+  (id, prevId) => {
+    if (prevId != null) settingsByPhoto[prevId] = captureSettings()
+    applySettings(settingsByPhoto[id])
+    loadCurrent()
+  },
+  { immediate: true },
+)
 watch(
   [scene, photoImg, fontReady, hiddenObject, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, format, padFill, padColor, zoom, stageSize],
   scheduleRedraw,
@@ -870,33 +894,7 @@ watch(activeTool, () => {
   selectedLineId.value = null
 })
 
-// --- 우측 패널 상세/레이어 분할 크기 조절 (구분선 드래그) ---
-// 상세 설정 영역 높이를 사용자가 끌어 조절한다. 두 영역(상세·레이어)은 각자 내부 스크롤.
-const rightEl = ref(null)
-const detailH = ref(248) // 상세 설정 영역 높이(px)
-let resizeStart = null
-function onResizeDown(e) {
-  resizeStart = { y: e.clientY, h: detailH.value }
-  window.addEventListener('pointermove', onResizeMove)
-  window.addEventListener('pointerup', onResizeUp)
-  e.preventDefault()
-}
-function onResizeMove(e) {
-  if (!resizeStart) return
-  const avail = rightEl.value?.clientHeight ?? 600
-  const max = Math.max(220, avail - 150) // 레이어에 최소 공간 확보
-  // 상세 설정 최소 220px — 그 이하로 줄여 레이어창이 잠식하지 못하게(컨트롤 잘림 방지).
-  detailH.value = Math.min(max, Math.max(220, resizeStart.h + (e.clientY - resizeStart.y)))
-}
-function onResizeUp() {
-  resizeStart = null
-  window.removeEventListener('pointermove', onResizeMove)
-  window.removeEventListener('pointerup', onResizeUp)
-}
-onScopeDispose(() => {
-  window.removeEventListener('pointermove', onResizeMove)
-  window.removeEventListener('pointerup', onResizeUp)
-})
+// (우측 패널 분할 리사이저 = 죽은 코드라 제거. 레이어 패널은 CSS 고정 높이로 위치 안 밀림.)
 
 // 완성 = 사용자가 카드별로 직접 표시(자동 판단 아님). 필름스트립에서 사진마다 토글.
 const doneSet = ref(new Set())
@@ -1109,7 +1107,7 @@ watch(
       </section>
 
       <!-- 우: 상세 설정 + 레이어 (구분선을 끌어 두 영역 높이 조절) -->
-      <aside class="ed-right" ref="rightEl">
+      <aside class="ed-right">
         <div class="section detail">
           <h3>상세 설정</h3>
 
@@ -1496,10 +1494,10 @@ watch(
   padding: 14px;
   border-bottom: 1px solid #eef1f4;
 }
-/* 상세 설정 = 내용 높이(잘리지 않게). 너무 길면 절반쯤에서 내부 스크롤, 나머지는 레이어. */
+/* 상세 설정 = 고정 높이(패널의 56%). 도구를 바꿔도 레이어 패널이 안 밀리도록 고정 — 내용이 길면
+   내부 스크롤, 짧으면 아래가 여백. 레이어는 항상 같은 위치에서 시작한다. */
 .section.detail {
-  flex: 0 0 auto;
-  max-height: 56%;
+  flex: 0 0 56%;
   overflow-y: auto;
 }
 .section.layers {
@@ -1507,27 +1505,6 @@ watch(
   min-height: 0;
   overflow-y: auto;
   border-bottom: 0;
-}
-/* 상세/레이어 사이 드래그 구분선 — 끌어서 두 영역 높이 조절. */
-.resizer {
-  flex: 0 0 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: ns-resize;
-  background: #fff;
-  border-top: 1px solid #eef1f4;
-  border-bottom: 1px solid #eef1f4;
-  touch-action: none;
-}
-.resizer .grip {
-  width: 36px;
-  height: 3px;
-  border-radius: 99px;
-  background: #d6dbe1;
-}
-.resizer:hover .grip {
-  background: #8b95a1;
 }
 /* 도구 컨트롤 블록 — 선택 편집(A) 블록 아래에 올 때 구분선으로 역할을 분리한다. */
 .tool-block {
