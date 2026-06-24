@@ -12,33 +12,6 @@ const router = useRouter()
 const auth = useAuthStore()
 const tripStore = useTripStore()
 
-const guestStampSamples = [
-  { title: '교토', stage: 3, startDate: '2025.11.07', endDate: '2025.11.09', complete: true },
-  { title: '도쿄', stage: 3, startDate: '2026.03.02', endDate: '2026.03.05', complete: true },
-  { title: '제주', stage: 2, startDate: '2026.09.02', endDate: '2026.09.04', complete: false },
-]
-
-const guestMemorySamples = [
-  {
-    title: '교토 단풍 기록',
-    subtitle: '교토 · 2025.11',
-    tags: ['단풍', '산책'],
-    tone: 'radial-gradient(80% 70% at 60% 35%, #d39a5a, #9a4b2a 60%, #5a2c18)',
-  },
-  {
-    title: '제주 동쪽 바다',
-    subtitle: '제주 · 2026.09',
-    tags: ['바다', '오름'],
-    tone: 'radial-gradient(80% 70% at 40% 40%, #7bb0ad, #3d8079 60%, #235650)',
-  },
-  {
-    title: '도쿄의 밤',
-    subtitle: '도쿄 · 2026.03',
-    tags: ['야경', '미식'],
-    tone: 'radial-gradient(80% 70% at 50% 30%, #8a6a9e, #4a3566 65%, #2a1d3e)',
-  },
-]
-
 const memoryTones = [
   'radial-gradient(80% 70% at 60% 35%, #d39a5a, #9a4b2a 60%, #5a2c18)',
   'radial-gradient(80% 70% at 40% 40%, #7bb0ad, #3d8079 60%, #235650)',
@@ -71,9 +44,10 @@ const upcomingTrips = computed(() =>
   sortedPlanningTrips.value.filter((trip) => trip.id !== resumeTrip.value?.id).slice(0, 2),
 )
 const hasPlanningTrips = computed(() => planningTrips.value.length > 0)
-const resumeTitle = computed(() =>
-  isLoggedIn.value && !hasPlanningTrips.value ? '새 여행 계획하기' : '이어서 계획하기',
-)
+const resumeTitle = computed(() => {
+  if (!isLoggedIn.value) return '새 여행 시작하기'
+  return hasPlanningTrips.value ? '이어서 계획하기' : '새 여행 계획하기'
+})
 const recentMemories = computed(() => sortedPastTrips.value.slice(0, 3))
 const totalTrips = computed(() => tripStore.trips.length)
 const totalDays = computed(() =>
@@ -162,21 +136,14 @@ function dateValue(value) {
   <div class="home-page">
     <AppTopBar
       active="home"
-      search-placeholder="여행 검색"
+      :show-search="false"
+      :show-default-action="false"
       :user-initial="userInitial"
       @create-trip="startTrip"
     >
       <template #actions>
-        <template v-if="isLoggedIn">
-          <BaseButton variant="primary" data-testid="home-start-trip-top" @click="startTrip">
-            새 여행
-          </BaseButton>
-        </template>
-        <template v-else>
+        <template v-if="!isLoggedIn">
           <BaseButton variant="ghost" data-testid="home-login" @click="goToLogin">로그인</BaseButton>
-          <BaseButton variant="primary" data-testid="home-start-trip-top" @click="startTrip">
-            새 여행
-          </BaseButton>
         </template>
       </template>
     </AppTopBar>
@@ -311,16 +278,24 @@ function dateValue(value) {
             />
           </button>
 
-          <button v-else class="home-ticket-button" type="button" @click="openTrips">
+          <button
+            v-else
+            class="home-ticket-button"
+            type="button"
+            data-testid="home-public-create"
+            @click="startTrip"
+          >
             <TripTicket
-              title="오사카 가을 여행"
-              region="오사카"
-              dates="10.18 - 10.21"
-              serial="TL-2026-1018"
-              status="TRIP TICKET"
+              title="로그인하고 여행을 계획해보세요."
+              region="TripLog"
+              dates="여행 티켓이 이곳에 표시됩니다."
+              serial="TL-READY"
+              status="NEW TRIP"
               color="mustard"
-              :dday="118"
-              :tags="['교토', '단풍']"
+              dday="+"
+              dday-label="ADD"
+              unissued
+              :show-barcode="false"
             />
           </button>
         </section>
@@ -339,17 +314,6 @@ function dateValue(value) {
                 complete
               />
             </template>
-            <template v-else-if="!isLoggedIn">
-              <TripStamp
-                v-for="stamp in guestStampSamples"
-                :key="stamp.title"
-                :title="stamp.title"
-                :stage="stamp.stage"
-                :start-date="stamp.startDate"
-                :end-date="stamp.endDate"
-                :complete="stamp.complete"
-              />
-            </template>
             <div v-else class="home-stamp-placeholder">
               <TripStamp
                 title="NEXT"
@@ -366,7 +330,7 @@ function dateValue(value) {
 
         <section class="home-memories" aria-labelledby="home-memories-title">
           <h2 id="home-memories-title" class="home-label">
-            {{ isLoggedIn ? '최근 추억' : '여행 조각들' }}
+            최근 추억
           </h2>
           <div class="home-memories__strip">
             <template v-if="isLoggedIn && recentMemories.length">
@@ -386,21 +350,10 @@ function dateValue(value) {
                 />
               </button>
             </template>
-            <template v-else-if="!isLoggedIn">
-              <TripPolaroid
-                v-for="memory in guestMemorySamples"
-                :key="memory.title"
-                :title="memory.title"
-                :subtitle="memory.subtitle"
-                :tags="memory.tags"
-                :tone="memory.tone"
-                completed
-              />
-            </template>
             <TripPolaroid
               v-else
-              title="다녀온 여행을 기록해요"
-              subtitle="사진과 카드가 이곳에 모입니다"
+              title="아직 기록된 추억이 없어요"
+              subtitle="로그인하면 사진과 카드가 이곳에 모입니다"
               empty
             />
           </div>
@@ -429,37 +382,9 @@ function dateValue(value) {
                 />
               </button>
             </template>
-            <p
-              v-else-if="isLoggedIn"
-              class="home-upcoming-empty"
-              data-testid="home-upcoming-empty"
-            >
+            <p v-else class="home-upcoming-empty" data-testid="home-upcoming-empty">
               계획된 여행이 아직 없어요
             </p>
-            <template v-else>
-              <button class="home-ticket-button" type="button" @click="openTrips">
-                <TripTicket
-                  title="후쿠오카 주말 여행"
-                  region="후쿠오카"
-                  dates="07.05 - 07.07"
-                  serial="TL-2026-0705"
-                  status="TRIP TICKET"
-                  color="blue"
-                  :dday="13"
-                />
-              </button>
-              <button class="home-ticket-button" type="button" @click="openTrips">
-                <TripTicket
-                  title="다낭 휴양 여행"
-                  region="다낭"
-                  dates="12.20 - 12.23"
-                  serial="TL-2026-1220"
-                  status="TRIP TICKET"
-                  color="burgundy"
-                  :dday="41"
-                />
-              </button>
-            </template>
           </div>
         </section>
       </section>

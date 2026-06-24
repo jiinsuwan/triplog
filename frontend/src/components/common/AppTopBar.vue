@@ -23,6 +23,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  showDefaultAction: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 defineEmits(['create-trip'])
@@ -42,9 +46,13 @@ defineEmits(['create-trip'])
       <span aria-hidden="true">Search</span>
       <span>{{ searchPlaceholder }}</span>
     </div>
-    <slot name="actions">
-      <BaseButton variant="primary" @click="$emit('create-trip')">새 여행</BaseButton>
-    </slot>
+    <div class="ds-topbar__actions">
+      <slot name="actions">
+        <BaseButton v-if="showDefaultAction" variant="primary" @click="$emit('create-trip')">
+          새 여행
+        </BaseButton>
+      </slot>
+    </div>
     <RouterLink class="ds-avatar" to="/profile" aria-label="프로필">{{ userInitial }}</RouterLink>
   </header>
 </template>

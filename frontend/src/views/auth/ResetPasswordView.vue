@@ -1,10 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { confirmPasswordReset } from '@/api/authApi'
-import Password from 'primevue/password'
-import Button from 'primevue/button'
 import Message from 'primevue/message'
+import Password from 'primevue/password'
+
+import { confirmPasswordReset } from '@/api/authApi'
+import { AuthPassport, BaseButton } from '@/components/common'
 
 const router = useRouter()
 const route = useRoute()
@@ -42,17 +43,29 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="auth">
-    <h1>비밀번호 재설정</h1>
-    <Message v-if="!token" severity="error" :closable="false">
+  <AuthPassport
+    title="새 비밀번호를 정해주세요"
+    subtitle="다시 들어올 수 있도록 비밀번호를 재설정합니다."
+    cover-title="비밀번호를<br>재설정해요"
+    cover-subtitle="새 비밀번호로 여행 기록장에 다시 들어오세요."
+  >
+    <Message v-if="!token" severity="error" :closable="false" class="top-message">
       재설정 링크가 유효하지 않습니다. 다시 요청해 주세요.
     </Message>
-    <form v-else @submit.prevent="onSubmit">
-      <label>
+
+    <form v-else class="auth-form" @submit.prevent="onSubmit">
+      <label class="auth-field">
         <span>새 비밀번호</span>
-        <Password v-model="password" toggleMask autocomplete="new-password" placeholder="8자 이상" required />
+        <Password
+          v-model="password"
+          :feedback="false"
+          toggleMask
+          autocomplete="new-password"
+          placeholder="8자 이상"
+          required
+        />
       </label>
-      <label>
+      <label class="auth-field">
         <span>새 비밀번호 확인</span>
         <Password
           v-model="passwordConfirm"
@@ -64,27 +77,77 @@ async function onSubmit() {
         />
       </label>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
-      <Button type="submit" label="비밀번호 변경" :loading="loading" />
+      <BaseButton type="submit" variant="primary" block :disabled="loading">
+        {{ loading ? '변경 중' : '비밀번호 변경' }}
+      </BaseButton>
     </form>
-    <p v-if="failed || !token">
-      <RouterLink to="/forgot-password">재설정 다시 요청하기</RouterLink>
+
+    <p v-if="failed || !token" class="links">
+      <RouterLink class="form-link" to="/forgot-password">재설정 다시 요청하기</RouterLink>
     </p>
-  </main>
+  </AuthPassport>
 </template>
 
 <style scoped>
-.auth {
-  max-width: 420px;
-  margin: 4rem auto;
+.top-message {
+  margin-bottom: 14px;
 }
-.auth form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+
+.auth-form {
+  display: grid;
+  gap: 15px;
 }
-.auth label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+
+.auth-field {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-field > span {
+  color: var(--ink-sub);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.auth-field :deep(.p-password),
+.auth-field :deep(.p-password-input) {
+  width: 100%;
+}
+
+.auth-field :deep(.p-inputtext) {
+  background: var(--on-fill);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 11px 13px;
+}
+
+.auth-field :deep(.p-inputtext::placeholder) {
+  color: var(--ink-faint);
+}
+
+.auth-field :deep(.p-inputtext:enabled:focus) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(194, 105, 63, 0.16);
+  outline: none;
+}
+
+.form-link {
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.form-link:hover {
+  text-decoration: underline;
+}
+
+.links {
+  margin: 18px 0 0;
+  text-align: center;
 }
 </style>
