@@ -14,12 +14,14 @@ import { exportCardPng, computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
 import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
+import CorrectionDialog from '@/components/log/CorrectionDialog.vue'
 
 const props = defineProps({ photoIds: { type: Array, default: () => [] } })
 const emit = defineEmits(['back'])
 
 const card = useCardStore()
 const { load } = usePhotoContent()
+const correctionOpen = ref(false) // 외곽선 보정 팝업
 const { generate: genCaption, generating: captionGenerating, failed: captionFailed } = useCardCaptions()
 
 const TOOLS = [
@@ -390,9 +392,32 @@ function updateCaptionText(text) {
   )
   card.setCaption(currentId.value, { ...existing, response: { ...existing.response, objects } })
 }
-function generateCaption() {
-  if (card.outlines[currentId.value]?.status === 'READY') genCaption(currentId.value)
+// 선택 객체의 문구만 삭제(외곽선은 유지). 되살리려면 "문구 다시 생성"(전체 재생성).
+function deleteSelectedCaption() {
+  if (selectedItemId.value != null) card.removeCaptionObject(currentId.value, selectedItemId.value)
 }
+// 문구 = 전부 사용자 선택(자동 없음). 이미 있으면 "다시 생성"은 확인 후 캐시를 비우고 전체 재생성한다.
+const hasCaption = computed(() => !!card.captions[currentId.value])
+const regenAsk = ref(false)
+function generateCaption() {
+  if (card.outlines[currentId.value]?.status !== 'READY' || !items.value.length) return
+  if (card.captions[currentId.value]) {
+    regenAsk.value = true // 기존 문구 있음 → 덮어쓰기 확인
+    return
+  }
+  genCaption(currentId.value)
+}
+function confirmRegen() {
+  regenAsk.value = false
+  card.clearCaption(currentId.value) // 캐시 비워 재생성 허용(전체 새로)
+  genCaption(currentId.value)
+}
+function cancelRegen() {
+  regenAsk.value = false
+}
+watch(currentId, () => {
+  regenAsk.value = false
+})
 
 // --- 추가 텍스트 요소(왼쪽 텍스트 도구) — 직접 추가/편집/드래그/저장 ---
 // 사진별 추가 텍스트 { id, text, x, y(0~1 중심), size(배율), rotation(도), color, hidden }.
@@ -1092,7 +1117,10 @@ watch(
           <template v-if="selectedCaption">
             <label class="lbl">문구 (선택 객체)</label>
             <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
-            <p class="muted small">줄바꿈으로 여러 줄. 서체·색·크기 = 다음.</p>
+            <div class="row">
+              <button class="mini" @click="deleteSelectedCaption">문구 삭제</button>
+            </div>
+            <p class="muted small">줄바꿈으로 여러 줄. 지운 문구는 "문구 다시 생성"으로 되살릴 수 있어요.</p>
           </template>
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>
@@ -1129,6 +1157,9 @@ watch(
           <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
                객체를 선택해도 사라지지 않아야 한다). 선택 편집(A)과 도구 컨트롤(B)은 별개 블록. -->
           <div v-if="activeTool === 'ai'" class="tool-block">
+            <Button label="외곽선 보정" icon="pi pi-pencil" size="small" severity="secondary" class="full"
+              :disabled="!photoImg" @click="correctionOpen = true" />
+            <p class="muted small">놓친 객체는 탭/박스로 추가, 잘못 잡힌 객체는 골라서 모양 고치기·삭제.</p>
             <label class="ctl-lbl">외곽선 두께</label>
             <div class="stepper">
               <button class="step" title="얇게" @click="bumpWidth(-0.1)">−</button>
@@ -1145,9 +1176,16 @@ watch(
               <label class="row">선 길이 <input type="range" min="2" max="30" step="1" v-model.number="dashLen" /><span class="numv">{{ dashLen }}</span></label>
               <label class="row">간격 <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span></label>
             </template>
-            <Button label="✨ 문구 생성" size="small" severity="secondary" class="full"
-              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !items.length || !!card.captions[currentId]"
+            <Button :label="hasCaption ? '✨ 문구 다시 생성' : '✨ 문구 생성'" size="small" severity="secondary" class="full"
+              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !items.length"
               @click="generateCaption" />
+            <div v-if="regenAsk" class="regen-ask">
+              <span class="muted small">다시 만들면 지금 문구가 새로 바뀝니다.</span>
+              <div class="regen-btns">
+                <button class="mini primary" @click="confirmRegen">다시 생성</button>
+                <button class="mini" @click="cancelRegen">취소</button>
+              </div>
+            </div>
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
             <p v-else-if="captionFailed[currentId]" class="warn small">문구를 불러오지 못했어요. 다시 시도하거나 직접 꾸며도 좋아요.</p>
             <p v-else-if="hasNoOutline(currentId)" class="muted small">객체 인식이 잘 되지 않아 외곽선을 찾지 못했어요. 텍스트·선으로 꾸밀 수 있어요.</p>
@@ -1237,6 +1275,8 @@ watch(
       </ul>
       <span class="film-info">{{ doneCount }} / {{ photoIds.length }} 완성</span>
     </footer>
+
+    <CorrectionDialog v-model="correctionOpen" :photo-id="currentId" />
   </div>
 </template>
 
@@ -1526,6 +1566,30 @@ watch(
 .full {
   width: 100%;
   margin-bottom: 6px;
+}
+/* 문구 다시 생성 확인 */
+.regen-ask {
+  margin-bottom: 8px;
+}
+.regen-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.mini {
+  border: 1px solid #d6dbe1;
+  background: #fff;
+  border-radius: 7px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+}
+.mini.primary {
+  background: #3182f6;
+  border-color: #3182f6;
+  color: #fff;
 }
 .rd {
   display: inline-flex;

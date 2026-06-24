@@ -104,11 +104,32 @@ class CardCaptionControllerTest {
     }
 
     @Test
-    void 사용자_보정_item_src_user_은_문구_후보에서_제외된다() throws Exception {
-        // 자동검출(det) + 사용자 보정(user) 혼재 → user 는 anchors 가 없어 후보에서 빠진다(S4-LOG-01).
+    void 사용자_보정_item_도_anchors_가_있으면_문구_후보에_포함된다() throws Exception {
+        // 필터 기준이 src 가 아니라 anchors 유무 — 보정 item(src=user)도 합성 anchors 가 있으면 후보다(S4-LOG-01).
         JsonNode items = mapper.readTree(
                 "[{\"id\":0,\"label\":\"dish\",\"src\":\"det\",\"center\":[0.5,0.5],\"area\":0.2,\"anchors\":[[0.5,0.3,0.9]]},"
-                        + "{\"id\":1,\"label\":\"user\",\"src\":\"user\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[]}]");
+                        + "{\"id\":1,\"label\":\"user\",\"src\":\"user\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[[0.2,0.3,1.0]]}]");
+        when(photoService.getOutline(1L, 7L))
+                .thenReturn(new PhotoOutlineResponse(7L, OutlineStatus.READY, items));
+        CardCaptionResult result = new CardCaptionResult(
+                new CardCaptionResponse(List.of(new CardCaptionObject(0, 0, List.of("맛있다"))), null),
+                List.of());
+        when(cardCaptionService.generate(anyList())).thenReturn(result);
+
+        controller.caption(1L, 7L);
+
+        verify(cardCaptionService).generate(itemsCaptor.capture());
+        List<CardCaptionItem> derived = itemsCaptor.getValue();
+        assertThat(derived).hasSize(2);
+        assertThat(derived.stream().map(CardCaptionItem::src).toList()).contains("det", "user");
+    }
+
+    @Test
+    void anchors_가_빈_item_은_문구_후보에서_제외된다() throws Exception {
+        // anchors 가 비면(grid/sal 구제·레거시 등) 문구 놓을 자리가 없어 후보에서 빠진다(ANCHOR_OUT_OF_RANGE 방지).
+        JsonNode items = mapper.readTree(
+                "[{\"id\":0,\"label\":\"dish\",\"src\":\"det\",\"center\":[0.5,0.5],\"area\":0.2,\"anchors\":[[0.5,0.3,0.9]]},"
+                        + "{\"id\":1,\"label\":\"grid\",\"src\":\"grid\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[]}]");
         when(photoService.getOutline(1L, 7L))
                 .thenReturn(new PhotoOutlineResponse(7L, OutlineStatus.READY, items));
         CardCaptionResult result = new CardCaptionResult(
@@ -125,7 +146,8 @@ class CardCaptionControllerTest {
     }
 
     @Test
-    void 보정_item_만_있으면_문구_생성_없이_INVALID_INPUT_을_던진다() throws Exception {
+    void anchors_없는_item_만_있으면_문구_생성_없이_INVALID_INPUT_을_던진다() throws Exception {
+        // anchors 빈 item 만 있으면 문구 놓을 자리가 없다 — LLM 호출 전 차단(크레딧 보호).
         JsonNode items = mapper.readTree(
                 "[{\"id\":0,\"label\":\"user\",\"src\":\"user\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[]}]");
         when(photoService.getOutline(1L, 7L))
@@ -136,6 +158,25 @@ class CardCaptionControllerTest {
                 .satisfies(e ->
                         assertThat(((BusinessException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
         verifyNoInteractions(cardCaptionService);
+    }
+
+    @Test
+    void 보정_item_만_있어도_anchors_가_있으면_문구를_생성한다() throws Exception {
+        // 자동검출 0개 + 보정 item(anchors 보유)만 있는 사진도 문구 생성 — 보정 객체도 문구 받는다(S4-LOG-01).
+        JsonNode items = mapper.readTree(
+                "[{\"id\":0,\"label\":\"user\",\"src\":\"user\",\"center\":[0.2,0.2],\"area\":0.05,\"anchors\":[[0.2,0.3,1.0]]}]");
+        when(photoService.getOutline(1L, 7L))
+                .thenReturn(new PhotoOutlineResponse(7L, OutlineStatus.READY, items));
+        CardCaptionResult result = new CardCaptionResult(
+                new CardCaptionResponse(List.of(new CardCaptionObject(0, 0, List.of("맛있다"))), null),
+                List.of());
+        when(cardCaptionService.generate(anyList())).thenReturn(result);
+
+        controller.caption(1L, 7L);
+
+        verify(cardCaptionService).generate(itemsCaptor.capture());
+        assertThat(itemsCaptor.getValue()).hasSize(1);
+        assertThat(itemsCaptor.getValue().get(0).src()).isEqualTo("user");
     }
 
     @Test
