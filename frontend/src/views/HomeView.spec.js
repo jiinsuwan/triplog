@@ -152,6 +152,7 @@ describe('HomeView', () => {
     expect(wrapper.find('.home-empty-ticket').exists()).toBe(false)
     expect(wrapper.text()).toContain('새 여행 계획하기')
     expect(wrapper.text()).toContain('TripLog로 여행을 계획해보세요.')
+    expect(wrapper.find('.home-resume .ds-ticket__meta').text()).toBe('TripLog·여행을 계획해보세요.')
     expect(wrapper.findAll('.ds-ticket')).toHaveLength(1)
     expect(wrapper.find('.ds-ticket--unissued').exists()).toBe(true)
     expect(wrapper.find('.ds-ticket__barcode').exists()).toBe(false)

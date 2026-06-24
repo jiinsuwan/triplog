@@ -300,7 +300,7 @@ function dateValue(value) {
             <TripTicket
               title="새 여행을 계획해보세요."
               region="TripLog"
-              dates="TripLog로 여행을 계획해보세요."
+              dates="여행을 계획해보세요."
               serial="TL-READY"
               status="NEW TRIP"
               color="mustard"
