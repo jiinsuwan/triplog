@@ -130,6 +130,10 @@ public class OutlineCorrectionService {
 
         Boolean ok = txTemplate.execute(status -> {
             PhotoOutline locked = outlineMapper.findByPhotoIdForUpdate(photoId);
+            if (locked != null && locked.getStatus() == OutlineStatus.PENDING) {
+                // 자동 초안이 도는 중 적용하면 워커 markReady 와 경합해 사용자 보정을 덮어쓸 수 있다.
+                throw new BusinessException(ErrorCode.OUTLINE_PROCESSING);
+            }
             ArrayNode items = parseItems(locked == null ? null : locked.getItems());
             ArrayNode rebuilt = objectMapper.createArrayNode();
             boolean replaced = false;
@@ -158,14 +162,19 @@ public class OutlineCorrectionService {
         return new OutlineCorrectionResponse(itemId, polygons);
     }
 
+    // FE 가 보낸 polygons 방어 — loop 은 점 3개 이상의 배열, point 는 [x, y] 숫자 2개, 좌표는 유한 0~1.
+    // (top-level/empty 만 보던 느슨한 검사로는 [123]·[[]]·좌표 누락·문자열이 0.0 좌표로 통과해 영속됐다.)
     private static void validatePolygons(JsonNode polygons) {
         for (JsonNode loop : polygons) {
-            if (!loop.isArray()) {
-                continue;
+            if (!loop.isArray() || loop.size() < 3) {
+                throw invalid("외곽선은 점 3개 이상의 배열이어야 합니다.");
             }
             for (JsonNode p : loop) {
-                validateCoord(p.path(0).asDouble());
-                validateCoord(p.path(1).asDouble());
+                if (!p.isArray() || p.size() != 2 || !p.get(0).isNumber() || !p.get(1).isNumber()) {
+                    throw invalid("외곽선 점은 [x, y] 숫자 2개여야 합니다.");
+                }
+                validateCoord(p.get(0).asDouble());
+                validateCoord(p.get(1).asDouble());
             }
         }
     }

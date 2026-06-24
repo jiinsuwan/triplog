@@ -15,7 +15,7 @@ import {
   applyRefine,
   deleteOutlineItem,
 } from '@/api/outlineApi'
-import { itemAt, bboxCenter, normalizeBox, clamp01 } from '@/card/outlineEdit'
+import { itemAt, normalizeBox, clamp01 } from '@/card/outlineEdit'
 
 // 캔버스에 그릴 색. 외곽선은 단색 빨강(흰 글로우 없음). 선택은 색 대신 굵기로 구분.
 const C = {
@@ -309,7 +309,7 @@ async function addByTap(nx, ny) {
 async function addByBox(box) {
   await runCorrection(() => boxOutline(props.photoId, box), appendFromResult)
 }
-function appendFromResult(res) {
+async function appendFromResult(res) {
   if (!res || res.itemId < 0) {
     fail(
       addTool.value === 'box'
@@ -318,12 +318,10 @@ function appendFromResult(res) {
     )
     return
   }
-  card.appendOutlineItem(props.photoId, {
-    id: res.itemId,
-    polygons: res.polygons,
-    center: bboxCenter(res.polygons),
-    src: 'user',
-  })
+  // BE 가 저장한 전체 item(bbox/center/area/anchors)과 store 를 맞추기 위해 재동기화한다.
+  // 부분 append(anchors 누락) 시 그 객체 문구가 빈 공간 앵커가 아니라 중심에 붙는 문제를 막는다.
+  const data = await fetchPhotoOutline(props.photoId)
+  card.applyOutlineSync(props.photoId, data)
   selectedId.value = res.itemId
   lastTap.value = null
   info('대상을 추가했어요. 잘못 잡혔으면 목록에서 ✕로 지울 수 있어요.')
@@ -376,6 +374,8 @@ async function doPreview() {
   await runCorrection(
     () => previewRefine(props.photoId, { itemId: id, pos: pos.value, neg: neg.value }),
     (res) => {
+      // 취소했거나 다른 대상으로 바뀐 뒤 늦게 도착한 응답은 버린다(stale 미리보기 방지).
+      if (!refining.value || selectedId.value !== id) return
       if (!res || res.itemId < 0) {
         fail('이 점들로는 대상을 못 잡았어요. 점을 더하거나 빼서 다시 해보세요.')
         return

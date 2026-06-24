@@ -392,7 +392,7 @@ function updateCaptionText(text) {
   )
   card.setCaption(currentId.value, { ...existing, response: { ...existing.response, objects } })
 }
-// 선택 객체의 문구만 삭제(외곽선은 유지). 직접 타이핑으로 다시 달 수 있다.
+// 선택 객체의 문구만 삭제(외곽선은 유지). 되살리려면 "문구 다시 생성"(전체 재생성).
 function deleteSelectedCaption() {
   if (selectedItemId.value != null) card.removeCaptionObject(currentId.value, selectedItemId.value)
 }
@@ -1120,7 +1120,7 @@ watch(
             <div class="row">
               <button class="mini" @click="deleteSelectedCaption">문구 삭제</button>
             </div>
-            <p class="muted small">줄바꿈으로 여러 줄. 지운 문구는 직접 타이핑으로 다시 달 수 있어요.</p>
+            <p class="muted small">줄바꿈으로 여러 줄. 지운 문구는 "문구 다시 생성"으로 되살릴 수 있어요.</p>
           </template>
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>

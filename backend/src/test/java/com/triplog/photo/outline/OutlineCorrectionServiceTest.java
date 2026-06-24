@@ -425,6 +425,40 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
+    void commit_rejects_malformed_polygons() {
+        // FE 가 보낸 polygons 가 계약(loop=점 3개 이상 배열, point=[x,y] 숫자 2개)을 어기면 저장 전에 거절.
+        String[] bad = {
+                "[[[0.1,0.1],[0.2,0.2]]]",            // 점 2개(3 미만)
+                "[[[0.1],[0.2,0.2],[0.3,0.3]]]",       // point 가 [x,y] 2개 아님
+                "[[[\"a\",0.2],[0.2,0.2],[0.3,0.3]]]", // 좌표가 숫자 아님(문자열)
+                "[123]",                                 // loop 가 배열 아님
+                "[[[0.1,0.1],[0.2,0.2],[1.5,0.3]]]",   // 좌표 0~1 범위 밖
+        };
+        for (String p : bad) {
+            assertThatThrownBy(() -> service().commitRefine(USER, PHOTO, 5, json(p), List.of()))
+                    .as("malformed polygons: %s", p)
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+        }
+        verifyNoInteractions(inferenceClient);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
+    }
+
+    @Test
+    void commit_rejects_pending() {
+        // 적용 시점에 자동 외곽선 처리 중(PENDING)이면 막는다(stale apply 가 READY 로 덮어쓰는 것 방지).
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.PENDING, "img-7", "[]"));
+
+        assertThatThrownBy(() -> service().commitRefine(USER, PHOTO, 5,
+                json("[[[0.1,0.1],[0.2,0.1],[0.2,0.2]]]"), List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUTLINE_PROCESSING);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
+        verifyNoInteractions(inferenceClient);
+    }
+
+    @Test
     void delete_removes_item_from_items() {
         String existing = "[{\"id\":0,\"src\":\"det\"},{\"id\":3,\"src\":\"user\"}]";
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
