@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -232,29 +235,74 @@ public class OutlineCorrectionService {
         return it;
     }
 
-    // 대상 객체 안쪽 씨앗 점 = polygons 꼭짓점 평균(대부분 객체 내부). 없으면 center, 최후 [0.5, 0.5].
+    // 대상 객체 안쪽 씨앗 점 — 가장 큰 loop 의 "보장된" 내부점(수평 스캔라인 중점). 꼭짓점 평균은 오목/U·다중
+    // loop 도형에서 객체 밖(틈새)에 떨어질 수 있어 쓰지 않는다. 실패 시 center, 최후 [0.5, 0.5] 폴백.
     private double[] seedPoint(JsonNode item) {
-        double sx = 0;
-        double sy = 0;
-        int n = 0;
-        for (JsonNode loop : item.path("polygons")) {
-            if (!loop.isArray()) {
-                continue;
+        JsonNode loop = largestLoop(item.path("polygons"));
+        if (loop != null) {
+            double[] p = interiorPoint(loop);
+            if (p != null) {
+                return p;
             }
-            for (JsonNode p : loop) {
-                sx += p.path(0).asDouble();
-                sy += p.path(1).asDouble();
-                n++;
-            }
-        }
-        if (n > 0) {
-            return new double[]{clamp01(sx / n), clamp01(sy / n)};
         }
         JsonNode c = item.get("center");
         if (c != null && c.isArray() && c.size() >= 2) {
             return new double[]{clamp01(c.get(0).asDouble()), clamp01(c.get(1).asDouble())};
         }
         return new double[]{0.5, 0.5};
+    }
+
+    private JsonNode largestLoop(JsonNode polygons) {
+        JsonNode best = null;
+        int bestN = 0;
+        for (JsonNode loop : polygons) {
+            if (loop.isArray() && loop.size() > bestN) {
+                best = loop;
+                bestN = loop.size();
+            }
+        }
+        return best;
+    }
+
+    // loop 의 보장된 내부점: bbox 중앙 y 의 수평선과 변들의 교점 x 들 → 가장 넓은 내부 구간의 중점.
+    // (오목 도형도 내부 구간 안에 들어간다.) 교점이 2개 미만이면 null(폴백 유도).
+    private double[] interiorPoint(JsonNode loop) {
+        int n = loop.size();
+        if (n < 3) {
+            return null;
+        }
+        double minY = 1.0;
+        double maxY = 0.0;
+        for (JsonNode p : loop) {
+            double yy = p.path(1).asDouble();
+            minY = Math.min(minY, yy);
+            maxY = Math.max(maxY, yy);
+        }
+        double y = (minY + maxY) / 2.0;
+        List<Double> xs = new ArrayList<>();
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            double yi = loop.get(i).path(1).asDouble();
+            double yj = loop.get(j).path(1).asDouble();
+            if ((yi > y) != (yj > y)) {
+                double xi = loop.get(i).path(0).asDouble();
+                double xj = loop.get(j).path(0).asDouble();
+                xs.add(xi + (xj - xi) * (y - yi) / (yj - yi));
+            }
+        }
+        if (xs.size() < 2) {
+            return null;
+        }
+        Collections.sort(xs);
+        double bestMid = 0.0;
+        double bestW = -1.0;
+        for (int k = 0; k + 1 < xs.size(); k += 2) {
+            double w = xs.get(k + 1) - xs.get(k);
+            if (w > bestW) {
+                bestW = w;
+                bestMid = (xs.get(k) + xs.get(k + 1)) / 2.0;
+            }
+        }
+        return new double[]{clamp01(bestMid), clamp01(y)};
     }
 
     private double[][] prepend(double[] seed, double[][] pos) {

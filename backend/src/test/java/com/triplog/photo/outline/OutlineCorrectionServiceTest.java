@@ -322,6 +322,27 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
+    void refine_seed_is_inside_concave_object() {
+        // U자(오목) 도형 — 꼭짓점 평균은 틈새(객체 밖)에 떨어지지만 씨앗은 보장된 내부점이어야 한다.
+        String u = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.2,0.2],[0.3,0.2],[0.3,0.5],[0.5,0.5],"
+                + "[0.5,0.2],[0.6,0.2],[0.6,0.7],[0.2,0.7]]]}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", u));
+        when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.1,0.1],[0.2,0.1],[0.2,0.2]]]"));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", u));
+        when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
+
+        service().refine(USER, PHOTO, 5, new double[0][], null);   // pos 0개 → 씨앗만 전달
+
+        ArgumentCaptor<double[][]> posCap = ArgumentCaptor.forClass(double[][].class);
+        verify(inferenceClient).refine(eq("img-7"), posCap.capture(), any());
+        double[] seed = posCap.getValue()[0];                      // pos[0] = 씨앗
+        // 씨앗이 U자 틈새(x 0.3~0.5)가 아니라 왼쪽 다리(x 0.2~0.3) 안에 있어야 한다(꼭짓점 평균은 틈새=밖).
+        assertThat(seed[0]).isBetween(0.2, 0.3);
+        assertThat(seed[1]).isBetween(0.2, 0.7);
+    }
+
+    @Test
     void coordinates_reject_nan_infinity_negative() {
         assertThatThrownBy(() -> service().tap(USER, PHOTO, new double[]{Double.NaN, 0.5}))
                 .isInstanceOf(BusinessException.class)
