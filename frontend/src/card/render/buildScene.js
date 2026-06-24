@@ -95,10 +95,16 @@ export function buildScene({ items = [], captions = {}, canvas, photo, style = {
     const center = Array.isArray(item.center) ? item.center : [0.5, 0.5];
     const [cnx, cny] = cf.pt(center[0], center[1]);
 
-    // 노트 배치점 = 선택된 anchor(빈 공간 좌표). anchors 가 없으면 객체 중심으로 폴백.
-    const a = anchors[ai];
-    const [anx, any] = a ? cf.pt(a[0], a[1]) : [cnx, cny];
-    if (!cf.visible(anx, any)) continue; // 크롭으로 화면 밖 → 노트 둘 자리 없음
+    // 노트 배치점 = 사용자가 옮긴 위치(position, 캔버스 0~1) 우선, 없으면 선택된 anchor.
+    let anx, any;
+    if (obj.position && Number.isFinite(obj.position.x) && Number.isFinite(obj.position.y)) {
+      anx = obj.position.x;
+      any = obj.position.y;
+    } else {
+      const a = anchors[ai];
+      [anx, any] = a ? cf.pt(a[0], a[1]) : [cnx, cny];
+      if (!cf.visible(anx, any)) continue; // 크롭으로 화면 밖 → 노트 둘 자리 없음
+    }
 
     const rPx = itemRadiusPx(item, cf);
 

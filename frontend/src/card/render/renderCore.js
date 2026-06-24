@@ -14,7 +14,7 @@
 export const WHITE = '#fdf8ee'; // 따뜻한 흰 (강조 1색, 크림 톤) — 단색 여백 기본색도 이 값을 재사용(exportCard)
 const SHADOW = 'rgba(22,15,8,'; // 따뜻한 어두운 그림자 베이스
 
-const NOTE_SIZE_RATIO = 0.034; // overlay-place 와 동일(작고 섬세)
+const NOTE_SIZE_RATIO = 0.027; // 카드 문구 기본 크기(작게 — 여러 문구가 카드를 덮지 않게)
 const MARGIN_RATIO = 0.035;
 const CLOSING_SIZE_RATIO = 0.046;
 
@@ -38,6 +38,7 @@ export function renderCard(ctx, scene, assets = {}, opts = {}) {
   const { W, H } = scene.canvas;
   const noteFont = opts.noteFont || 'Ownglyph ooa';
   const closingFont = opts.closingFont || 'Ownglyph ooa';
+  const skipLuminance = !!opts.skipLuminance; // 드래그 중 getImageData 생략(성능)
   const noteSize = Math.round(W * NOTE_SIZE_RATIO);
   const margin = Math.round(W * MARGIN_RATIO);
 
@@ -46,7 +47,7 @@ export function renderCard(ctx, scene, assets = {}, opts = {}) {
 
   for (const layer of scene.layers) {
     if (layer.visible === false) continue;
-    if (layer.kind === 'note') drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font: noteFont });
+    if (layer.kind === 'note') drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font: noteFont, skipLuminance });
     else if (layer.kind === 'closing') drawClosingLayer(ctx, layer, { W, H, font: closingFont });
   }
 }
@@ -97,7 +98,7 @@ function drawPhotoTone(ctx, img, W, H, t, grain) {
 }
 
 // ---------- 한 레이어(코멘트 1개): 음영 → 외곽선 → 화살표 → 문구 → (장식) ----------
-function drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font }) {
+function drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font, skipLuminance }) {
   const lines = layer.lines;
   if (!lines || lines.length === 0) return; // 외부 호출 방어(빈 줄이면 measureText/Math.max 붕괴 방지)
   const lh = noteSize * 1.3;
@@ -121,8 +122,16 @@ function drawNoteLayer(ctx, layer, { W, H, noteSize, margin, font }) {
   const ny = y0 + noteSize;
 
   // 국소 음영 — 노트 박스 아래 사진 밝기 보고 강도 조절(밝을수록 강).
-  const lum = sampleLuminance(ctx, x0 - noteSize * 0.5, y0 - noteSize * 0.4, boxW + noteSize, boxH + noteSize * 0.7, W, H);
-  const strength = Math.min(0.34, Math.max(0.1, (lum - 0.32) * 0.6 + 0.12));
+  // 드래그 중(skipLuminance)에는 getImageData(비쌈)를 건너뛰고 고정 강도로 그린다(끝나면 풀 렌더).
+  const strength = skipLuminance
+    ? 0.2
+    : Math.min(
+        0.34,
+        Math.max(
+          0.1,
+          (sampleLuminance(ctx, x0 - noteSize * 0.5, y0 - noteSize * 0.4, boxW + noteSize, boxH + noteSize * 0.7, W, H) - 0.32) * 0.6 + 0.12,
+        ),
+      );
   drawLocalDarken(ctx, { x: x0 - noteSize * 0.5, y: y0 - noteSize * 0.4, w: boxW + noteSize, h: boxH + noteSize * 0.7, strength });
 
   // 외곽선(닫힌 루프별). radial 리샘플 + 접시 밖 오프셋 → 매끈한 손그림 윤곽.

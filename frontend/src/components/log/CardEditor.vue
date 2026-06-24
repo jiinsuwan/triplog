@@ -144,20 +144,30 @@ function setObjectVisible(id, vis) {
   vis ? s.delete(k) : s.add(k)
   hiddenObject.value = s
 }
-// 레이어 목록: 객체(외곽선+문구) + 마무리.
-const layers = computed(() => {
-  const list = items.value.map((item, i) => {
-    const cap = captionByItem.value[item.id]
-    return {
-      id: item.id,
-      no: i + 1,
-      kind: cap ? 'object-caption' : 'object',
-      label: cap ? (cap.note || []).join(' ') : item.label || `객체 ${i + 1}`,
-      hasCaption: !!cap,
-    }
-  })
-  return list
-})
+// 문구(캡션) 표시/숨김 — 외곽선과 독립(객체와 문구는 별개 레이어).
+const hiddenCaption = ref(new Set())
+const isCaptionOn = (id) => !hiddenCaption.value.has(keyOf(id))
+function toggleCaption(id) {
+  const k = keyOf(id)
+  const s = new Set(hiddenCaption.value)
+  s.has(k) ? s.delete(k) : s.add(k)
+  hiddenCaption.value = s
+}
+// 문구 위치 override — 사용자가 드래그한 위치(캔버스 0~1 정규화), 사진별. 없으면 anchor 자동배치.
+const captionPos = reactive({})
+const getCaptionPos = (id) => captionPos[keyOf(id)] ?? null
+function setCaptionPos(id, x, y) {
+  captionPos[keyOf(id)] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
+}
+// 마무리(closing) 표시/숨김 — 사진별.
+const hiddenClosing = ref(new Set())
+const isClosingOn = computed(() => !hiddenClosing.value.has(currentId.value))
+function toggleClosing() {
+  const s = new Set(hiddenClosing.value)
+  s.has(currentId.value) ? s.delete(currentId.value) : s.add(currentId.value)
+  hiddenClosing.value = s
+}
+// (통합 레이어 목록 layerRows 는 texts/lines 선언 뒤에 정의 — 아래.)
 
 let disposed = false
 onScopeDispose(() => {
@@ -167,6 +177,7 @@ onScopeDispose(() => {
 // 진입 시 처리 미완(PENDING)으로 넘어온 사진을 1회만 재조회한다(배치 화면 폴링이
 // deadline 으로 끊겼을 수 있다 — 그새 워커가 끝냈으면 반영). 무한 폴링 아님 = 진입 1회.
 onMounted(async () => {
+  card.hydrateCaptions(props.photoIds) // 새로고침 시 문구를 localStorage 에서 복원 → GMS 재생성 방지
   for (const id of props.photoIds) {
     if (disposed) break // 진입 직후 이탈 시 남은 재조회 중단(불필요 호출 방지)
     const s = card.outlines[id]?.status
@@ -223,12 +234,17 @@ async function loadCurrent() {
 const scene = computed(() => {
   const img = photoImg.value
   if (!img) return null
-  const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? []).filter((o) =>
-    isObjectOn(o.itemId),
-  )
+  const cr = contentRect.value
+  const cd = canvasDims.value
+  const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? [])
+    .filter((o) => isCaptionOn(o.itemId))
+    .map((o) => {
+      const p = getCaptionPos(o.itemId)
+      return p ? { ...o, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } } : o
+    })
   return buildScene({
     items: items.value,
-    captions: { objects: visibleObjects, closing: closing.value },
+    captions: { objects: visibleObjects, closing: isClosingOn.value ? closing.value : null },
     canvas: { W: contentRect.value.cw, H: contentRect.value.ch },
     photo: { w: img.naturalWidth, h: img.naturalHeight },
     // 외곽선은 에디터 paintOutlines 가 전담(두께·점선·흰색·visibility 조절) — renderCore sketch 외곽선 끔.
@@ -355,10 +371,10 @@ function redraw() {
     // fixed: 여백 채움 → 콘텐츠를 별도 캔버스에 그려 가운데 얹는다(export 와 동일).
     drawPadding(ctx, img, fw, fh)
     const content = getContentCanvas(cw, ch)
-    renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img })
+    renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img }, { skipLuminance: !!drag })
     ctx.drawImage(content, dx, dy)
   } else {
-    renderCard(ctx, sc, { photo: img }) // native: 프레임 전체가 콘텐츠
+    renderCard(ctx, sc, { photo: img }, { skipLuminance: !!drag }) // native: 프레임 전체가 콘텐츠
   }
   paintOutlines(ctx, img, fw, fh)
   drawLines(ctx, { W: fw, H: fh })
@@ -492,11 +508,9 @@ function selectText(id) {
 
 // --- 레이어 선택 + 표시/숨김(클립스튜디오식). 삭제는 없다(외곽선은 숨길 뿐). ---
 // 전체/일부 선택(체크박스) 후 일괄 숨기기/보이기. 눈 아이콘은 행별 즉시 토글.
-const layerKeys = computed(() => [
-  ...texts.value.map((t) => `txt:${t.id}`),
-  ...lines.value.map((l) => `line:${l.id}`),
-  ...items.value.map((it) => `obj:${it.id}`),
-])
+const layerKeys = computed(() =>
+  layerRows.value.filter((r) => r.kind !== 'closing').map((r) => `${r.kind}:${r.id}`),
+)
 const allSelected = computed(
   () => layerKeys.value.length > 0 && layerKeys.value.every((k) => bulkSelected.value.has(k)),
 )
@@ -508,14 +522,21 @@ function bulkSetVisible(vis) {
     const i = key.indexOf(':')
     const type = key.slice(0, i)
     const idRaw = key.slice(i + 1)
-    if (type === 'txt') {
+    if (type === 'text') {
       const t = texts.value.find((x) => x.id === idRaw)
       if (t) t.hidden = !vis
     } else if (type === 'line') {
       const l = lines.value.find((x) => x.id === idRaw)
       if (l) l.hidden = !vis
-    } else if (type === 'obj') setObjectVisible(Number(idRaw), vis)
+    } else if (type === 'outline') setObjectVisible(Number(idRaw), vis)
+    else if (type === 'caption') setCaptionVisible(Number(idRaw), vis)
   }
+}
+function setCaptionVisible(id, vis) {
+  const k = keyOf(id)
+  const s = new Set(hiddenCaption.value)
+  vis ? s.delete(k) : s.add(k)
+  hiddenCaption.value = s
 }
 
 const TEXT_LH = 1.4 // 줄 높이 배수(폰트 size 대비)
@@ -625,6 +646,56 @@ function selectLine(id) {
     selectedTextId.value = null
   }
 }
+
+// 통합 레이어 목록: 텍스트·선·외곽선·문구·마무리를 한 배열로(전체 순번 1..N). 묶지 않는다.
+const LAYER_CHIP = { text: '텍스트', line: '선', outline: '외곽선', caption: '문구', closing: '마무리' }
+const LAYER_CHIP_CLASS = { text: 'text', line: 'line', outline: '', caption: 'object-caption', closing: 'closing' }
+const layerRows = computed(() => {
+  const rows = []
+  for (const t of texts.value) rows.push({ kind: 'text', id: t.id, label: t.text || '(빈 텍스트)' })
+  for (const l of lines.value) rows.push({ kind: 'line', id: l.id, label: l.arrow !== 'none' ? '화살표' : '선' })
+  for (const item of items.value) {
+    rows.push({ kind: 'outline', id: item.id, label: item.label || '객체' })
+    const cap = captionByItem.value[item.id]
+    if (cap) rows.push({ kind: 'caption', id: item.id, label: (cap.note || []).join(' ') })
+  }
+  if (closing.value) rows.push({ kind: 'closing', id: 'closing', label: closing.value.text })
+  return rows.map((r, i) => ({ ...r, no: i + 1 }))
+})
+function layerOn(row) {
+  if (row.kind === 'text') return !texts.value.find((t) => t.id === row.id)?.hidden
+  if (row.kind === 'line') return !lines.value.find((l) => l.id === row.id)?.hidden
+  if (row.kind === 'outline') return isObjectOn(row.id)
+  if (row.kind === 'caption') return isCaptionOn(row.id)
+  if (row.kind === 'closing') return isClosingOn.value
+  return true
+}
+function toggleLayerRow(row) {
+  if (row.kind === 'text') {
+    const t = texts.value.find((x) => x.id === row.id)
+    if (t) t.hidden = !t.hidden
+  } else if (row.kind === 'line') {
+    const l = lines.value.find((x) => x.id === row.id)
+    if (l) l.hidden = !l.hidden
+  } else if (row.kind === 'outline') toggleObject(row.id)
+  else if (row.kind === 'caption') toggleCaption(row.id)
+  else if (row.kind === 'closing') toggleClosing()
+}
+function selectLayerRow(row) {
+  if (row.kind === 'text') selectText(row.id)
+  else if (row.kind === 'line') selectLine(row.id)
+  else if (row.kind === 'outline' || row.kind === 'caption') selectItem(row.id)
+}
+function isLayerActive(row) {
+  if (row.kind === 'text') return row.id === selectedTextId.value
+  if (row.kind === 'line') return row.id === selectedLineId.value
+  if (row.kind === 'outline' || row.kind === 'caption') return row.id === selectedItemId.value
+  return false
+}
+function removeLayerRow(row) {
+  if (row.kind === 'text') removeText(row.id)
+  else if (row.kind === 'line') removeLine(row.id)
+}
 // 화살촉.
 function arrowHead(ctx, tipX, tipY, fromX, fromY, size) {
   const a = Math.atan2(tipY - fromY, tipX - fromX)
@@ -637,24 +708,28 @@ function arrowHead(ctx, tipX, tipY, fromX, fromY, size) {
 }
 function paintLine(ctx, l, W, H) {
   const x1 = l.x1 * W, y1 = l.y1 * H, x2 = l.x2 * W, y2 = l.y2 * H
-  const lw = Math.max(2, W * 0.006 * (l.width ?? 1))
+  const lw = Math.max(3, W * 0.008 * (l.width ?? 1))
+  const dash = l.style === 'dashed' ? [lw * 2.5, lw * 1.8] : []
+  const drawStroke = (color, width, headSize) => {
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineWidth = width
+    ctx.setLineDash(dash)
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+    ctx.setLineDash([])
+    if (l.arrow === 'end' || l.arrow === 'both') arrowHead(ctx, x2, y2, x1, y1, headSize)
+    if (l.arrow === 'both') arrowHead(ctx, x1, y1, x2, y2, headSize)
+  }
   ctx.save()
-  ctx.strokeStyle = l.color ?? '#ffffff'
-  ctx.fillStyle = l.color ?? '#ffffff'
-  ctx.lineWidth = lw
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'
-  ctx.shadowBlur = lw * 0.6
-  ctx.setLineDash(l.style === 'dashed' ? [lw * 2.5, lw * 1.8] : [])
-  ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.stroke()
-  ctx.setLineDash([])
-  const head = lw * 3.4
-  if (l.arrow === 'end' || l.arrow === 'both') arrowHead(ctx, x2, y2, x1, y1, head)
-  if (l.arrow === 'both') arrowHead(ctx, x1, y1, x2, y2, head)
+  // 밝은 사진에서도 보이도록 어두운 외곽선을 먼저 깔고 그 위에 본 색을 그린다.
+  const halo = lw + Math.max(2, lw * 0.8)
+  drawStroke('rgba(0,0,0,0.55)', halo, halo * 2.6)
+  drawStroke(l.color ?? '#ffffff', lw, lw * 3.4)
   ctx.restore()
 }
 function drawLines(ctx, dims) {
@@ -718,6 +793,56 @@ function lineEndpointAt(l, nx, ny) {
 
 // 캔버스 드래그로 텍스트/선 이동·그리기. drag = { kind, ... }.
 let drag = null
+// AI 문구 박스(캔버스 0~1) — hit-test/드래그용. 중심 = override 또는 anchor, 크기 = 노트 측정.
+function captionBox(itemId) {
+  const o = captionByItem.value[itemId]
+  if (!o || !isCaptionOn(itemId)) return null
+  const lines = (o.note || [])
+    .flatMap((s) => String(s).split('\n'))
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (!lines.length) return null
+  const img = photoImg.value
+  const ctx = canvasEl.value?.getContext('2d')
+  if (!img || !ctx) return null
+  const cr = contentRect.value
+  const cd = canvasDims.value
+  const cw = cr.cw
+  const ch = cr.ch
+  // 박스 크기(콘텐츠 px) — noteSize 기준 측정.
+  const noteSize = Math.round(cw * 0.027)
+  ctx.font = `${noteSize}px "Ownglyph ooa"`
+  const boxW = Math.max(...lines.map((l) => ctx.measureText(l).width))
+  const boxH = lines.length * noteSize * 1.3
+  // 배치점(콘텐츠 px) — override 또는 anchor.
+  let ax, ay
+  const p = getCaptionPos(itemId)
+  if (p) {
+    ax = p.x * cd.W - cr.dx
+    ay = p.y * cd.H - cr.dy
+  } else {
+    const item = items.value.find((it) => it.id === itemId)
+    const anchors = Array.isArray(item?.anchors) ? item.anchors : []
+    let ai = Number.isInteger(o.anchor) ? o.anchor : 0
+    if (ai < 0 || ai >= anchors.length) ai = 0
+    const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, cw, ch)
+    const a = anchors[ai]
+    const [anx, any] = a ? cf.pt(a[0], a[1]) : [0.5, 0.5]
+    ax = anx * cw
+    ay = any * ch
+  }
+  // renderCore drawNoteLayer 와 동일 클램프(margin·하단 마무리 자리) → hit-test 가 실제 표시 위치와 일치.
+  const margin = Math.round(cw * 0.035)
+  const yMax = ch - margin - Math.round(cw * 0.046) * 2.4
+  const x0 = Math.min(cw - margin - boxW, Math.max(margin, ax - boxW / 2))
+  const y0 = Math.min(yMax - boxH, Math.max(margin, ay - boxH / 2))
+  return {
+    cx: (cr.dx + x0 + boxW / 2) / cd.W,
+    cy: (cr.dy + y0 + boxH / 2) / cd.H,
+    hw: boxW / 2 / cd.W,
+    hh: boxH / 2 / cd.H,
+  }
+}
 function bindCanvasDrag(e) {
   window.addEventListener('pointermove', onCanvasPointerMove)
   window.addEventListener('pointerup', onCanvasPointerUp)
@@ -813,6 +938,17 @@ function onCanvasPointerDown(e) {
     bindCanvasDrag(e)
     return
   }
+  // 5.5) AI 문구(캡션) 클릭 → 선택 + 드래그 이동
+  for (const item of items.value) {
+    const b = captionBox(item.id)
+    if (!b) continue
+    if (Math.abs(nx - b.cx) <= b.hw + 0.012 && Math.abs(ny - b.cy) <= b.hh + 0.012) {
+      selectItem(item.id)
+      drag = { kind: 'caption', id: item.id, dx: nx - b.cx, dy: ny - b.cy }
+      bindCanvasDrag(e)
+      return
+    }
+  }
   // 6) 빈 곳 클릭(선택 모드 등) → 선택 해제
   selectedItemId.value = null
   selectedTextId.value = null
@@ -831,6 +967,19 @@ function onCanvasPointerMove(e) {
       t.x = Math.min(1, Math.max(0, nx - drag.dx))
       t.y = Math.min(1, Math.max(0, ny - drag.dy))
     }
+  } else if (drag.kind === 'caption') {
+    // 콘텐츠 영역(레터박스 안)으로 제한 — 9:16 패딩에 떨어뜨려도 표시와 어긋나지 않게.
+    const cr = contentRect.value
+    const cd = canvasDims.value
+    const minX = cr.dx / cd.W
+    const maxX = (cr.dx + cr.cw) / cd.W
+    const minY = cr.dy / cd.H
+    const maxY = (cr.dy + cr.ch) / cd.H
+    setCaptionPos(
+      drag.id,
+      Math.min(maxX, Math.max(minX, nx - drag.dx)),
+      Math.min(maxY, Math.max(minY, ny - drag.dy)),
+    )
   } else if (drag.kind === 'text-rotate') {
     const t = texts.value.find((x) => x.id === drag.id)
     if (t) {
@@ -876,6 +1025,7 @@ function onCanvasPointerUp() {
     if (l && Math.hypot(l.x2 - l.x1, l.y2 - l.y1) < 0.02) removeLine(l.id)
   }
   drag = null
+  scheduleRedraw() // 드래그 종료 → 풀 품질(음영) 재렌더
   window.removeEventListener('pointermove', onCanvasPointerMove)
   window.removeEventListener('pointerup', onCanvasPointerUp)
 }
@@ -969,12 +1119,17 @@ async function exportCurrent() {
   // 합성 후 사진이 바뀌었으면(stale) 저장을 취소한다 — 잘못된 합성 PNG 다운로드 방지.
   const exportId = currentId.value
   try {
-    const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? []).filter((o) =>
-      isObjectOn(o.itemId),
-    )
+    const cr = contentRect.value
+    const cd = canvasDims.value
+    const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? [])
+      .filter((o) => isCaptionOn(o.itemId))
+      .map((o) => {
+        const p = getCaptionPos(o.itemId)
+        return p ? { ...o, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } } : o
+      })
     const inputs = {
       items: items.value,
-      captions: { objects: visibleObjects, closing: closing.value },
+      captions: { objects: visibleObjects, closing: isClosingOn.value ? closing.value : null },
       photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
       // 미리보기 scene 과 동일: 외곽선은 paintOutlines(composeOverlays)가 전담 → buildScene sketch 외곽선 끔.
       // (이게 빠지면 문구 생성된 객체는 buildScene sketch + paintOutlines 가 겹쳐 PNG 외곽선 중복)
@@ -1089,6 +1244,8 @@ watch(
         </button>
       </nav>
 
+      <!-- 가운데 열: 캔버스 + 필름스트립 (좌·우 패널은 전체 높이, 필름은 이 열 안에) -->
+      <div class="ed-center">
       <!-- 중: 캔버스 (줌) -->
       <section class="ed-stage" ref="stageEl">
         <!-- 사진 위 플로팅 모드 토글 -->
@@ -1106,7 +1263,27 @@ watch(
         </div>
       </section>
 
-      <!-- 우: 상세 설정 + 레이어 (구분선을 끌어 두 영역 높이 조절) -->
+      <!-- 위쪽 핸들을 끌어 필름스트립 높이 조절(썸네일 자동 확대) -->
+      <div class="film-resizer" title="끌어서 사진 크기 조절" @pointerdown="onFilmResizeDown"><span class="grip" /></div>
+
+      <!-- 하단: 카드 필름스트립 (사진마다 완성 토글) -->
+      <footer class="ed-bottom" :style="{ flex: `0 0 ${filmH}px`, '--filmH': filmH + 'px' }">
+        <ul class="filmstrip">
+          <li v-for="(id, i) in photoIds" :key="id">
+            <button class="film" :class="{ on: i === current }" @click="current = i">
+              <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
+              <span v-if="hasNoOutline(id)" class="film-badge" title="외곽선 없음 · 직접 꾸미기"></span>
+            </button>
+            <button class="film-status" :class="{ done: isDone(id) }" :title="isDone(id) ? '완성 해제' : '완성으로 표시'" @click="toggleDone(id)">
+              {{ isDone(id) ? '✓ 완성' : '미완성' }}
+            </button>
+          </li>
+        </ul>
+        <span class="film-info">{{ doneCount }} / {{ photoIds.length }} 완성</span>
+      </footer>
+      </div>
+
+      <!-- 우: 상세 설정 + 레이어 -->
       <aside class="ed-right">
         <div class="section detail">
           <h3>상세 설정</h3>
@@ -1117,9 +1294,7 @@ watch(
             <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
             <div class="row">
               <button class="mini" @click="deleteSelectedCaption">문구 삭제</button>
-            </div>
-            <p class="muted small">줄바꿈으로 여러 줄. 지운 문구는 "문구 다시 생성"으로 되살릴 수 있어요.</p>
-          </template>
+            </div>          </template>
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>
             <textarea class="cap-edit" :value="selectedText.text" rows="2" @input="updateTextValue($event.target.value)" />
@@ -1155,9 +1330,18 @@ watch(
           <!-- (B) 활성 도구 컨트롤 — 선택과 무관하게 전역 동작(외곽선 두께/스타일 등은 전역이라
                객체를 선택해도 사라지지 않아야 한다). 선택 편집(A)과 도구 컨트롤(B)은 별개 블록. -->
           <div v-if="activeTool === 'ai'" class="tool-block">
-            <Button label="외곽선 보정" icon="pi pi-pencil" size="small" severity="secondary" class="full"
-              :disabled="!photoImg" @click="correctionOpen = true" />
-            <p class="muted small">놓친 객체는 탭/박스로 추가, 잘못 잡힌 객체는 골라서 모양 고치기·삭제.</p>
+            <div class="act-row">
+              <button class="act-btn" :disabled="!photoImg" @click="correctionOpen = true">
+                <i class="pi pi-pencil" />외곽선 보정
+              </button>
+              <button
+                class="act-btn"
+                :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !items.length"
+                @click="generateCaption"
+              >
+                ✨ {{ hasCaption ? '문구 다시' : '문구 생성' }}
+              </button>
+            </div>
             <label class="ctl-lbl">외곽선 두께</label>
             <div class="stepper">
               <button class="step" title="얇게" @click="bumpWidth(-0.1)">−</button>
@@ -1170,13 +1354,12 @@ watch(
               <label class="rd"><input type="radio" value="solid" v-model="outlineStyle" /> 실선</label>
               <label class="rd"><input type="radio" value="dashed" v-model="outlineStyle" /> 점선</label>
             </div>
-            <template v-if="outlineStyle === 'dashed'">
-              <label class="row">선 길이 <input type="range" min="2" max="30" step="1" v-model.number="dashLen" /><span class="numv">{{ dashLen }}</span></label>
-              <label class="row">간격 <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span></label>
-            </template>
-            <Button :label="hasCaption ? '✨ 문구 다시 생성' : '✨ 문구 생성'" size="small" severity="secondary" class="full"
-              :disabled="captionGenerating || card.outlines[currentId]?.status !== 'READY' || !items.length"
-              @click="generateCaption" />
+            <div v-if="outlineStyle === 'dashed'" class="row dash-row">
+              <span>길이</span>
+              <input type="range" min="2" max="30" step="1" v-model.number="dashLen" /><span class="numv">{{ dashLen }}</span>
+              <span>간격</span>
+              <input type="range" min="1" max="30" step="1" v-model.number="dashGap" /><span class="numv">{{ dashGap }}</span>
+            </div>
             <div v-if="regenAsk" class="regen-ask">
               <span class="muted small">다시 만들면 지금 문구가 새로 바뀝니다.</span>
               <div class="regen-btns">
@@ -1185,20 +1368,14 @@ watch(
               </div>
             </div>
             <p v-if="captionGenerating" class="muted small">문구 생성 중…</p>
-            <p v-else-if="captionFailed[currentId]" class="warn small">문구를 불러오지 못했어요. 다시 시도하거나 직접 꾸며도 좋아요.</p>
-            <p v-else-if="hasNoOutline(currentId)" class="muted small">객체 인식이 잘 되지 않아 외곽선을 찾지 못했어요. 텍스트·선으로 꾸밀 수 있어요.</p>
-            <p v-else-if="!items.length" class="muted small">사진을 준비하고 있어요…</p>
-            <p v-else class="muted small">피사체 외곽선 {{ items.length }}개 인식. 레이어에서 켜고 끄기.</p>
+            <p v-else-if="captionFailed[currentId]" class="warn small">문구 생성 실패</p>
           </div>
-          <div v-else-if="activeTool === 'text'" class="tool-block">
-            <p class="muted small">캔버스를 클릭해 텍스트를 추가하세요.</p>
-          </div>
-          <p v-else-if="activeTool === 'deco' && !selectedCaption && !selectedText && !selectedLine" class="muted small">"장식" 추가는 곧 제공됩니다.</p>
+          <p v-else-if="activeTool === 'deco' && !selectedCaption && !selectedText && !selectedLine" class="muted small">장식은 곧 제공됩니다.</p>
         </div>
 
         <div class="section layers">
           <div class="layers-head">
-            <h3>레이어 <span class="muted">· {{ layers.length + texts.length + lines.length + (closing ? 1 : 0) }}</span></h3>
+            <h3>레이어 <span class="muted">· {{ layerRows.length }}</span></h3>
             <span class="grow" />
             <label class="all-vis" title="전체 선택">
               <input type="checkbox" :checked="allSelected" @change="setAllSelected($event.target.checked)" /> 전체 선택
@@ -1210,69 +1387,48 @@ watch(
             <span class="bulk-n">{{ bulkSelected.size ? bulkSelected.size + '개 선택' : '선택 후 숨기기/보이기' }}</span>
           </div>
 
-          <p v-if="!layers.length && !texts.length && !lines.length" class="muted small">레이어가 없습니다.</p>
+          <p v-if="!layerRows.length" class="muted small">레이어가 없습니다.</p>
           <ul class="layer-list">
-            <li v-for="t in texts" :key="t.id" :class="{ off: t.hidden }">
-              <button class="eye" :title="t.hidden ? '보이기' : '숨기기'" @click="toggleText(t)">
-                <i :class="t.hidden ? 'pi pi-eye-slash' : 'pi pi-eye'" />
+            <li
+              v-for="row in layerRows"
+              :key="row.kind + ':' + row.id"
+              :class="{ off: !layerOn(row), 'row-active': isLayerActive(row) }"
+            >
+              <button class="eye" :title="layerOn(row) ? '숨기기' : '보이기'" @click="toggleLayerRow(row)">
+                <i :class="layerOn(row) ? 'pi pi-eye' : 'pi pi-eye-slash'" />
               </button>
-              <input class="sel-ck" type="checkbox" title="선택" :checked="bulkSelected.has('txt:' + t.id)" @change="toggleBulk('txt:' + t.id)" />
-              <button class="layer" :class="{ active: t.id === selectedTextId }" @click="selectText(t.id)">
-                <span class="layer-name">{{ t.text || '(빈 텍스트)' }}</span>
+              <input
+                v-if="row.kind !== 'closing'"
+                class="sel-ck"
+                type="checkbox"
+                title="선택"
+                :checked="bulkSelected.has(row.kind + ':' + row.id)"
+                @change="toggleBulk(row.kind + ':' + row.id)"
+              />
+              <span v-else class="ck-sp" />
+              <button
+                class="layer"
+                :class="{ active: isLayerActive(row), static: row.kind === 'closing' }"
+                :disabled="row.kind === 'closing'"
+                @click="selectLayerRow(row)"
+              >
+                <span class="lno">{{ row.no }}</span>
+                <span class="layer-name">{{ row.label }}</span>
               </button>
-              <span class="chip text tag">텍스트</span>
-              <button class="del-one" title="삭제" @click="removeText(t.id)">✕</button>
-            </li>
-            <li v-for="l in lines" :key="l.id" :class="{ off: l.hidden }">
-              <button class="eye" :title="l.hidden ? '보이기' : '숨기기'" @click="toggleLine(l)">
-                <i :class="l.hidden ? 'pi pi-eye-slash' : 'pi pi-eye'" />
+              <span class="chip tag" :class="LAYER_CHIP_CLASS[row.kind]">{{ LAYER_CHIP[row.kind] }}</span>
+              <button
+                v-if="row.kind === 'text' || row.kind === 'line'"
+                class="del-one"
+                title="삭제"
+                @click="removeLayerRow(row)"
+              >
+                ✕
               </button>
-              <input class="sel-ck" type="checkbox" title="선택" :checked="bulkSelected.has('line:' + l.id)" @change="toggleBulk('line:' + l.id)" />
-              <button class="layer" :class="{ active: l.id === selectedLineId }" @click="selectLine(l.id)">
-                <span class="layer-name">{{ l.arrow !== 'none' ? '화살표' : '선' }}</span>
-              </button>
-              <span class="chip line tag">선</span>
-              <button class="del-one" title="삭제" @click="removeLine(l.id)">✕</button>
-            </li>
-            <li v-for="layer in layers" :key="layer.id" :class="{ off: !isObjectOn(layer.id) }">
-              <button class="eye" :title="isObjectOn(layer.id) ? '숨기기' : '보이기'" @click="toggleObject(layer.id)">
-                <i :class="isObjectOn(layer.id) ? 'pi pi-eye' : 'pi pi-eye-slash'" />
-              </button>
-              <input class="sel-ck" type="checkbox" title="선택" :checked="bulkSelected.has('obj:' + layer.id)" @change="toggleBulk('obj:' + layer.id)" />
-              <button class="layer" :class="{ active: layer.id === selectedItemId }" @click="selectItem(layer.id)">
-                <span class="lno">{{ layer.no }}</span>
-                <span class="layer-name">{{ layer.label }}</span>
-              </button>
-              <span class="chip tag" :class="layer.kind">{{ layer.hasCaption ? '문구' : '외곽선' }}</span>
-            </li>
-            <li v-if="closing" class="closing-row">
-              <span class="eye-sp" /><span class="ck-sp" />
-              <div class="layer static"><span class="layer-name">{{ closing.text }}</span></div>
-              <span class="chip closing tag">마무리</span>
             </li>
           </ul>
         </div>
       </aside>
     </div>
-
-    <!-- 위쪽 핸들을 끌어 필름스트립 높이 조절(썸네일 자동 확대) -->
-    <div class="film-resizer" title="끌어서 사진 크기 조절" @pointerdown="onFilmResizeDown"><span class="grip" /></div>
-
-    <!-- 하단: 카드 필름스트립 (사진마다 완성 토글) -->
-    <footer class="ed-bottom" :style="{ flex: `0 0 ${filmH}px`, '--filmH': filmH + 'px' }">
-      <ul class="filmstrip">
-        <li v-for="(id, i) in photoIds" :key="id">
-          <button class="film" :class="{ on: i === current }" @click="current = i">
-            <img v-if="thumbUrls[id]" :src="thumbUrls[id]" alt="" />
-            <span v-if="hasNoOutline(id)" class="film-badge">직접 꾸미기</span>
-          </button>
-          <button class="film-status" :class="{ done: isDone(id) }" :title="isDone(id) ? '완성 해제' : '완성으로 표시'" @click="toggleDone(id)">
-            {{ isDone(id) ? '✓ 완성' : '미완성' }}
-          </button>
-        </li>
-      </ul>
-      <span class="film-info">{{ doneCount }} / {{ photoIds.length }} 완성</span>
-    </footer>
 
     <CorrectionDialog v-model="correctionOpen" :photo-id="currentId" />
   </div>
@@ -1283,7 +1439,13 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f2f4f6;
+  background: var(--paper);
+}
+/* 슬라이더·라디오·체크박스 = 브라우저 기본 파랑 대신 디자인 accent(테라코타). */
+.ed input[type='range'],
+.ed input[type='radio'],
+.ed input[type='checkbox'] {
+  accent-color: var(--accent);
 }
 .ed-top {
   flex: 0 0 auto;
@@ -1291,15 +1453,15 @@ watch(
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
-  background: #fff;
-  border-bottom: 1px solid #e5e8eb;
+  background: var(--paper-card);
+  border-bottom: 1px solid var(--line);
 }
 .back {
   border: 0;
   background: none;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--ink-sub);
   cursor: pointer;
 }
 .title {
@@ -1312,13 +1474,13 @@ watch(
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #e5e8eb;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 2px 10px 4px;
 }
 .fmt legend {
   font-size: 0.7rem;
-  color: #8b95a1;
+  color: var(--ink-faint);
   padding: 0 4px;
 }
 .fmt label {
@@ -1329,14 +1491,14 @@ watch(
   cursor: pointer;
 }
 .ok {
-  color: #16c47e;
+  color: var(--t-sage);
   font-weight: 600;
   font-size: 0.85rem;
 }
 .pad-color {
   width: 24px;
   height: 22px;
-  border: 1px solid #d6dbe1;
+  border: 1px solid var(--line);
   border-radius: 5px;
   padding: 0;
   cursor: pointer;
@@ -1346,14 +1508,23 @@ watch(
   min-height: 0;
   display: flex;
 }
+/* 가운데 열 = 캔버스 + 필름스트립. 좌(rail)·우(right) 패널은 ed-mid 전체 높이를 차지한다. */
+.ed-center {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .ed-rail {
   flex: 0 0 64px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 10px 6px;
-  background: #fff;
-  border-right: 1px solid #e5e8eb;
+  background: var(--paper-card);
+  border-right: 1px solid var(--line);
 }
 .rail-btn {
   display: flex;
@@ -1365,11 +1536,11 @@ watch(
   background: none;
   border-radius: 10px;
   cursor: pointer;
-  color: #4b5563;
+  color: var(--ink-sub);
 }
 .rail-btn.on {
-  background: #f1ecfb;
-  color: #6d40d6;
+  background: var(--paper-dim);
+  color: var(--t-plum);
 }
 .rail-ic {
   font-size: 1.1rem;
@@ -1387,8 +1558,8 @@ watch(
   padding: 16px;
   overflow: auto; /* 줌 확대 시 스크롤. 가운데 정렬은 캔버스 margin:auto (justify/align center 는 overflow 좌상단을 잘라 스크롤 불가) */
   background:
-    radial-gradient(circle, #d6dbe1 1px, transparent 1px) 0 0 / 18px 18px,
-    #eef1f4;
+    radial-gradient(circle, var(--line) 1px, transparent 1px) 0 0 / 18px 18px,
+    var(--line2);
 }
 .stage-canvas {
   position: relative;
@@ -1406,7 +1577,7 @@ watch(
   padding: 6px 14px;
   border-radius: 99px;
   background: rgba(25, 31, 40, 0.72);
-  color: #fff;
+  color: var(--paper-card);
   font-size: 0.8rem;
   white-space: nowrap;
   pointer-events: none;
@@ -1416,7 +1587,7 @@ watch(
   margin: auto; /* flex 컨테이너 가운데 + 확대 시 좌상단까지 스크롤 접근 가능 */
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
-  background: #fff;
+  background: var(--paper-card);
 }
 /* 사진 위 플로팅 모드 토글(선택/생성) */
 .stage-modes {
@@ -1429,7 +1600,7 @@ watch(
   gap: 2px;
   padding: 3px;
   background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #e5e8eb;
+  border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
 }
@@ -1440,12 +1611,12 @@ watch(
   padding: 5px 16px;
   font-size: 0.82rem;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--ink-sub);
   cursor: pointer;
 }
 .stage-modes button.on {
-  background: #3182f6;
-  color: #fff;
+  background: var(--accent);
+  color: var(--paper-card);
 }
 /* 줌 컨트롤(스테이지 우하단) */
 .zoom-bar {
@@ -1456,8 +1627,8 @@ watch(
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  background: #fff;
-  border: 1px solid #e5e8eb;
+  background: var(--paper-card);
+  border: 1px solid var(--line);
   border-radius: 9px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
@@ -1466,19 +1637,19 @@ watch(
   background: none;
   cursor: pointer;
   font-size: 0.9rem;
-  color: #4b5563;
+  color: var(--ink-sub);
   padding: 2px 6px;
   border-radius: 6px;
 }
 .zoom-bar button:hover {
-  background: #f2f4f6;
+  background: var(--paper);
 }
 .zoom-bar .fit {
   font-size: 0.76rem;
 }
 .zoom-v {
   font-size: 0.76rem;
-  color: #4b5563;
+  color: var(--ink-sub);
   min-width: 38px;
   text-align: center;
 }
@@ -1486,19 +1657,58 @@ watch(
   flex: 0 0 268px;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-left: 1px solid #e5e8eb;
+  background: var(--paper-card);
+  border-left: 1px solid var(--line);
   overflow: hidden;
 }
 .section {
   padding: 14px;
-  border-bottom: 1px solid #eef1f4;
+  border-bottom: 1px solid var(--line2);
 }
-/* 상세 설정 = 고정 높이(패널의 56%). 도구를 바꿔도 레이어 패널이 안 밀리도록 고정 — 내용이 길면
-   내부 스크롤, 짧으면 아래가 여백. 레이어는 항상 같은 위치에서 시작한다. */
+/* 상세 설정 = 고정 높이. 도구를 바꿔도(점선 토글 포함) 레이어 패널이 안 밀리도록 고정 —
+   내용이 길면 내부 스크롤, 짧으면 아래가 여백. 레이어는 항상 같은 위치에서 시작한다. */
 .section.detail {
-  flex: 0 0 56%;
+  flex: 0 0 44%;
   overflow-y: auto;
+}
+/* 주요 동작 버튼(외곽선 보정 · 문구 생성) = 한 줄 2개. */
+.act-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.act-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 6px;
+  border: 1px solid var(--line, #e2d8c4);
+  border-radius: 9px;
+  background: var(--paper-card, #fffdf8);
+  color: var(--ink, #2c2926);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.act-btn:hover:not(:disabled) {
+  border-color: var(--accent, #c2693f);
+  color: var(--accent, #c2693f);
+}
+.act-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* 점선 세부(길이·간격) = 한 줄에 컴팩트. */
+.dash-row {
+  gap: 6px;
+  font-size: 0.78rem;
+}
+.dash-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
 }
 .section.layers {
   flex: 1;
@@ -1510,26 +1720,26 @@ watch(
 .tool-block {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #eef1f4;
+  border-top: 1px solid var(--line2);
 }
 .ed-right h3 {
   margin: 0 0 10px;
   font-size: 0.92rem;
 }
 .muted {
-  color: #8b95a1;
+  color: var(--ink-faint);
   font-weight: 400;
 }
 .small {
   font-size: 0.8rem;
 }
 .warn {
-  color: #f04452;
+  color: var(--complete);
 }
 .lbl {
   display: block;
   font-size: 0.82rem;
-  color: #4b5563;
+  color: var(--ink-sub);
   margin-bottom: 4px;
 }
 .row {
@@ -1537,7 +1747,7 @@ watch(
   align-items: center;
   gap: 8px;
   font-size: 0.82rem;
-  color: #4b5563;
+  color: var(--ink-sub);
   margin-bottom: 10px;
 }
 .full {
@@ -1554,19 +1764,19 @@ watch(
   margin-top: 4px;
 }
 .mini {
-  border: 1px solid #d6dbe1;
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--paper-card);
   border-radius: 7px;
   padding: 4px 12px;
   font-size: 0.78rem;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--ink-sub);
   cursor: pointer;
 }
 .mini.primary {
-  background: #3182f6;
-  border-color: #3182f6;
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper-card);
 }
 .rd {
   display: inline-flex;
@@ -1577,7 +1787,7 @@ watch(
 .ctl-lbl {
   display: block;
   font-size: 0.82rem;
-  color: #4b5563;
+  color: var(--ink-sub);
   margin-bottom: 6px;
 }
 /* 외곽선 두께 = 슬라이더 + −/+ + 숫자 직접 입력 */
@@ -1595,21 +1805,21 @@ watch(
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
-  border: 1px solid #d6dbe1;
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--paper-card);
   border-radius: 7px;
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
-  color: #4b5563;
+  color: var(--ink-sub);
 }
 .step:hover {
-  background: #f7f8fa;
+  background: var(--paper-dim);
 }
 .num {
   flex: 0 0 48px;
   width: 48px;
-  border: 1px solid #d6dbe1;
+  border: 1px solid var(--line);
   border-radius: 7px;
   padding: 3px 4px;
   font: inherit;
@@ -1619,13 +1829,13 @@ watch(
 .numv {
   flex: 0 0 auto;
   font-size: 0.78rem;
-  color: #8b95a1;
+  color: var(--ink-faint);
   min-width: 16px;
   text-align: right;
 }
 .cap-edit {
   width: 100%;
-  border: 1px solid #d6dbe1;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px;
   font: inherit;
@@ -1659,7 +1869,7 @@ watch(
   align-items: center;
   gap: 4px;
   font-size: 0.78rem;
-  color: #4b5563;
+  color: var(--ink-sub);
   cursor: pointer;
 }
 /* 선택 후 일괄 숨기기/보이기 바 */
@@ -1670,22 +1880,22 @@ watch(
   margin-bottom: 8px;
 }
 .bulk-bar button {
-  border: 1px solid #e5e8eb;
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--paper-card);
   border-radius: 7px;
   padding: 3px 10px;
   font-size: 0.76rem;
   cursor: pointer;
-  color: #4b5563;
+  color: var(--ink-sub);
 }
 .bulk-bar button:disabled {
-  color: #c9d2db;
+  color: var(--ink-faint);
   cursor: default;
 }
 .bulk-n {
   margin-left: auto;
   font-size: 0.72rem;
-  color: #8b95a1;
+  color: var(--ink-faint);
 }
 /* 행별 가시성 눈 아이콘(클릭 토글) */
 .eye {
@@ -1696,7 +1906,7 @@ watch(
   place-items: center;
   border: 0;
   background: none;
-  color: #3182f6;
+  color: var(--accent);
   cursor: pointer;
   font-size: 0.78rem;
 }
@@ -1718,7 +1928,7 @@ watch(
   opacity: 0.45;
 }
 .layer-list li.off .eye {
-  color: #c9d2db;
+  color: var(--ink-faint);
 }
 /* 태그(외곽선/문구/텍스트/마무리)는 오른쪽으로 — 레이어 버튼(flex:1)이 밀어낸다. */
 .chip.tag {
@@ -1735,7 +1945,7 @@ watch(
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #f04452;
+  color: var(--complete);
   opacity: 0.7;
 }
 .del-one:hover {
@@ -1749,16 +1959,22 @@ watch(
   gap: 6px;
   text-align: left;
   border: 0;
-  background: #f7f8fa;
-  border-radius: 8px;
-  padding: 6px 8px;
+  background: none;
+  padding: 4px 2px;
   cursor: pointer;
 }
 .layer.static {
   cursor: default;
 }
-.layer.active {
-  background: #eaf1ff;
+.layer.active .layer-name {
+  color: var(--accent);
+  font-weight: 700;
+}
+/* 선택된 행 = 줄 전체 하이라이트 + 왼쪽 accent 바(선택 명확). */
+.layer-list li.row-active {
+  background: rgba(194, 105, 63, 0.12);
+  border-radius: 8px;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .lno {
   flex: 0 0 auto;
@@ -1767,8 +1983,8 @@ watch(
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #3182f6;
-  color: #fff;
+  background: var(--accent);
+  color: var(--paper-card);
   font-size: 0.62rem;
   font-weight: 800;
 }
@@ -1778,21 +1994,21 @@ watch(
   font-weight: 700;
   border-radius: 5px;
   padding: 1px 5px;
-  background: #e3ecff;
-  color: #3182f6;
+  background: var(--paper-dim);
+  color: var(--accent);
 }
 .chip.object-caption,
 .chip.closing {
-  background: #eee7fb;
-  color: #6d40d6;
+  background: var(--paper-dim);
+  color: var(--t-plum);
 }
 .chip.text {
-  background: #e7f7ee;
-  color: #16a866;
+  background: var(--paper-dim);
+  color: var(--t-sage);
 }
 .chip.line {
-  background: #fdeede;
-  color: #d97706;
+  background: var(--paper-dim);
+  color: var(--t-mustard);
 }
 .card-canvas.grab {
   cursor: grab;
@@ -1814,7 +2030,7 @@ watch(
   align-items: stretch;
   gap: 14px;
   padding: 8px 16px;
-  background: #fff;
+  background: var(--paper-card);
   overflow: hidden;
   min-height: 0;
 }
@@ -1825,18 +2041,18 @@ watch(
   align-items: center;
   justify-content: center;
   cursor: ns-resize;
-  background: #fff;
-  border-top: 1px solid #e5e8eb;
+  background: var(--paper-card);
+  border-top: 1px solid var(--line);
   touch-action: none;
 }
 .film-resizer .grip {
   width: 44px;
   height: 3px;
   border-radius: 99px;
-  background: #d6dbe1;
+  background: var(--line);
 }
 .film-resizer:hover .grip {
-  background: #8b95a1;
+  background: var(--ink-faint);
 }
 .filmstrip {
   list-style: none;
@@ -1865,14 +2081,14 @@ watch(
   aspect-ratio: 40 / 71;
   width: auto;
   padding: 0;
-  border: 1px solid #e5e8eb;
+  border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
-  background: #f2f4f6;
+  background: var(--paper);
   cursor: pointer;
 }
 .film.on {
-  outline: 3px solid #3182f6;
+  outline: 3px solid var(--accent);
   outline-offset: -1px;
 }
 .film img {
@@ -1882,14 +2098,13 @@ watch(
 }
 .film-badge {
   position: absolute;
-  left: 3px;
-  bottom: 3px;
-  padding: 1px 6px;
-  border-radius: 99px;
-  background: rgba(49, 130, 246, 0.92);
-  color: #fff;
-  font-size: 0.6rem;
-  font-weight: 700;
+  left: 5px;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e6b422;
+  box-shadow: 0 0 0 2px var(--paper-card);
   pointer-events: none;
 }
 /* 사진별 완성 토글 배지(썸네일 아래) */
@@ -1900,17 +2115,17 @@ watch(
   font-size: 0.66rem;
   font-weight: 700;
   cursor: pointer;
-  background: #eef1f4;
-  color: #8b95a1;
+  background: var(--line2);
+  color: var(--ink-faint);
   white-space: nowrap;
 }
 .film-status.done {
-  background: #e7f7ee;
-  color: #16a866;
+  background: var(--paper-dim);
+  color: var(--t-sage);
 }
 .film-info {
   flex: 0 0 auto;
   font-size: 0.82rem;
-  color: #8b95a1;
+  color: var(--ink-faint);
 }
 </style>
