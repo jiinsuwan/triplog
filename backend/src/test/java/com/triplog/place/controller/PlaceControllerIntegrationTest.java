@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,6 +41,51 @@ class PlaceControllerIntegrationTest {
     }
 
     @Test
+    void flyway_seed_loads_tourapi_content_types_and_detail_documents() {
+        assertThat(tourApiPlaceCount("LODGING")).isGreaterThan(0);
+        assertThat(tourApiPlaceCount("CULTURE")).isGreaterThan(0);
+        assertThat(tourApiPlaceCount("EVENT")).isGreaterThan(0);
+        assertThat(tourApiPlaceCount("TRAVEL_COURSE")).isGreaterThan(0);
+        assertThat(tourApiPlaceCount("SHOPPING")).isGreaterThan(0);
+        assertThat(tourApiPlaceCount("RESTAURANT")).isGreaterThan(0);
+
+        Long documentCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM place_documents
+                        WHERE source = 'TOUR_API'
+                          AND document_type = 'TOURAPI_DETAIL'
+                        """,
+                Long.class);
+        Long emptyDocumentTextCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM place_documents
+                        WHERE source = 'TOUR_API'
+                          AND document_type = 'TOURAPI_DETAIL'
+                          AND (document_text IS NULL OR document_text = '')
+                        """,
+                Long.class);
+
+        assertThat(documentCount).isEqualTo(297);
+        assertThat(emptyDocumentTextCount).isZero();
+    }
+
+    @Test
+    void flyway_seed_excludes_tourapi_places_with_out_of_korea_coordinates() {
+        Long invalidCoordinateCount = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM places
+                        WHERE source = 'TOUR_API'
+                          AND (
+                              latitude < 32 OR latitude > 39
+                              OR longitude < 124 OR longitude > 132
+                          )
+                        """,
+                Long.class);
+
+        assertThat(invalidCoordinateCount).isZero();
+    }
+
+    @Test
     void list_places_without_auth_and_filter_by_region_category_keyword() throws Exception {
         mockMvc.perform(get("/places")
                         .param("region1", "서울특별시")
@@ -56,6 +102,51 @@ class PlaceControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.items[0].placeType").value("ATTRACTION"))
                 .andExpect(jsonPath("$.data.items[0].region1").value("서울특별시"))
                 .andExpect(jsonPath("$.data.items[0].region2").value("용산구"));
+    }
+
+    @Test
+    void list_places_filters_by_place_type() throws Exception {
+        mockMvc.perform(get("/places")
+                        .param("placeType", "lodging")
+                        .param("size", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.total").value(greaterThan(0)))
+                .andExpect(jsonPath("$.data.items[0].source").value("TOUR_API"))
+                .andExpect(jsonPath("$.data.items[0].placeType").value("LODGING"))
+                .andExpect(jsonPath("$.data.items[0].category").value("숙박"));
+    }
+
+    @Test
+    void list_places_without_place_type_keeps_public_tourist_catalog() throws Exception {
+        Long expectedDefaultTotal = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM places
+                        WHERE place_type IN ('ATTRACTION', 'TOURIST_COMPLEX')
+                        """,
+                Long.class);
+        Long allPlaceTotal = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM places", Long.class);
+
+        assertThat(expectedDefaultTotal).isNotNull();
+        assertThat(allPlaceTotal).isNotNull();
+        assertThat(expectedDefaultTotal).isLessThan(allPlaceTotal);
+
+        mockMvc.perform(get("/places")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.total").value(expectedDefaultTotal.intValue()));
+    }
+
+    @Test
+    void list_places_returns_empty_result_for_unknown_place_type() throws Exception {
+        mockMvc.perform(get("/places")
+                        .param("placeType", "UNKNOWN_TYPE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.items").isEmpty());
     }
 
     @Test
@@ -119,5 +210,16 @@ class PlaceControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("SUCCESS"))
                 .andExpect(jsonPath("$.data[?(@ == '관광지')]").isNotEmpty())
                 .andExpect(jsonPath("$.data[?(@ == '관광단지')]").isNotEmpty());
+    }
+
+    private Long tourApiPlaceCount(String placeType) {
+        return jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM places
+                        WHERE source = 'TOUR_API'
+                          AND place_type = ?
+                        """,
+                Long.class,
+                placeType);
     }
 }

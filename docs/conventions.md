@@ -307,6 +307,7 @@ API를 새로 만들거나 수정하는 Issue/PR은 **Test Criteria 작성 시 �
 | 단건 조회 API | 없는 id → 404 |
 | 생성/수정 API | 잘못된 body → 400 |
 | 목록 API | page/size/query/filter 동작 |
+| 목록 API 필터 추가 | 기존 기본 결과 회귀 + 신규 필터 정상값/unknown 값 안전 처리 |
 | DB migration 포함 PR | 깨끗한 DB에서 Flyway migration 적용 |
 | 외부 API 연동 | timeout/retry/fallback 또는 실패 응답 처리 |
 | 파일 업로드/서빙 API | 용량/확장자/권한/cache 정책 |

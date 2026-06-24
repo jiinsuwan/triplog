@@ -62,5 +62,8 @@ coverage/
 # ========== 사진 업로드 (로컬 저장) ==========
 uploads/
 
+# TourAPI local fetch output for review/import staging.
+data/tourapi/out/
+
 # 대용량 PoC 참고 PDF (커밋 제외)
 docs/poc/*.pdf
