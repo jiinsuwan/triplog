@@ -64,5 +64,40 @@ export const useCardStore = defineStore('card', {
     setCaption(photoId, data) {
       this.captions = { ...this.captions, [photoId]: data }
     },
+    // 보정 추가(탭/박스): 결과 item 을 외곽선에 더한다. 상태가 READY 가 아니었어도(FAILED 등) READY 로 올린다.
+    appendOutlineItem(photoId, item) {
+      const cur = this.outlines[photoId]
+      const items = cur?.status === 'READY' && Array.isArray(cur.items) ? cur.items : []
+      this.outlines = { ...this.outlines, [photoId]: { status: 'READY', items: [...items, item] } }
+    },
+    // 정제 후 서버 기준으로 외곽선을 갱신하고(교체·병합 흡수 반영), 더는 없는 item 의 문구를 정리한다.
+    applyOutlineSync(photoId, data) {
+      this.outlines = { ...this.outlines, [photoId]: data }
+      this.pruneCaptions(photoId, Array.isArray(data?.items) ? data.items.map((it) => it.id) : [])
+    },
+    // 객체 삭제(빼기): 외곽선에서 제거하고 그 객체의 문구도 함께 제거(없는 itemId 문구가 새 객체에 안 붙게).
+    removeOutlineItem(photoId, itemId) {
+      const cur = this.outlines[photoId]
+      if (!cur || !Array.isArray(cur.items)) return
+      const items = cur.items.filter((it) => it.id !== itemId)
+      this.outlines = { ...this.outlines, [photoId]: { ...cur, items } }
+      this.pruneCaptions(
+        photoId,
+        items.map((it) => it.id),
+      )
+    },
+    // 문구를 현재 존재하는 item id 들로만 정리한다(삭제·흡수된 itemId 의 문구 제거).
+    pruneCaptions(photoId, ids) {
+      const cap = this.captions[photoId]
+      if (!cap?.response?.objects) return
+      const keep = new Set(ids)
+      this.captions = {
+        ...this.captions,
+        [photoId]: {
+          ...cap,
+          response: { ...cap.response, objects: cap.response.objects.filter((o) => keep.has(o.itemId)) },
+        },
+      }
+    },
   },
 })

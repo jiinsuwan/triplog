@@ -102,4 +102,35 @@ describe('useCardStore', () => {
       expect(card.captions[7]).toEqual(data)
     })
   })
+
+  describe('보정 액션 — append/sync/remove', () => {
+    it('appendOutlineItem — 외곽선에 item 을 더하고 상태를 READY 로 올린다(FAILED 였어도)', () => {
+      const card = useCardStore()
+      card.setOutline(7, { status: 'FAILED', items: null })
+      card.appendOutlineItem(7, { id: 0, polygons: [[[0.1, 0.1]]] })
+      expect(card.outlines[7].status).toBe('READY')
+      expect(card.outlines[7].items).toHaveLength(1)
+      card.appendOutlineItem(7, { id: 1, polygons: [] })
+      expect(card.outlines[7].items.map((it) => it.id)).toEqual([0, 1])
+    })
+
+    it('removeOutlineItem — item 과 그 문구를 함께 제거한다', () => {
+      const card = useCardStore()
+      card.setOutline(7, { status: 'READY', items: [{ id: 0 }, { id: 3 }] })
+      card.setCaption(7, { response: { objects: [{ itemId: 0 }, { itemId: 3 }], closing: null } })
+      card.removeOutlineItem(7, 3)
+      expect(card.outlines[7].items.map((it) => it.id)).toEqual([0])
+      expect(card.captions[7].response.objects.map((o) => o.itemId)).toEqual([0]) // 3 문구도 제거
+    })
+
+    it('applyOutlineSync — 서버 외곽선으로 갱신하고 사라진 item 의 문구를 정리한다', () => {
+      const card = useCardStore()
+      card.setOutline(7, { status: 'READY', items: [{ id: 0 }, { id: 9 }] })
+      card.setCaption(7, { response: { objects: [{ itemId: 0 }, { itemId: 9 }], closing: null } })
+      // 정제로 9 가 0 에 흡수돼 사라진 서버 상태
+      card.applyOutlineSync(7, { status: 'READY', items: [{ id: 0, polygons: [[[0.1, 0.1]]] }] })
+      expect(card.outlines[7].items.map((it) => it.id)).toEqual([0])
+      expect(card.captions[7].response.objects.map((o) => o.itemId)).toEqual([0]) // 9 문구 정리
+    })
+  })
 })
