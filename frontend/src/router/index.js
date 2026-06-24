@@ -136,7 +136,7 @@ export function authGuard(to) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
   // 이미 로그인한 사용자의 기본 진입점은 여행 목록이다.
-  if (auth.isAuthenticated && (to.path === '/' || GUEST_ONLY_PATHS.includes(to.path))) {
+  if (auth.isAuthenticated && GUEST_ONLY_PATHS.includes(to.path)) {
     return { path: AUTHENTICATED_ENTRY_PATH }
   }
 

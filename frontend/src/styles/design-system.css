@@ -388,6 +388,41 @@ select {
   font-weight: 600;
 }
 
+.ds-ticket--unissued {
+  background: #fffaf0;
+  border-color: #e7dcc6;
+  box-shadow: 0 10px 24px -20px rgba(75, 50, 24, 0.5);
+}
+
+.ds-ticket--unissued .ds-ticket__stub-left {
+  background: color-mix(in srgb, var(--tc) 66%, #f4ead7);
+}
+
+.ds-ticket--unissued .ds-ticket__label,
+.ds-ticket--unissued .ds-ticket__dday-value {
+  color: color-mix(in srgb, var(--tc) 82%, #8b7a60);
+}
+
+.ds-ticket--unissued .ds-ticket__title {
+  color: color-mix(in srgb, var(--ink) 82%, #9b8d77);
+}
+
+.ds-ticket--unissued .ds-ticket__meta {
+  color: #8c7d66;
+}
+
+.ds-ticket--no-barcode .ds-ticket__stub-right {
+  gap: 0.24em;
+}
+
+.ds-ticket--no-barcode .ds-ticket__dday-label {
+  font-size: 0.72em;
+}
+
+.ds-ticket--no-barcode .ds-ticket__dday-value {
+  font-size: 1.72em;
+}
+
 .ds-ticket--torn {
   width: calc(var(--ticket-w) * 326 / 416);
 }

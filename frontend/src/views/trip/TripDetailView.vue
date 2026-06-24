@@ -9,6 +9,7 @@ import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
+import { TripTicket } from '@/components/common'
 import { useTripStore } from '@/stores/trip'
 import {
   REGION_OPTIONS,
@@ -35,6 +36,7 @@ const errors = ref({})
 const form = reactive(createTripFormFromTrip())
 
 const trip = computed(() => tripStore.selectedTrip)
+const isPastTrip = computed(() => isPastTripStatus(trip.value?.status ?? form.status))
 const statusMeta = computed(() => {
   const status = trip.value?.status ?? form.status
   return {
@@ -75,6 +77,29 @@ const endDateModel = computed({
     form.endDate = value ? toDateOnly(value) : ''
   },
 })
+const ticketStatus = computed(() => (isPastTrip.value ? 'MEMORY TICKET' : 'TRIP TICKET'))
+const ticketColor = computed(() => (isPastTrip.value ? 'khaki' : 'mustard'))
+const ticketSerial = computed(() => {
+  const sourceTrip = trip.value
+  const year = sourceTrip?.startDate?.slice(0, 4) || new Date().getFullYear()
+  const id = sourceTrip?.id ?? tripId.value
+  return `TL-${year}-${String(id).padStart(4, '0')}`
+})
+const ticketTags = computed(() => {
+  const sourceTrip = trip.value
+  return sourceTrip ? [sourceTrip.region, sourceTrip.theme].filter(Boolean) : []
+})
+const ticketDday = computed(() => {
+  const sourceTrip = trip.value
+  if (!sourceTrip?.startDate || isPastTrip.value) return null
+
+  const today = new Date()
+  const target = new Date(`${sourceTrip.startDate}T00:00:00`)
+  today.setHours(0, 0, 0, 0)
+
+  return Math.max(0, Math.ceil((target - today) / 86400000))
+})
+const ticketStampTitle = computed(() => (trip.value?.region || 'TRIP').slice(0, 4))
 
 onMounted(() => {
   loadTrip()
@@ -199,11 +224,20 @@ function toDate(dateOnly) {
         <h1>{{ trip.title }}</h1>
         <p>{{ trip.region }} · {{ trip.theme }} · {{ tripDurationDays(trip) }}일</p>
 
-        <div class="summary-card">
-          <span>{{ trip.region }}</span>
-          <strong>{{ trip.title }}</strong>
-          <small>{{ formatTripDateRange(trip) }}</small>
-        </div>
+        <button class="summary-ticket" type="button" @click="goWorkspace">
+          <TripTicket
+            :title="trip.title"
+            :region="trip.region"
+            :dates="formatTripDateRange(trip)"
+            :serial="ticketSerial"
+            :tags="ticketTags"
+            :color="ticketColor"
+            :dday="ticketDday"
+            :torn="isPastTrip"
+            :stamp-title="ticketStampTitle"
+            :status="ticketStatus"
+          />
+        </button>
 
         <div class="summary-actions">
           <Button
@@ -429,7 +463,7 @@ function toDate(dateOnly) {
 .detail-shell {
   min-height: calc(100vh - 120px);
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  grid-template-columns: minmax(460px, 0.9fr) minmax(360px, 1.1fr);
   gap: 22px;
 }
 
@@ -470,44 +504,35 @@ function toDate(dateOnly) {
   font-weight: 750;
 }
 
-.summary-card {
-  min-height: 260px;
+.summary-ticket {
+  width: 100%;
   margin-top: auto;
-  padding: 22px;
-  border-radius: 28px;
+  padding: 18px;
+  border: 1px dashed #ddcfb5;
+  border-radius: 24px;
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  color: #fff;
-  background:
-    linear-gradient(0deg, rgba(9, 16, 22, 0.82), rgba(9, 16, 22, 0.08) 62%),
-    linear-gradient(135deg, #d66c55, #57495f 54%, #edbf53);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.20);
+  justify-content: center;
+  background: rgba(248, 241, 228, 0.72);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
-.summary-card span {
-  align-self: flex-start;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 12px;
-  font-weight: 900;
+.summary-ticket :deep(.ds-ticket) {
+  --ticket-w: 416px;
 }
 
-.summary-card strong {
-  margin-top: 16px;
-  font-size: 28px;
-  line-height: 1.08;
+.summary-ticket:hover {
+  border-color: #c76a3f;
+  box-shadow: 0 14px 34px rgba(82, 55, 30, 0.12);
+  transform: translateY(-2px);
 }
 
-.summary-card small {
-  margin-top: 8px;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 13px;
-  font-weight: 800;
+.summary-ticket:focus-visible {
+  outline: 3px solid rgba(199, 106, 63, 0.28);
+  outline-offset: 4px;
 }
 
 .summary-actions {
@@ -627,7 +652,7 @@ function toDate(dateOnly) {
   line-height: 1.6;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .detail-shell,
   .info-grid {
     grid-template-columns: 1fr;
@@ -637,6 +662,18 @@ function toDate(dateOnly) {
 @media (max-width: 640px) {
   .detail-page {
     padding: 14px;
+  }
+
+  .detail-summary {
+    padding: 18px;
+  }
+
+  .summary-ticket {
+    padding: 12px;
+  }
+
+  .summary-ticket :deep(.ds-ticket) {
+    --ticket-w: calc(100vw - 92px);
   }
 
   .form-grid {

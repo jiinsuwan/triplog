@@ -24,6 +24,26 @@ describe('design foundation components', () => {
     expect(wrapper.find('.ds-ticket__dday-value').classes()).toContain('is-muted')
   })
 
+  it('renders unissued trip tickets without barcode', () => {
+    const wrapper = mount(TripTicket, {
+      props: {
+        title: '새 여행을 계획해보세요.',
+        region: 'TripLog',
+        dates: 'TripLog로 여행을 계획해보세요.',
+        dday: '+',
+        ddayLabel: 'ADD',
+        unissued: true,
+        showBarcode: false,
+      },
+    })
+
+    expect(wrapper.classes()).toContain('ds-ticket--unissued')
+    expect(wrapper.classes()).toContain('ds-ticket--no-barcode')
+    expect(wrapper.find('.ds-ticket__barcode').exists()).toBe(false)
+    expect(wrapper.find('.ds-ticket__dday-label').text()).toBe('ADD')
+    expect(wrapper.find('.ds-ticket__dday-value').text()).toBe('+')
+  })
+
   it('renders stamp stages with design glyphs', () => {
     const wrapper = mount(TripStamp, {
       props: {
