@@ -100,11 +100,11 @@ describe('LoginView', () => {
     expect(wrapper.text()).toContain('이미 같은 이메일로 가입된 계정이 있습니다.')
   })
 
-  it('소셜 로그인 버튼은 백엔드 authorize 흐름을 시작한다', async () => {
+  it('소셜 로그인 아이콘은 provider별 백엔드 authorize 흐름을 바로 시작한다', async () => {
     routerMock.routeQuery = { redirect: '/profile' }
     const wrapper = mountLoginView()
 
-    await wrapper.findAll('button').find((button) => button.text().includes('구글로 계속하기')).trigger('click')
+    await wrapper.find('button[aria-label="구글로 계속하기"]').trigger('click')
 
     expect(authApi.startOAuthLogin).toHaveBeenCalledWith('google', '/profile')
   })

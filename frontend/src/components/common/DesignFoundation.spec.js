@@ -2,12 +2,38 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 
+import AppTopBar from './AppTopBar.vue'
 import BaseModal from './BaseModal.vue'
 import TripPolaroid from './TripPolaroid.vue'
 import TripStamp from './TripStamp.vue'
 import TripTicket from './TripTicket.vue'
 
 describe('design foundation components', () => {
+  it('can hide topbar search and default create action while keeping profile access', () => {
+    const wrapper = mount(AppTopBar, {
+      props: {
+        active: 'home',
+        showSearch: false,
+        showDefaultAction: false,
+        userInitial: '지',
+      },
+      global: {
+        stubs: {
+          RouterLink: {
+            props: ['to'],
+            template: '<a :href="typeof to === \'string\' ? to : to.path"><slot /></a>',
+          },
+        },
+      },
+    })
+
+    expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
+    expect(wrapper.find('.ds-topbar__actions').text()).toBe('')
+    expect(wrapper.text()).not.toContain('새 여행')
+    expect(wrapper.find('.ds-avatar').attributes('href')).toBe('/profile')
+    expect(wrapper.find('.ds-avatar').text()).toBe('지')
+  })
+
   it('renders trip ticket d-day and tag fallbacks', () => {
     const wrapper = mount(TripTicket, {
       props: {

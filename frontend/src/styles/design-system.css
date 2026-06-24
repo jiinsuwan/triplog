@@ -123,6 +123,17 @@ select {
   padding: 7px 12px;
 }
 
+.ds-topbar__actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.ds-topbar__search + .ds-topbar__actions {
+  margin-left: 0;
+}
+
 .ds-avatar {
   align-items: center;
   background: linear-gradient(135deg, var(--accent-soft), var(--accent));

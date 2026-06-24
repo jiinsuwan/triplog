@@ -39,24 +39,25 @@ describe('HomeView', () => {
     const wrapper = mountHomeView()
 
     expect(wrapper.find('h1').text()).toContain('다음 여행')
-    expect(wrapper.text()).toContain('이어서 계획하기')
+    expect(wrapper.text()).toContain('새 여행 시작하기')
     expect(wrapper.text()).toContain('곧 떠날 여행')
+    expect(wrapper.text()).toContain('계획된 여행이 아직 없어요')
+    expect(wrapper.text()).not.toContain('오사카 가을 여행')
+    expect(wrapper.text()).not.toContain('후쿠오카 주말 여행')
+    expect(wrapper.text()).not.toContain('교토 단풍 기록')
     expect(wrapper.find('.ds-tabs').text()).not.toContain('LOGS')
+    expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-start-trip-top"]').exists()).toBe(false)
   })
 
-  it('sends public start and preview actions through login redirects', async () => {
+  it('sends the public ticket start action through a login redirect', async () => {
     const wrapper = mountHomeView()
 
-    await wrapper.get('[data-testid="home-start-trip-top"]').trigger('click')
-    await wrapper.get('.home-ticket-button').trigger('click')
+    await wrapper.get('[data-testid="home-public-create"]').trigger('click')
 
-    expect(routerMock.push).toHaveBeenNthCalledWith(1, {
+    expect(routerMock.push).toHaveBeenCalledWith({
       path: '/login',
       query: { redirect: '/trips/new' },
-    })
-    expect(routerMock.push).toHaveBeenNthCalledWith(2, {
-      path: '/login',
-      query: { redirect: '/trips' },
     })
   })
 
@@ -104,10 +105,12 @@ describe('HomeView', () => {
     expect(wrapper.text()).toContain('후쿠오카 주말 여행')
     expect(wrapper.text()).toContain('다낭 휴양 여행')
     expect(wrapper.find('[data-testid="home-login"]').exists()).toBe(false)
+    expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-start-trip-top"]').exists()).toBe(false)
     expect(tripStore.fetchTripList).toHaveBeenCalled()
   })
 
-  it('opens authenticated dashboard actions without login redirects', async () => {
+  it('opens authenticated resume action without login redirects', async () => {
     const auth = useAuthStore()
     const tripStore = useTripStore()
     auth.setTokens('access', 'refresh')
@@ -127,11 +130,10 @@ describe('HomeView', () => {
 
     const wrapper = mountHomeView()
 
-    await wrapper.get('[data-testid="home-start-trip-top"]').trigger('click')
     await wrapper.get('[data-testid="home-resume-trip"]').trigger('click')
 
-    expect(routerMock.push).toHaveBeenNthCalledWith(1, '/trips/new')
-    expect(routerMock.push).toHaveBeenNthCalledWith(2, {
+    expect(wrapper.find('[data-testid="home-start-trip-top"]').exists()).toBe(false)
+    expect(routerMock.push).toHaveBeenCalledWith({
       name: 'trip-detail',
       params: { tripId: 9 },
     })
