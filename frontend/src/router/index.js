@@ -111,6 +111,14 @@ const routes = [
   },
 ]
 
+if (import.meta.env.DEV) {
+  routes.push({
+    path: '/design-system',
+    name: 'design-system-preview',
+    component: () => import('@/views/DesignSystemPreviewView.vue'),
+  })
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
