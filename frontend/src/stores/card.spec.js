@@ -132,5 +132,14 @@ describe('useCardStore', () => {
       expect(card.outlines[7].items.map((it) => it.id)).toEqual([0])
       expect(card.captions[7].response.objects.map((o) => o.itemId)).toEqual([0]) // 9 문구 정리
     })
+
+    it('removeCaptionObject — 한 객체 문구만 지운다(외곽선은 그대로)', () => {
+      const card = useCardStore()
+      card.setOutline(7, { status: 'READY', items: [{ id: 0 }, { id: 3 }] })
+      card.setCaption(7, { response: { objects: [{ itemId: 0 }, { itemId: 3 }], closing: null } })
+      card.removeCaptionObject(7, 3)
+      expect(card.captions[7].response.objects.map((o) => o.itemId)).toEqual([0])
+      expect(card.outlines[7].items.map((it) => it.id)).toEqual([0, 3]) // 외곽선은 유지
+    })
   })
 })

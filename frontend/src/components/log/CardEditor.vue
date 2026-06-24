@@ -392,6 +392,10 @@ function updateCaptionText(text) {
   )
   card.setCaption(currentId.value, { ...existing, response: { ...existing.response, objects } })
 }
+// 선택 객체의 문구만 삭제(외곽선은 유지). 직접 타이핑으로 다시 달 수 있다.
+function deleteSelectedCaption() {
+  if (selectedItemId.value != null) card.removeCaptionObject(currentId.value, selectedItemId.value)
+}
 // 문구 = 전부 사용자 선택(자동 없음). 이미 있으면 "다시 생성"은 확인 후 캐시를 비우고 전체 재생성한다.
 const hasCaption = computed(() => !!card.captions[currentId.value])
 const regenAsk = ref(false)
@@ -1113,7 +1117,10 @@ watch(
           <template v-if="selectedCaption">
             <label class="lbl">문구 (선택 객체)</label>
             <textarea class="cap-edit" :value="selectedCaption.note.join('\n')" rows="3" @input="updateCaptionText($event.target.value)" />
-            <p class="muted small">줄바꿈으로 여러 줄. 서체·색·크기 = 다음.</p>
+            <div class="row">
+              <button class="mini" @click="deleteSelectedCaption">문구 삭제</button>
+            </div>
+            <p class="muted small">줄바꿈으로 여러 줄. 지운 문구는 직접 타이핑으로 다시 달 수 있어요.</p>
           </template>
           <template v-else-if="selectedText">
             <label class="lbl">텍스트 (선택)</label>

@@ -70,6 +70,18 @@ export const useCardStore = defineStore('card', {
       delete next[photoId]
       this.captions = next
     },
+    // 한 객체의 문구만 지운다(외곽선은 유지). scene·export 가 captions 를 읽으므로 양쪽 즉시 반영.
+    removeCaptionObject(photoId, itemId) {
+      const cap = this.captions[photoId]
+      if (!cap?.response?.objects) return
+      this.captions = {
+        ...this.captions,
+        [photoId]: {
+          ...cap,
+          response: { ...cap.response, objects: cap.response.objects.filter((o) => o.itemId !== itemId) },
+        },
+      }
+    },
     // 보정 추가(탭/박스): 결과 item 을 외곽선에 더한다. 상태가 READY 가 아니었어도(FAILED 등) READY 로 올린다.
     appendOutlineItem(photoId, item) {
       const cur = this.outlines[photoId]
