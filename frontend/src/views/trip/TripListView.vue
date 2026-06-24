@@ -1,15 +1,15 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
-import Message from 'primevue/message'
-import ProgressSpinner from 'primevue/progressspinner'
-import Tag from 'primevue/tag'
+
+import { AppTopBar, BaseButton, EmptyState, TripTicket } from '@/components/common'
+import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
 import { formatTripDateRange, tripDurationDays } from '@/utils/tripForm'
-import { isPastTripStatus, tripStatusLabel, tripStatusSeverity } from '@/utils/tripStatus'
+import { isPastTripStatus } from '@/utils/tripStatus'
 
 const router = useRouter()
+const auth = useAuthStore()
 const tripStore = useTripStore()
 
 const planningTrips = computed(() =>
@@ -18,6 +18,12 @@ const planningTrips = computed(() =>
 const pastTrips = computed(() =>
   tripStore.trips.filter((trip) => isPastTripStatus(trip.status)),
 )
+const totalCount = computed(() => tripStore.trips.length)
+const displayName = computed(() => {
+  const user = auth.user
+  return user?.nickname || user?.name || user?.email?.split('@')[0] || 'T'
+})
+const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase() || 'T')
 
 onMounted(() => {
   tripStore.fetchTripList().catch(() => {})
@@ -31,422 +37,416 @@ function goDetail(trip) {
   router.push({ name: 'trip-detail', params: { tripId: trip.id } })
 }
 
-function statusLabel(status) {
-  return tripStatusLabel(status)
+function tripStatusText(status) {
+  return isPastTripStatus(status) ? 'MEMORY TICKET' : 'TRIP TICKET'
 }
 
-function statusSeverity(status) {
-  return tripStatusSeverity(status)
+function ticketSerial(trip) {
+  const year = trip.startDate?.slice(0, 4) || new Date().getFullYear()
+  return `TL-${year}-${String(trip.id).padStart(4, '0')}`
 }
 
-function accentFor(region = '') {
-  const accents = {
-    전주: 'linear-gradient(135deg, #d66c55, #57495f 54%, #edbf53)',
-    제주: 'linear-gradient(135deg, #6fb292, #3d6fb6 54%, #edbf53)',
-    부산: 'linear-gradient(135deg, #315f8f, #2e8f6b 54%, #f1c86b)',
-    서울: 'linear-gradient(135deg, #151d25, #806fd1 52%, #edbf53)',
-  }
-  return accents[region] || 'linear-gradient(135deg, #2e8f6b, #3182f6 54%, #edbf53)'
+function ticketColor(trip, index) {
+  if (isPastTripStatus(trip.status)) return 'khaki'
+  const colors = ['mustard', 'blue', 'sage', 'burgundy', 'plum']
+  return colors[index % colors.length]
+}
+
+function ticketDday(trip) {
+  if (!trip.startDate || isPastTripStatus(trip.status)) return null
+
+  const today = new Date()
+  const target = new Date(`${trip.startDate}T00:00:00`)
+  today.setHours(0, 0, 0, 0)
+
+  return Math.max(0, Math.ceil((target - today) / 86400000))
+}
+
+function tripTags(trip) {
+  return [trip.region, trip.theme].filter(Boolean)
+}
+
+function stampTitle(trip) {
+  return (trip.region || 'TRIP').slice(0, 4)
 }
 </script>
 
 <template>
-  <main class="trip-page">
-    <header class="trip-hero">
-      <div>
-        <span class="eyebrow">TripLog</span>
-        <h1>지난 여행은 카드로, 새 여행은 계획으로.</h1>
-        <p>
-          Sprint 1에서는 여행 목록과 생성 흐름을 먼저 완성합니다. 지도와 일정 편집은 다음
-          단계에서 이어 붙입니다.
-        </p>
+  <div class="trip-list-page">
+    <AppTopBar
+      active="trips"
+      search-placeholder="여행, 지역 검색"
+      :user-initial="userInitial"
+      @create-trip="goCreate"
+    >
+      <template #actions>
+        <BaseButton variant="primary" data-testid="trip-list-create-top" @click="goCreate">
+          새 여행
+        </BaseButton>
+      </template>
+    </AppTopBar>
+
+    <main class="trip-list-shell" aria-labelledby="trip-list-title">
+      <header class="trip-list-head">
+        <div>
+          <p class="ds-tag-hand">My trip tickets</p>
+          <h1 id="trip-list-title">나의 여행</h1>
+          <p>
+            계획 중인 여행과 다녀온 기록을 티켓으로 모아봅니다.
+          </p>
+        </div>
+        <div class="trip-list-head__summary" aria-label="여행 요약">
+          <span>전체 {{ totalCount }}개</span>
+          <span>계획 {{ planningTrips.length }}개</span>
+          <span>기록 {{ pastTrips.length }}개</span>
+        </div>
+      </header>
+
+      <div v-if="tripStore.error" class="trip-list-alert" role="alert">
+        {{ tripStore.error }}
       </div>
-      <Button label="새 여행 만들기" icon="pi pi-plus" size="large" @click="goCreate" />
-    </header>
 
-    <Message v-if="tripStore.error" severity="error" :closable="false" class="state-message">
-      {{ tripStore.error }}
-    </Message>
-
-    <section v-if="tripStore.loading" class="loading-state" aria-live="polite">
-      <ProgressSpinner aria-label="여행 목록 불러오는 중" />
-      <span>여행 목록을 불러오는 중입니다.</span>
-    </section>
-
-    <section v-else-if="!tripStore.hasTrips" class="empty-state">
-      <div class="empty-icon">+</div>
-      <h2>아직 만든 여행이 없습니다.</h2>
-      <p>제목, 기간, 지역, 테마만 먼저 정하고 다음 단계에서 장소와 경로를 채워보세요.</p>
-      <Button label="첫 여행 만들기" icon="pi pi-plus" @click="goCreate" />
-    </section>
-
-    <template v-else>
-      <section class="trip-section">
-        <div class="section-title">
-          <div>
-            <h2>새 여행 준비</h2>
-            <p>아직 계획 중인 여행입니다.</p>
-          </div>
-          <span>{{ planningTrips.length }}개</span>
-        </div>
-
-        <div class="trip-grid">
-          <button class="new-trip-card" type="button" @click="goCreate">
-            <span class="new-plus">+</span>
-            <strong>새 여행 추가</strong>
-            <small>장소 탐색과 경로 만들기는 다음 Sprint에서 연결합니다.</small>
-          </button>
-
-          <article
-            v-for="trip in planningTrips"
-            :key="trip.id"
-            class="trip-card"
-            role="button"
-            tabindex="0"
-            :style="{ '--card-accent': accentFor(trip.region) }"
-            @click="goDetail(trip)"
-            @keydown.enter.prevent="goDetail(trip)"
-            @keydown.space.prevent="goDetail(trip)"
-          >
-            <div class="story-lines" aria-hidden="true"><span /><span /><span /></div>
-            <Tag :value="statusLabel(trip.status)" :severity="statusSeverity(trip.status)" />
-            <div class="trip-card-copy">
-              <span>{{ trip.region }}</span>
-              <h3>{{ trip.title }}</h3>
-              <p>{{ formatTripDateRange(trip) }}</p>
-              <div class="trip-meta">
-                <em>{{ tripDurationDays(trip) }}일</em>
-                <em>{{ trip.theme }}</em>
-              </div>
-            </div>
-          </article>
-        </div>
+      <section v-if="tripStore.loading" class="trip-list-loading" aria-live="polite">
+        <span class="trip-list-loading__spinner" aria-hidden="true"></span>
+        <strong>여행 목록을 불러오는 중입니다.</strong>
       </section>
 
-      <section v-if="pastTrips.length" class="trip-section">
-        <div class="section-title">
-          <div>
-            <h2>지난 여행</h2>
-            <p>다녀온 여행은 기록 카드로 이어질 예정입니다.</p>
-          </div>
-          <span>{{ pastTrips.length }}개</span>
-        </div>
+      <EmptyState
+        v-else-if="!tripStore.hasTrips"
+        icon="TL"
+        title="아직 만든 여행이 없습니다."
+        description="제목, 기간, 지역, 테마를 정해 첫 여행 티켓을 만들어보세요."
+        action-label="첫 여행 만들기"
+        @action="goCreate"
+      />
 
-        <div class="trip-grid">
-          <article
-            v-for="trip in pastTrips"
-            :key="trip.id"
-            class="trip-card past"
-            role="button"
-            tabindex="0"
-            :style="{ '--card-accent': accentFor(trip.region) }"
-            @click="goDetail(trip)"
-            @keydown.enter.prevent="goDetail(trip)"
-            @keydown.space.prevent="goDetail(trip)"
-          >
-            <div class="story-lines" aria-hidden="true"><span /><span /><span /></div>
-            <Tag :value="statusLabel(trip.status)" :severity="statusSeverity(trip.status)" />
-            <div class="trip-card-copy">
-              <span>{{ trip.region }}</span>
-              <h3>{{ trip.title }}</h3>
-              <p>{{ formatTripDateRange(trip) }}</p>
-              <div class="trip-meta">
-                <em>{{ tripDurationDays(trip) }}일</em>
-                <em>{{ trip.theme }}</em>
-              </div>
+      <template v-else>
+        <section class="trip-list-section" aria-labelledby="planning-trips-title">
+          <header class="trip-list-section__head">
+            <div>
+              <h2 id="planning-trips-title">계획 중</h2>
+              <p>장소와 일정을 채워갈 여행입니다.</p>
             </div>
-          </article>
-        </div>
-      </section>
-    </template>
-  </main>
+            <span>{{ planningTrips.length }}개</span>
+          </header>
+
+          <div class="trip-ticket-grid">
+            <button class="trip-add-ticket" type="button" data-testid="trip-list-create" @click="goCreate">
+              <span class="trip-add-ticket__plus" aria-hidden="true">+</span>
+              <strong>새 여행 추가</strong>
+              <small>여행 정보를 먼저 만들고 장소를 채워갑니다.</small>
+            </button>
+
+            <button
+              v-for="(trip, index) in planningTrips"
+              :key="trip.id"
+              class="trip-ticket-card"
+              type="button"
+              :data-testid="`trip-ticket-${trip.id}`"
+              @click="goDetail(trip)"
+            >
+              <TripTicket
+                :title="trip.title"
+                :region="trip.region"
+                :dates="formatTripDateRange(trip)"
+                :serial="ticketSerial(trip)"
+                :status="tripStatusText(trip.status)"
+                :color="ticketColor(trip, index)"
+                :dday="ticketDday(trip)"
+                :tags="tripTags(trip)"
+              />
+              <span class="trip-ticket-card__meta">
+                {{ tripDurationDays(trip) }}일 · {{ trip.theme || '테마 미정' }}
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section v-if="pastTrips.length" class="trip-list-section" aria-labelledby="past-trips-title">
+          <header class="trip-list-section__head">
+            <div>
+              <h2 id="past-trips-title">지난 여행</h2>
+              <p>사진과 기록으로 이어질 여행입니다.</p>
+            </div>
+            <span>{{ pastTrips.length }}개</span>
+          </header>
+
+          <div class="trip-ticket-grid trip-ticket-grid--past">
+            <button
+              v-for="(trip, index) in pastTrips"
+              :key="trip.id"
+              class="trip-ticket-card trip-ticket-card--past"
+              type="button"
+              :data-testid="`trip-ticket-${trip.id}`"
+              @click="goDetail(trip)"
+            >
+              <TripTicket
+                :title="trip.title"
+                :region="trip.region"
+                :dates="formatTripDateRange(trip)"
+                :serial="ticketSerial(trip)"
+                :status="tripStatusText(trip.status)"
+                :color="ticketColor(trip, index)"
+                :tags="tripTags(trip)"
+                :stamp-title="stampTitle(trip)"
+                torn
+              />
+              <span class="trip-ticket-card__meta">
+                {{ tripDurationDays(trip) }}일 · 기록 보기
+              </span>
+            </button>
+          </div>
+        </section>
+      </template>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.trip-page {
+.trip-list-page {
   min-height: 100vh;
-  padding: 32px clamp(18px, 4vw, 56px) 56px;
-  background:
-    linear-gradient(135deg, rgba(46, 143, 107, 0.12), transparent 34%),
-    linear-gradient(315deg, rgba(49, 130, 246, 0.10), transparent 38%),
-    #f6f8fb;
-  color: #151d25;
 }
 
-.trip-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
+.trip-list-shell {
+  --ds-surface: var(--paper);
+  margin: 18px auto 44px;
+  max-width: 1200px;
+  padding: 0 24px;
+}
+
+.trip-list-head {
   align-items: flex-end;
-  margin-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 22px;
+  justify-content: space-between;
+  padding: 20px 0 18px;
 }
 
-.eyebrow {
-  display: inline-flex;
-  margin-bottom: 10px;
-  color: #2e8f6b;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.trip-hero h1 {
-  max-width: 720px;
-  margin: 0;
-  font-size: clamp(38px, 7vw, 74px);
-  line-height: 0.98;
+.trip-list-head h1 {
+  font-family: var(--font-hand);
+  font-size: 36px;
+  font-weight: 400;
   letter-spacing: 0;
+  line-height: 1.05;
+  margin: 2px 0 0;
 }
 
-.trip-hero p {
-  max-width: 720px;
+.trip-list-head p:not(.ds-tag-hand) {
+  color: var(--ink-sub);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  margin: 8px 0 0;
+}
+
+.trip-list-head__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+  min-width: 260px;
+}
+
+.trip-list-head__summary span,
+.trip-list-section__head > span {
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--ink-sub);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 11px;
+}
+
+.trip-list-alert {
+  background: #fff1eb;
+  border: 1px solid #e3b3a0;
+  border-radius: 10px;
+  color: var(--complete);
+  font-size: 13px;
+  font-weight: 700;
   margin: 18px 0 0;
-  color: #4e5968;
-  font-size: 16px;
-  line-height: 1.65;
-  font-weight: 650;
+  padding: 12px 14px;
 }
 
-.state-message {
-  margin-bottom: 18px;
+.trip-list-loading {
+  align-items: center;
+  background: var(--paper-card);
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  color: var(--ink-sub);
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+  min-height: 180px;
 }
 
-.loading-state,
-.empty-state {
-  min-height: 360px;
-  border: 1px solid #e5e8ef;
-  border-radius: 28px;
+.trip-list-loading__spinner {
+  animation: trip-list-spin 0.9s linear infinite;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  height: 22px;
+  width: 22px;
+}
+
+.trip-list-section {
+  padding: 24px 0 4px;
+}
+
+.trip-list-section + .trip-list-section {
+  border-top: 1px solid var(--line2);
+  margin-top: 20px;
+}
+
+.trip-list-section__head {
+  align-items: flex-end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.trip-list-section__head h2 {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.trip-list-section__head p {
+  color: var(--ink-sub);
+  font-size: 12px;
+  margin: 5px 0 0;
+}
+
+.trip-ticket-grid {
+  align-items: start;
   display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 14px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+}
+
+.trip-ticket-grid--past {
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+}
+
+.trip-add-ticket,
+.trip-ticket-card {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.trip-add-ticket {
+  align-items: center;
+  background: #fffdf855;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-sub);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-height: 118px;
+  padding: 18px;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.trip-add-ticket:hover,
+.trip-ticket-card:hover {
+  transform: translateY(-2px);
+}
+
+.trip-add-ticket:hover {
+  border-color: var(--accent);
+}
+
+.trip-add-ticket__plus {
+  color: var(--accent);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.trip-add-ticket strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.trip-add-ticket small {
+  color: var(--ink-faint);
+  font-size: 12px;
   text-align: center;
 }
 
-.loading-state span,
-.empty-state p {
-  color: #687586;
-  font-weight: 700;
-}
-
-.empty-icon,
-.new-plus {
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
+.trip-ticket-card {
+  --ticket-w: min(416px, 100%);
   display: grid;
-  place-items: center;
-  color: #fff;
-  background: #2e8f6b;
-  font-size: 32px;
-  font-weight: 950;
+  gap: 8px;
+  justify-items: start;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
 }
 
-.empty-state h2 {
-  margin: 0;
-  font-size: 28px;
-}
-
-.trip-section {
-  display: grid;
-  gap: 12px;
-  margin-top: 28px;
-}
-
-.section-title {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 4px;
-}
-
-.section-title h2 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.section-title p {
-  margin: 5px 0 0;
-  color: #687586;
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.section-title span {
-  min-height: 30px;
-  padding: 0 11px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px solid #e5e8ef;
-  color: #687586;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.trip-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 16px;
-}
-
-.trip-card,
-.new-trip-card {
-  min-height: 360px;
-  border-radius: 28px;
-  overflow: hidden;
-  position: relative;
-  text-align: left;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
-}
-
-.new-trip-card {
-  padding: 22px;
-  border: 1px dashed rgba(49, 130, 246, 0.42);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  background:
-    linear-gradient(135deg, rgba(49, 130, 246, 0.14), transparent 42%),
-    linear-gradient(315deg, rgba(139, 92, 246, 0.14), transparent 38%),
-    #fff;
-  color: #151d25;
-  cursor: pointer;
-}
-
-.new-trip-card strong {
-  display: block;
-  font-size: 28px;
-  line-height: 1.1;
-}
-
-.new-trip-card small {
-  display: block;
-  margin-top: 10px;
-  color: #687586;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.55;
-}
-
-.trip-card {
-  padding: 18px;
-  color: #fff;
-  background: var(--card-accent);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  cursor: pointer;
-}
-
-.trip-card:focus-visible {
-  outline: 4px solid rgba(49, 130, 246, 0.44);
+.trip-ticket-card:focus-visible,
+.trip-add-ticket:focus-visible {
+  outline: 3px solid rgba(194, 105, 63, 0.24);
   outline-offset: 4px;
 }
 
-.trip-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(0deg, rgba(9, 16, 22, 0.82), rgba(9, 16, 22, 0.08) 62%),
-    linear-gradient(115deg, rgba(255, 255, 255, 0.18), transparent 34%);
-}
-
-.trip-card :deep(.p-tag),
-.trip-card-copy,
-.story-lines {
-  position: relative;
-  z-index: 1;
-}
-
-.story-lines {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-  margin-bottom: 16px;
-}
-
-.story-lines span {
-  height: 3px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.76);
-}
-
-.trip-card-copy {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 18px;
-}
-
-.trip-card-copy span {
-  display: inline-flex;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 12px;
-  font-weight: 900;
-  backdrop-filter: blur(10px);
-}
-
-.trip-card-copy h3 {
-  margin: 18px 0 0;
-  font-size: 26px;
-  line-height: 1.05;
-}
-
-.trip-card-copy p {
-  margin: 8px 0 0;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.trip-meta {
-  display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.trip-meta em {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.82);
+.trip-ticket-card__meta {
+  color: var(--ink-faint);
   font-size: 11px;
-  font-style: normal;
-  font-weight: 900;
-  backdrop-filter: blur(10px);
+  font-weight: 700;
+  padding-left: 8px;
 }
 
-@media (max-width: 1120px) {
-  .trip-grid {
-    grid-template-columns: repeat(2, minmax(170px, 1fr));
+.trip-ticket-card--past {
+  --ticket-w: min(390px, 100%);
+}
+
+.trip-list-shell :deep(.ds-empty-state) {
+  margin-top: 18px;
+}
+
+@keyframes trip-list-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@media (max-width: 720px) {
-  .trip-page {
-    padding: 18px 14px 36px;
+@media (max-width: 760px) {
+  .trip-list-shell {
+    padding: 0 14px;
   }
 
-  .trip-hero {
+  .trip-list-head {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .trip-grid {
+  .trip-list-head__summary {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .trip-ticket-grid,
+  .trip-ticket-grid--past {
     grid-template-columns: 1fr;
   }
 
-  .trip-card,
-  .new-trip-card {
-    min-height: 300px;
+  .trip-ticket-card,
+  .trip-ticket-card--past {
+    --ticket-w: min(416px, calc(100vw - 44px));
   }
 }
 </style>

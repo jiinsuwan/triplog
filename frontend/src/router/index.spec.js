@@ -33,17 +33,17 @@ describe('router authGuard — 보호 라우트 가드', () => {
     expect(authGuard(route('/'))).toBe(true)
   })
 
-  it('이미 로그인한 사용자가 / 접근 시 여행 목록으로 보낸다', () => {
+  it('이미 로그인한 사용자가 / 접근 시 홈 대시보드를 그대로 볼 수 있다', () => {
     useAuthStore().setTokens('a1', 'r1')
-    expect(authGuard(route('/'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
+    expect(authGuard(route('/'))).toBe(true)
   })
 
-  it('이미 로그인한 사용자가 /login 접근 시 여행 목록으로 보낸다', () => {
+  it('이미 로그인한 사용자가 /login 접근 시 기본 진입점으로 보낸다', () => {
     useAuthStore().setTokens('a1', 'r1')
     expect(authGuard(route('/login'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
 
-  it('이미 로그인한 사용자가 /signup 접근 시 여행 목록으로 보낸다', () => {
+  it('이미 로그인한 사용자가 /signup 접근 시 기본 진입점으로 보낸다', () => {
     useAuthStore().setTokens('a1', 'r1')
     expect(authGuard(route('/signup'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
