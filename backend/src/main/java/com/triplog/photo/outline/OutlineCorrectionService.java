@@ -19,7 +19,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -71,16 +73,101 @@ public class OutlineCorrectionService {
         return apply(userId, photoId, imageId -> inferenceClient.box(imageId, box));
     }
 
-    /** 정제 = itemId 객체를 +/− 점으로 다듬어 교체. pos 점이 다른 객체 안쪽이면 그 객체를 흡수(병합·삭제). */
-    public OutlineCorrectionResponse refine(Long userId, Long photoId, Integer itemId, double[][] pos, double[][] neg) {
+    /** 정제 미리보기 = itemId 객체를 +/− 점으로 다듬은 결과(폴리곤 + 흡수 대상)만 돌려준다. 저장 안 함(적용 전). */
+    public OutlineRefinePreview previewRefine(Long userId, Long photoId, Integer itemId, double[][] pos, double[][] neg) {
         if (itemId == null) {
             throw invalid("itemId 가 필요합니다.");
         }
         validatePoints(pos, false, "pos");   // 씨앗을 BE 가 더하므로 사용자 pos 0개 허용(빼기만 가능)
         validatePoints(neg, false, "neg");
-        return applyRefine(userId, photoId, itemId,
-                (pos != null) ? pos : new double[0][],
-                (neg != null) ? neg : new double[0][]);
+        double[][] safePos = (pos != null) ? pos : new double[0][];
+        double[][] safeNeg = (neg != null) ? neg : new double[0][];
+
+        Photo photo = photoService.requireOwnedPhoto(userId, photoId);
+        PhotoOutline outline = outlineMapper.findByPhotoId(photoId);
+        if (outline != null && outline.getStatus() == OutlineStatus.PENDING) {
+            throw new BusinessException(ErrorCode.OUTLINE_PROCESSING);
+        }
+        ArrayNode items = parseItems(outline == null ? null : outline.getItems());
+        JsonNode target = findItem(items, itemId);
+        if (target == null) {
+            return emptyPreview();   // 대상 객체 없음
+        }
+        double[][] seededPos = prepend(seedPoint(target), safePos);   // 씨앗 = 대상 안쪽 점
+        String imageId = (outline != null) ? outline.getImageId() : null;
+        OutlineCall call = callInference(photo, imageId, id -> inferenceClient.refine(id, seededPos, safeNeg));
+        JsonNode polygons = call.polygons();
+        if (polygons == null || !polygons.isArray() || polygons.isEmpty()) {
+            return emptyPreview();   // 못 잡음
+        }
+        // 흡수(병합) 대상 = 사용자 pos 점이 안쪽에 떨어진 다른 객체 id. 적용 전엔 삭제하지 않는다.
+        List<Integer> absorb = new ArrayList<>();
+        for (JsonNode it : items) {
+            int id = it.path("id").asInt(-1);
+            if (id != itemId && absorbedByUserPos(it, safePos)) {
+                absorb.add(id);
+            }
+        }
+        return new OutlineRefinePreview(itemId, polygons, absorb);
+    }
+
+    private OutlineRefinePreview emptyPreview() {
+        return new OutlineRefinePreview(NO_OP_ITEM_ID, objectMapper.createArrayNode(), List.of());
+    }
+
+    /** 정제 적용 = 미리보기 polygons 로 대상 객체를 교체하고 흡수 대상을 삭제한다(저장). inference 없음. */
+    public OutlineCorrectionResponse commitRefine(Long userId, Long photoId, Integer itemId,
+                                                  JsonNode polygons, List<Integer> absorbItemIds) {
+        if (itemId == null) {
+            throw invalid("itemId 가 필요합니다.");
+        }
+        if (polygons == null || !polygons.isArray() || polygons.isEmpty()) {
+            throw invalid("polygons 가 비어 있습니다.");
+        }
+        validatePolygons(polygons);   // FE 가 보낸 좌표 방어(0~1)
+        photoService.requireOwnedPhoto(userId, photoId);
+        Set<Integer> absorb = (absorbItemIds != null) ? new HashSet<>(absorbItemIds) : Set.of();
+
+        Boolean ok = txTemplate.execute(status -> {
+            PhotoOutline locked = outlineMapper.findByPhotoIdForUpdate(photoId);
+            ArrayNode items = parseItems(locked == null ? null : locked.getItems());
+            ArrayNode rebuilt = objectMapper.createArrayNode();
+            boolean replaced = false;
+            for (JsonNode it : items) {
+                int id = it.path("id").asInt(-1);
+                if (id == itemId) {
+                    rebuilt.add(replacedItem(it, polygons));
+                    replaced = true;
+                } else if (!absorb.contains(id)) {
+                    rebuilt.add(it);   // 흡수 대상이 아니면 유지
+                }
+            }
+            if (!replaced) {
+                return false;   // 잠금 후 대상 사라짐
+            }
+            int rows = outlineMapper.updateCorrection(photoId, writeJson(rebuilt),
+                    locked != null ? locked.getImageId() : null);
+            if (rows == 0) {
+                throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+            }
+            return true;
+        });
+        if (!Boolean.TRUE.equals(ok)) {
+            return noOp();   // 대상이 사라짐
+        }
+        return new OutlineCorrectionResponse(itemId, polygons);
+    }
+
+    private static void validatePolygons(JsonNode polygons) {
+        for (JsonNode loop : polygons) {
+            if (!loop.isArray()) {
+                continue;
+            }
+            for (JsonNode p : loop) {
+                validateCoord(p.path(0).asDouble());
+                validateCoord(p.path(1).asDouble());
+            }
+        }
     }
 
     /** 삭제 = 잘못 잡힌 객체를 외곽선 통째로 제거(영속). 없으면 멱등(아무것도 안 함). */
@@ -165,62 +252,7 @@ public class OutlineCorrectionService {
         return newId != null ? newId : 0;
     }
 
-    // --- 정제(refine) = 대상 객체 교체 + 병합 ---
-
-    // 대상(itemId)의 모양을 +/− 점으로 다듬어 교체. 씨앗(대상 안쪽 점)을 pos 앞에 더해 SAM 이 그 객체에
-    // 머물게 하고, 사용자 pos 점이 다른 객체 안쪽에 떨어지면 그 객체를 흡수(삭제). inference 는 트랜잭션 밖.
-    private OutlineCorrectionResponse applyRefine(Long userId, Long photoId, int itemId,
-                                                  double[][] pos, double[][] neg) {
-        Photo photo = photoService.requireOwnedPhoto(userId, photoId);
-        PhotoOutline outline = outlineMapper.findByPhotoId(photoId);
-        if (outline != null && outline.getStatus() == OutlineStatus.PENDING) {
-            throw new BusinessException(ErrorCode.OUTLINE_PROCESSING);
-        }
-        JsonNode target = findItem(parseItems(outline == null ? null : outline.getItems()), itemId);
-        if (target == null) {
-            return noOp();   // 대상 객체가 없음 → no-op(FE 안내)
-        }
-        double[][] seededPos = prepend(seedPoint(target), pos);   // 씨앗 = 대상 안쪽 점
-
-        String imageId = (outline != null) ? outline.getImageId() : null;
-        OutlineCall call = callInference(photo, imageId, id -> inferenceClient.refine(id, seededPos, neg));
-        JsonNode polygons = call.polygons();
-        if (polygons == null || !polygons.isArray() || polygons.isEmpty()) {
-            return noOp();   // 못 잡음 → 기존 모양 유지(빈 것으로 안 덮음)
-        }
-        if (!persistRefine(photoId, itemId, polygons, pos, call.imageId())) {
-            return noOp();   // 잠금 후 대상 사라짐 → add 폴백 금지
-        }
-        return new OutlineCorrectionResponse(itemId, polygons);
-    }
-
-    // 쓰기 구간만 짧은 트랜잭션 + FOR UPDATE. 대상 polygons 교체(geometry·anchors 재계산) + 사용자 pos 점이
-    // 안쪽에 떨어진 다른 객체는 병합으로 삭제. 대상이 없으면 false(저장 안 함).
-    private boolean persistRefine(Long photoId, int itemId, JsonNode polygons, double[][] userPos, String imageId) {
-        Boolean ok = txTemplate.execute(status -> {
-            PhotoOutline locked = outlineMapper.findByPhotoIdForUpdate(photoId);
-            ArrayNode items = parseItems(locked == null ? null : locked.getItems());
-            ArrayNode rebuilt = objectMapper.createArrayNode();
-            boolean replaced = false;
-            for (JsonNode it : items) {
-                if (it.path("id").asInt(-1) == itemId) {
-                    rebuilt.add(replacedItem(it, polygons));
-                    replaced = true;
-                } else if (!absorbedByUserPos(it, userPos)) {
-                    rebuilt.add(it);   // 흡수 대상이 아니면 유지(흡수면 제외 = 삭제)
-                }
-            }
-            if (!replaced) {
-                return false;   // 대상이 잠금 후 사라짐
-            }
-            int rows = outlineMapper.updateCorrection(photoId, writeJson(rebuilt), imageId);
-            if (rows == 0) {
-                throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
-            }
-            return true;
-        });
-        return Boolean.TRUE.equals(ok);
-    }
+    // --- 정제 헬퍼 (교체 객체 만들기 · 씨앗 · 점-다각형) ---
 
     // 정제된 객체 = 모양만 바뀐 같은 객체. id·label·src 유지, polygons 교체 + geometry·anchors(합성) 재계산
     // (모양이 바뀌어 saliency 앵커는 못 재현하므로 객체 바깥 합성 앵커로 갈음).

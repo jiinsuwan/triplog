@@ -18,6 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -224,9 +226,9 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
-    void refine_requires_itemId() {
+    void preview_requires_itemId() {
         // 씨앗을 BE 가 더하므로 pos 0개는 허용되지만, 어느 객체를 정제할지(itemId)는 필수.
-        assertThatThrownBy(() -> service().refine(USER, PHOTO, null, new double[][]{{0.5, 0.5}}, null))
+        assertThatThrownBy(() -> service().previewRefine(USER, PHOTO, null, new double[][]{{0.5, 0.5}}, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
         verifyNoInteractions(inferenceClient);
@@ -247,41 +249,73 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
-    void refine_replaces_target_item_polygons() {
+    void preview_returns_polygons_without_saving() {
+        // 미리보기 = inference 결과 polygons 만 돌려주고 저장하지 않는다(적용 전).
         String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]}]";
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
         when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]"));
+
+        OutlineRefinePreview preview = service().previewRefine(USER, PHOTO, 5,
+                new double[][]{{0.5, 0.5}}, new double[][]{{0.2, 0.2}});
+
+        assertThat(preview.itemId()).isEqualTo(5);              // 새 id 아님 — 그 객체를 다듬은 미리보기
+        assertThat(preview.polygons()).isEqualTo(json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]"));
+        assertThat(preview.absorbItemIds()).isEmpty();
+        verify(inferenceClient).refine(eq("img-7"), any(), any());
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());   // 저장 안 함
+    }
+
+    @Test
+    void commit_replaces_target_polygons() {
+        // 적용 = 미리보기 polygons 로 대상(5)을 교체해 저장. inference 없음.
+        String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]}]";
+        JsonNode polygons = json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]");
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
         when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
 
-        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 5,
-                new double[][]{{0.5, 0.5}}, new double[][]{{0.2, 0.2}});
+        OutlineCorrectionResponse resp = service().commitRefine(USER, PHOTO, 5, polygons, List.of());
 
         assertThat(resp.itemId()).isEqualTo(5);                 // 새 id 아님 — 그 객체 교체
-        verify(inferenceClient).refine(eq("img-7"), any(), any());
+        verifyNoInteractions(inferenceClient);                  // 적용은 추론 없이 저장만
         ArgumentCaptor<String> itemsCap = ArgumentCaptor.forClass(String.class);
         verify(outlineMapper).updateCorrection(eq(PHOTO), itemsCap.capture(), eq("img-7"));
         JsonNode saved = json(itemsCap.getValue());
         assertThat(saved).hasSize(1);                           // item 수 불변(교체)
         assertThat(saved.get(0).get("id").asInt()).isEqualTo(5);
-        assertThat(saved.get(0).get("polygons")).isEqualTo(json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]"));
+        assertThat(saved.get(0).get("polygons")).isEqualTo(polygons);
         assertThat(saved.get(0).get("anchors")).hasSize(3);     // 모양 바뀜 → 앵커 재생성
     }
 
     @Test
-    void refine_absorbs_other_item_when_pos_inside_it() {
-        // 정제 중 사용자 pos 점이 다른 객체(id 9) 안쪽 → 그 객체 흡수(병합·삭제). 결과는 대상(5)만.
+    void preview_reports_absorb_without_deleting() {
+        // 미리보기에서 사용자 pos 점이 다른 객체(9) 안쪽 → absorbItemIds 에 9 보고. 단 아직 삭제(저장)하지 않는다.
         String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]},"
                 + "{\"id\":9,\"src\":\"det\",\"polygons\":[[[0.0,0.0],[0.2,0.0],[0.2,0.2],[0.0,0.2]]]}]";
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
         when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.0,0.0],[0.6,0.0],[0.6,0.6]]]"));
+
+        OutlineRefinePreview preview = service().previewRefine(USER, PHOTO, 5,
+                new double[][]{{0.1, 0.1}}, null);             // 0.1,0.1 = item 9 안쪽
+
+        assertThat(preview.itemId()).isEqualTo(5);
+        assertThat(preview.absorbItemIds()).containsExactly(9);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());   // 미리보기는 저장 안 함
+    }
+
+    @Test
+    void commit_absorbs_listed_items() {
+        // 적용 = 대상(5) 교체 + absorbItemIds(9) 삭제 → 5만 남는다.
+        String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]},"
+                + "{\"id\":9,\"src\":\"det\",\"polygons\":[[[0.0,0.0],[0.2,0.0],[0.2,0.2],[0.0,0.2]]]}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
         when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
 
-        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 5,
-                new double[][]{{0.1, 0.1}}, null);              // 0.1,0.1 = item 9 안쪽
+        OutlineCorrectionResponse resp = service().commitRefine(USER, PHOTO, 5,
+                json("[[[0.0,0.0],[0.6,0.0],[0.6,0.6]]]"), List.of(9));
 
         assertThat(resp.itemId()).isEqualTo(5);
         ArgumentCaptor<String> itemsCap = ArgumentCaptor.forClass(String.class);
@@ -292,47 +326,59 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
-    void refine_noop_when_target_missing() {
+    void preview_noop_when_target_missing() {
         // 대상 itemId 가 items 에 없으면 no-op — inference 도 안 부른다.
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[{\"id\":0}]"));
 
-        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 99,
+        OutlineRefinePreview preview = service().previewRefine(USER, PHOTO, 99,
                 new double[][]{{0.5, 0.5}}, null);
 
-        assertThat(resp.itemId()).isEqualTo(-1);
-        assertThat(resp.polygons().isEmpty()).isTrue();
+        assertThat(preview.itemId()).isEqualTo(-1);
+        assertThat(preview.polygons().isEmpty()).isTrue();
+        assertThat(preview.absorbItemIds()).isEmpty();
         verifyNoInteractions(inferenceClient);
-        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
     }
 
     @Test
-    void refine_noop_keeps_existing_when_inference_empty() {
-        // 정제 결과가 비면(못 잡음) 기존 모양 유지 — 저장 안 함.
+    void commit_noop_when_target_missing() {
+        // 적용 시점(잠금 후) 대상 itemId 가 사라졌으면 no-op — 저장 안 함.
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[{\"id\":0}]"));
+
+        OutlineCorrectionResponse resp = service().commitRefine(USER, PHOTO, 99,
+                json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]"), List.of());
+
+        assertThat(resp.itemId()).isEqualTo(-1);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
+        verifyNoInteractions(inferenceClient);
+    }
+
+    @Test
+    void preview_noop_when_inference_empty() {
+        // 정제 결과가 비면(못 잡음) 미리보기도 빈 결과 — 적용할 대상이 없다.
         String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]}]";
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
         when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[]"));
 
-        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 5,
+        OutlineRefinePreview preview = service().previewRefine(USER, PHOTO, 5,
                 new double[][]{{0.5, 0.5}}, null);
 
-        assertThat(resp.itemId()).isEqualTo(-1);
+        assertThat(preview.itemId()).isEqualTo(-1);
         verify(outlineMapper, never()).updateCorrection(any(), any(), any());
     }
 
     @Test
-    void refine_seed_is_inside_concave_object() {
+    void preview_seed_is_inside_concave_object() {
         // U자(오목) 도형 — 꼭짓점 평균은 틈새(객체 밖)에 떨어지지만 씨앗은 보장된 내부점이어야 한다.
         String u = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.2,0.2],[0.3,0.2],[0.3,0.5],[0.5,0.5],"
                 + "[0.5,0.2],[0.6,0.2],[0.6,0.7],[0.2,0.7]]]}]";
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", u));
         when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.1,0.1],[0.2,0.1],[0.2,0.2]]]"));
-        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", u));
-        when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
 
-        service().refine(USER, PHOTO, 5, new double[0][], null);   // pos 0개 → 씨앗만 전달
+        service().previewRefine(USER, PHOTO, 5, new double[0][], null);   // pos 0개 → 씨앗만 전달
 
         ArgumentCaptor<double[][]> posCap = ArgumentCaptor.forClass(double[][].class);
         verify(inferenceClient).refine(eq("img-7"), posCap.capture(), any());
@@ -357,15 +403,25 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
-    void refine_rejects_too_many_points() {
+    void preview_rejects_too_many_points() {
         double[][] huge = new double[65][];
         for (int i = 0; i < huge.length; i++) {
             huge[i] = new double[]{0.5, 0.5};
         }
-        assertThatThrownBy(() -> service().refine(USER, PHOTO, 0, huge, null))
+        assertThatThrownBy(() -> service().previewRefine(USER, PHOTO, 0, huge, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
         verifyNoInteractions(inferenceClient);
+    }
+
+    @Test
+    void commit_rejects_empty_polygons() {
+        // 적용은 polygons 가 필수 — 비면 거부(미리보기에서 못 잡은 결과로는 적용을 호출하지 않는다).
+        assertThatThrownBy(() -> service().commitRefine(USER, PHOTO, 5, json("[]"), List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+        verifyNoInteractions(inferenceClient);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
     }
 
     @Test
