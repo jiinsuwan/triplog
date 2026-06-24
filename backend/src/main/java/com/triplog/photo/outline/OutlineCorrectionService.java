@@ -171,15 +171,16 @@ public class OutlineCorrectionService {
     }
 
     // 사용자 보정 item 은 자동검출 item 과 같은 shape(bbox/center/area/anchors/polygons)으로 저장해
-    // 렌더(center 배지 등) 계약을 깨지 않는다. 단 anchors 는 사이드카가 saliency 로 계산하는 값이라
-    // BE 가 재현할 수 없으므로 빈 배열로 둔다(문구 후보 제외 = CardCaptionController 에서 src="user" 필터).
+    // 렌더(center 배지 등) 계약을 깨지 않는다. anchors 는 saliency 가 없어 재현 못 하므로, 객체 바깥
+    // (아래/오른쪽/왼쪽) 빈 공간에 합성 앵커 3개를 부여한다 — 그래야 문구 후보로 들어가 배치된다
+    // (CardCaptionController 는 anchors 빈 item 만 제외, ANCHOR_OUT_OF_RANGE 방지).
     private ObjectNode userItem(int id, JsonNode polygons) {
         ObjectNode it = objectMapper.createObjectNode();
         it.put("id", id);
         it.put("label", USER_SRC);
         it.put("src", USER_SRC);
         addGeometry(it, polygons);
-        it.set("anchors", objectMapper.createArrayNode());
+        addUserAnchors(it);
         it.set("polygons", polygons);
         return it;
     }
@@ -222,6 +223,34 @@ public class OutlineCorrectionService {
         center.add(round4((minX + maxX) / 2.0)).add(round4((minY + maxY) / 2.0));
         it.set("center", center);
         it.put("area", round4(area));
+    }
+
+    // 사용자 보정 item 의 합성 앵커 — bbox 바깥(아래/오른쪽/왼쪽) 빈 공간 3점. 자동검출 anchors 와
+    // 같은 [x, y, score] 형식(score 는 우선순위용 합성값). 0~1 로 클램프.
+    private void addUserAnchors(ObjectNode it) {
+        JsonNode bbox = it.get("bbox");
+        double minX = bbox.get(0).asDouble();
+        double minY = bbox.get(1).asDouble();
+        double maxX = bbox.get(2).asDouble();
+        double maxY = bbox.get(3).asDouble();
+        double cx = (minX + maxX) / 2.0;
+        double cy = (minY + maxY) / 2.0;
+        double gap = 0.04; // 객체에서 살짝 띄워 문구가 피사체를 안 가리게
+        ArrayNode anchors = objectMapper.createArrayNode();
+        anchors.add(anchorNode(cx, maxY + gap, 1.0));   // 아래
+        anchors.add(anchorNode(maxX + gap, cy, 0.9));   // 오른쪽
+        anchors.add(anchorNode(minX - gap, cy, 0.8));   // 왼쪽
+        it.set("anchors", anchors);
+    }
+
+    private ArrayNode anchorNode(double x, double y, double score) {
+        ArrayNode a = objectMapper.createArrayNode();
+        a.add(round4(clamp01(x))).add(round4(clamp01(y))).add(round4(score));
+        return a;
+    }
+
+    private static double clamp01(double v) {
+        return Math.max(0.0, Math.min(1.0, v));
     }
 
     private static double round4(double v) {

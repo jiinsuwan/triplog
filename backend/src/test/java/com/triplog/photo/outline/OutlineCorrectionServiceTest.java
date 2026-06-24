@@ -95,13 +95,18 @@ class OutlineCorrectionServiceTest {
         JsonNode added = merged.get(1);
         assertThat(added.get("id").asInt()).isEqualTo(1);
         assertThat(added.get("src").asText()).isEqualTo("user");
-        // 자동검출 item 과 같은 shape: bbox/center/area + 빈 anchors(렌더 계약 보존, P1-2)
+        // 자동검출 item 과 같은 shape: bbox/center/area + 합성 anchors(객체 바깥 3점, 문구 후보용 S4-LOG-01)
         assertThat(added.get("center").isArray()).isTrue();
         assertThat(added.get("center")).hasSize(2);
         assertThat(added.has("bbox")).isTrue();
         assertThat(added.has("area")).isTrue();
         assertThat(added.get("anchors").isArray()).isTrue();
-        assertThat(added.get("anchors")).isEmpty();
+        assertThat(added.get("anchors")).hasSize(3);
+        for (JsonNode a : added.get("anchors")) {
+            assertThat(a).hasSize(3);                            // [x, y, score]
+            assertThat(a.get(0).asDouble()).isBetween(0.0, 1.0);
+            assertThat(a.get(1).asDouble()).isBetween(0.0, 1.0);
+        }
     }
 
     @Test
