@@ -139,7 +139,7 @@ describe('HomeView', () => {
     })
   })
 
-  it('renders unissued planning ticket and text-only upcoming state without planned trips', () => {
+  it('renders unissued planning ticket and opens create flow without planned trips', async () => {
     const auth = useAuthStore()
     const tripStore = useTripStore()
     auth.setTokens('access', 'refresh')
@@ -163,5 +163,9 @@ describe('HomeView', () => {
     expect(wrapper.find('.home-upcoming .ds-ticket').exists()).toBe(false)
     expect(wrapper.find('.home-stamp-placeholder').exists()).toBe(true)
     expect(wrapper.text()).toContain('계획된 여행이 아직 없어요')
+
+    await wrapper.get('[data-testid="home-empty-create"]').trigger('click')
+
+    expect(routerMock.push).toHaveBeenCalledWith('/trips/new')
   })
 })

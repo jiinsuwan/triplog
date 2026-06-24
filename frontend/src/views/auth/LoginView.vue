@@ -27,9 +27,9 @@ const justWithdrawn = route.query.withdrawn === '1'
 const oauthError = route.query.oauthError
 
 const socialProviders = [
-  { id: 'google', label: '구글', iconSrc: googleIcon, class: 'google' },
-  { id: 'naver', label: '네이버', iconSrc: naverIcon, class: 'naver' },
-  { id: 'kakao', label: '카카오', iconSrc: kakaoIcon, class: 'kakao' },
+  { id: 'google', label: '구글', iconSrc: googleIcon },
+  { id: 'naver', label: '네이버', iconSrc: naverIcon },
+  { id: 'kakao', label: '카카오', iconSrc: kakaoIcon, modifier: 'kakao' },
 ]
 
 async function onSubmit() {
@@ -123,7 +123,10 @@ function oauthErrorMessage(reason) {
           v-for="provider in socialProviders"
           :key="provider.id"
           type="button"
-          :class="['social-icon-button', `social-icon-button--${provider.class}`]"
+          :class="[
+            'social-icon-button',
+            provider.modifier && `social-icon-button--${provider.modifier}`,
+          ]"
           :aria-label="`${provider.label}로 계속하기`"
           :title="`${provider.label}로 계속하기`"
           @click="onSocialLogin(provider.id)"
@@ -131,7 +134,7 @@ function oauthErrorMessage(reason) {
           <span class="social-icon" aria-hidden="true">
             <img
               class="social-icon__image"
-              :class="`social-icon__image--${provider.class}`"
+              :class="provider.modifier && `social-icon__image--${provider.modifier}`"
               :src="provider.iconSrc"
               alt=""
             />
@@ -286,7 +289,7 @@ function oauthErrorMessage(reason) {
 .social-icon__image {
   display: block;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   width: 100%;
 }
 
