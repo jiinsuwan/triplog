@@ -64,6 +64,12 @@ export const useCardStore = defineStore('card', {
     setCaption(photoId, data) {
       this.captions = { ...this.captions, [photoId]: data }
     },
+    // 문구 캐시를 비운다(전체 재생성 허용 — useCardCaptions 캐시 가드 우회). 사용자 확인 후에만 호출.
+    clearCaption(photoId) {
+      const next = { ...this.captions }
+      delete next[photoId]
+      this.captions = next
+    },
     // 보정 추가(탭/박스): 결과 item 을 외곽선에 더한다. 상태가 READY 가 아니었어도(FAILED 등) READY 로 올린다.
     appendOutlineItem(photoId, item) {
       const cur = this.outlines[photoId]
