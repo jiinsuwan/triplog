@@ -75,7 +75,7 @@ const resumeTitle = computed(() =>
   isLoggedIn.value && !hasPlanningTrips.value ? '새 여행 계획하기' : '이어서 계획하기',
 )
 const recentMemories = computed(() => sortedPastTrips.value.slice(0, 3))
-const totalTrips = computed(() => tripStore.total || tripStore.trips.length)
+const totalTrips = computed(() => tripStore.trips.length)
 const totalDays = computed(() =>
   tripStore.trips.reduce((sum, trip) => sum + tripDurationDays(trip), 0),
 )

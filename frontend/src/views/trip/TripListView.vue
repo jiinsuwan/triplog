@@ -3,11 +3,13 @@ import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { AppTopBar, BaseButton, EmptyState, TripTicket } from '@/components/common'
+import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
 import { formatTripDateRange, tripDurationDays } from '@/utils/tripForm'
 import { isPastTripStatus } from '@/utils/tripStatus'
 
 const router = useRouter()
+const auth = useAuthStore()
 const tripStore = useTripStore()
 
 const planningTrips = computed(() =>
@@ -16,7 +18,12 @@ const planningTrips = computed(() =>
 const pastTrips = computed(() =>
   tripStore.trips.filter((trip) => isPastTripStatus(trip.status)),
 )
-const totalCount = computed(() => tripStore.total || tripStore.trips.length)
+const totalCount = computed(() => tripStore.trips.length)
+const displayName = computed(() => {
+  const user = auth.user
+  return user?.nickname || user?.name || user?.email?.split('@')[0] || 'T'
+})
+const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase() || 'T')
 
 onMounted(() => {
   tripStore.fetchTripList().catch(() => {})
@@ -66,7 +73,12 @@ function stampTitle(trip) {
 
 <template>
   <div class="trip-list-page">
-    <AppTopBar active="trips" search-placeholder="여행, 지역 검색" user-initial="T" @create-trip="goCreate">
+    <AppTopBar
+      active="trips"
+      search-placeholder="여행, 지역 검색"
+      :user-initial="userInitial"
+      @create-trip="goCreate"
+    >
       <template #actions>
         <BaseButton variant="primary" data-testid="trip-list-create-top" @click="goCreate">
           새 여행

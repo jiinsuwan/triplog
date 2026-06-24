@@ -16,8 +16,16 @@ const tripStoreMock = vi.hoisted(() => ({
   fetchTripList: vi.fn(),
 }))
 
+const authStoreMock = vi.hoisted(() => ({
+  user: null,
+}))
+
 vi.mock('vue-router', () => ({
   useRouter: () => routerMock,
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authStoreMock,
 }))
 
 vi.mock('@/stores/trip', () => ({
@@ -47,6 +55,7 @@ describe('TripListView', () => {
     tripStoreMock.hasTrips = false
     tripStoreMock.fetchTripList.mockReset()
     tripStoreMock.fetchTripList.mockResolvedValue({ items: [] })
+    authStoreMock.user = null
   })
 
   it('renders the authenticated trip list instead of the old home copy', () => {
@@ -94,11 +103,14 @@ describe('TripListView', () => {
         status: 'past',
       },
     ]
-    tripStoreMock.total = 2
+    tripStoreMock.total = 99
     tripStoreMock.hasTrips = true
+    authStoreMock.user = { nickname: '지수' }
 
     const wrapper = mountTripListView()
 
+    expect(wrapper.find('.ds-avatar').text()).toBe('지')
+    expect(wrapper.find('.trip-list-head__summary').text()).toContain('전체 2개')
     expect(wrapper.text()).toContain('계획 중')
     expect(wrapper.text()).toContain('지난 여행')
     expect(wrapper.findAll('.ds-ticket')).toHaveLength(2)

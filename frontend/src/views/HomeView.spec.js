@@ -93,7 +93,7 @@ describe('HomeView', () => {
         endDate: '2025-12-23',
       },
     ]
-    tripStore.total = 2
+    tripStore.total = 99
     vi.spyOn(auth, 'fetchMe').mockResolvedValue(auth.user)
     vi.spyOn(tripStore, 'fetchTripList').mockResolvedValue({ items: tripStore.trips, total: 2 })
 
