@@ -224,8 +224,9 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
-    void refine_requires_at_least_one_positive_point() {
-        assertThatThrownBy(() -> service().refine(USER, PHOTO, new double[0][], null))
+    void refine_requires_itemId() {
+        // 씨앗을 BE 가 더하므로 pos 0개는 허용되지만, 어느 객체를 정제할지(itemId)는 필수.
+        assertThatThrownBy(() -> service().refine(USER, PHOTO, null, new double[][]{{0.5, 0.5}}, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
         verifyNoInteractions(inferenceClient);
@@ -246,18 +247,78 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
-    void refine_with_pos_and_neg_merges_and_persists() {
+    void refine_replaces_target_item_polygons() {
+        String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]}]";
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
-        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[]"));
-        when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.1,0.1]]]"));
-        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[]"));
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]"));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
         when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
 
-        OutlineCorrectionResponse resp = service().refine(USER, PHOTO,
+        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 5,
                 new double[][]{{0.5, 0.5}}, new double[][]{{0.2, 0.2}});
 
-        assertThat(resp.itemId()).isEqualTo(0);
+        assertThat(resp.itemId()).isEqualTo(5);                 // 새 id 아님 — 그 객체 교체
         verify(inferenceClient).refine(eq("img-7"), any(), any());
+        ArgumentCaptor<String> itemsCap = ArgumentCaptor.forClass(String.class);
+        verify(outlineMapper).updateCorrection(eq(PHOTO), itemsCap.capture(), eq("img-7"));
+        JsonNode saved = json(itemsCap.getValue());
+        assertThat(saved).hasSize(1);                           // item 수 불변(교체)
+        assertThat(saved.get(0).get("id").asInt()).isEqualTo(5);
+        assertThat(saved.get(0).get("polygons")).isEqualTo(json("[[[0.1,0.1],[0.3,0.1],[0.3,0.3]]]"));
+        assertThat(saved.get(0).get("anchors")).hasSize(3);     // 모양 바뀜 → 앵커 재생성
+    }
+
+    @Test
+    void refine_absorbs_other_item_when_pos_inside_it() {
+        // 정제 중 사용자 pos 점이 다른 객체(id 9) 안쪽 → 그 객체 흡수(병합·삭제). 결과는 대상(5)만.
+        String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]},"
+                + "{\"id\":9,\"src\":\"det\",\"polygons\":[[[0.0,0.0],[0.2,0.0],[0.2,0.2],[0.0,0.2]]]}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[[[0.0,0.0],[0.6,0.0],[0.6,0.6]]]"));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(outlineMapper.updateCorrection(eq(PHOTO), any(), eq("img-7"))).thenReturn(1);
+
+        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 5,
+                new double[][]{{0.1, 0.1}}, null);              // 0.1,0.1 = item 9 안쪽
+
+        assertThat(resp.itemId()).isEqualTo(5);
+        ArgumentCaptor<String> itemsCap = ArgumentCaptor.forClass(String.class);
+        verify(outlineMapper).updateCorrection(eq(PHOTO), itemsCap.capture(), eq("img-7"));
+        JsonNode saved = json(itemsCap.getValue());
+        assertThat(saved).hasSize(1);                           // 9 흡수 삭제 → 5만
+        assertThat(saved.get(0).get("id").asInt()).isEqualTo(5);
+    }
+
+    @Test
+    void refine_noop_when_target_missing() {
+        // 대상 itemId 가 items 에 없으면 no-op — inference 도 안 부른다.
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", "[{\"id\":0}]"));
+
+        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 99,
+                new double[][]{{0.5, 0.5}}, null);
+
+        assertThat(resp.itemId()).isEqualTo(-1);
+        assertThat(resp.polygons().isEmpty()).isTrue();
+        verifyNoInteractions(inferenceClient);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
+    }
+
+    @Test
+    void refine_noop_keeps_existing_when_inference_empty() {
+        // 정제 결과가 비면(못 잡음) 기존 모양 유지 — 저장 안 함.
+        String existing = "[{\"id\":5,\"src\":\"user\",\"polygons\":[[[0.4,0.4],[0.6,0.4],[0.6,0.6],[0.4,0.6]]]}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(inferenceClient.refine(eq("img-7"), any(), any())).thenReturn(json("[]"));
+
+        OutlineCorrectionResponse resp = service().refine(USER, PHOTO, 5,
+                new double[][]{{0.5, 0.5}}, null);
+
+        assertThat(resp.itemId()).isEqualTo(-1);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
     }
 
     @Test
@@ -280,7 +341,7 @@ class OutlineCorrectionServiceTest {
         for (int i = 0; i < huge.length; i++) {
             huge[i] = new double[]{0.5, 0.5};
         }
-        assertThatThrownBy(() -> service().refine(USER, PHOTO, huge, null))
+        assertThatThrownBy(() -> service().refine(USER, PHOTO, 0, huge, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
         verifyNoInteractions(inferenceClient);

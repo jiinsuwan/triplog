@@ -68,12 +68,16 @@ public class OutlineCorrectionService {
         return apply(userId, photoId, imageId -> inferenceClient.box(imageId, box));
     }
 
-    /** 정제 = 포지티브/네거티브 점 묶음으로 한 객체를 다듬어 추가. */
-    public OutlineCorrectionResponse refine(Long userId, Long photoId, double[][] pos, double[][] neg) {
-        validatePoints(pos, true, "pos");
+    /** 정제 = itemId 객체를 +/− 점으로 다듬어 교체. pos 점이 다른 객체 안쪽이면 그 객체를 흡수(병합·삭제). */
+    public OutlineCorrectionResponse refine(Long userId, Long photoId, Integer itemId, double[][] pos, double[][] neg) {
+        if (itemId == null) {
+            throw invalid("itemId 가 필요합니다.");
+        }
+        validatePoints(pos, false, "pos");   // 씨앗을 BE 가 더하므로 사용자 pos 0개 허용(빼기만 가능)
         validatePoints(neg, false, "neg");
-        double[][] safeNeg = (neg != null) ? neg : new double[0][];
-        return apply(userId, photoId, imageId -> inferenceClient.refine(imageId, pos, safeNeg));
+        return applyRefine(userId, photoId, itemId,
+                (pos != null) ? pos : new double[0][],
+                (neg != null) ? neg : new double[0][]);
     }
 
     // 소유권 → 상태 확인 → (트랜잭션 밖) inference 호출 → 빈 결과면 no-op → (트랜잭션 안) items 병합 저장.
@@ -127,6 +131,161 @@ public class OutlineCorrectionService {
             return id;
         });
         return newId != null ? newId : 0;
+    }
+
+    // --- 정제(refine) = 대상 객체 교체 + 병합 ---
+
+    // 대상(itemId)의 모양을 +/− 점으로 다듬어 교체. 씨앗(대상 안쪽 점)을 pos 앞에 더해 SAM 이 그 객체에
+    // 머물게 하고, 사용자 pos 점이 다른 객체 안쪽에 떨어지면 그 객체를 흡수(삭제). inference 는 트랜잭션 밖.
+    private OutlineCorrectionResponse applyRefine(Long userId, Long photoId, int itemId,
+                                                  double[][] pos, double[][] neg) {
+        Photo photo = photoService.requireOwnedPhoto(userId, photoId);
+        PhotoOutline outline = outlineMapper.findByPhotoId(photoId);
+        if (outline != null && outline.getStatus() == OutlineStatus.PENDING) {
+            throw new BusinessException(ErrorCode.OUTLINE_PROCESSING);
+        }
+        JsonNode target = findItem(parseItems(outline == null ? null : outline.getItems()), itemId);
+        if (target == null) {
+            return noOp();   // 대상 객체가 없음 → no-op(FE 안내)
+        }
+        double[][] seededPos = prepend(seedPoint(target), pos);   // 씨앗 = 대상 안쪽 점
+
+        String imageId = (outline != null) ? outline.getImageId() : null;
+        OutlineCall call = callInference(photo, imageId, id -> inferenceClient.refine(id, seededPos, neg));
+        JsonNode polygons = call.polygons();
+        if (polygons == null || !polygons.isArray() || polygons.isEmpty()) {
+            return noOp();   // 못 잡음 → 기존 모양 유지(빈 것으로 안 덮음)
+        }
+        if (!persistRefine(photoId, itemId, polygons, pos, call.imageId())) {
+            return noOp();   // 잠금 후 대상 사라짐 → add 폴백 금지
+        }
+        return new OutlineCorrectionResponse(itemId, polygons);
+    }
+
+    // 쓰기 구간만 짧은 트랜잭션 + FOR UPDATE. 대상 polygons 교체(geometry·anchors 재계산) + 사용자 pos 점이
+    // 안쪽에 떨어진 다른 객체는 병합으로 삭제. 대상이 없으면 false(저장 안 함).
+    private boolean persistRefine(Long photoId, int itemId, JsonNode polygons, double[][] userPos, String imageId) {
+        Boolean ok = txTemplate.execute(status -> {
+            PhotoOutline locked = outlineMapper.findByPhotoIdForUpdate(photoId);
+            ArrayNode items = parseItems(locked == null ? null : locked.getItems());
+            ArrayNode rebuilt = objectMapper.createArrayNode();
+            boolean replaced = false;
+            for (JsonNode it : items) {
+                if (it.path("id").asInt(-1) == itemId) {
+                    rebuilt.add(replacedItem(it, polygons));
+                    replaced = true;
+                } else if (!absorbedByUserPos(it, userPos)) {
+                    rebuilt.add(it);   // 흡수 대상이 아니면 유지(흡수면 제외 = 삭제)
+                }
+            }
+            if (!replaced) {
+                return false;   // 대상이 잠금 후 사라짐
+            }
+            int rows = outlineMapper.updateCorrection(photoId, writeJson(rebuilt), imageId);
+            if (rows == 0) {
+                throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+            }
+            return true;
+        });
+        return Boolean.TRUE.equals(ok);
+    }
+
+    // 정제된 객체 = 모양만 바뀐 같은 객체. id·label·src 유지, polygons 교체 + geometry·anchors(합성) 재계산
+    // (모양이 바뀌어 saliency 앵커는 못 재현하므로 객체 바깥 합성 앵커로 갈음).
+    private ObjectNode replacedItem(JsonNode old, JsonNode polygons) {
+        ObjectNode it = objectMapper.createObjectNode();
+        it.put("id", old.path("id").asInt());
+        it.set("label", old.has("label") && !old.get("label").isNull() ? old.get("label") : objectMapper.nullNode());
+        it.put("src", old.path("src").asText(USER_SRC));
+        addGeometry(it, polygons);
+        addUserAnchors(it);
+        it.set("polygons", polygons);
+        return it;
+    }
+
+    // 대상 객체 안쪽 씨앗 점 = polygons 꼭짓점 평균(대부분 객체 내부). 없으면 center, 최후 [0.5, 0.5].
+    private double[] seedPoint(JsonNode item) {
+        double sx = 0;
+        double sy = 0;
+        int n = 0;
+        for (JsonNode loop : item.path("polygons")) {
+            if (!loop.isArray()) {
+                continue;
+            }
+            for (JsonNode p : loop) {
+                sx += p.path(0).asDouble();
+                sy += p.path(1).asDouble();
+                n++;
+            }
+        }
+        if (n > 0) {
+            return new double[]{clamp01(sx / n), clamp01(sy / n)};
+        }
+        JsonNode c = item.get("center");
+        if (c != null && c.isArray() && c.size() >= 2) {
+            return new double[]{clamp01(c.get(0).asDouble()), clamp01(c.get(1).asDouble())};
+        }
+        return new double[]{0.5, 0.5};
+    }
+
+    private double[][] prepend(double[] seed, double[][] pos) {
+        double[][] out = new double[pos.length + 1][];
+        out[0] = seed;
+        System.arraycopy(pos, 0, out, 1, pos.length);
+        return out;
+    }
+
+    private JsonNode findItem(ArrayNode items, int itemId) {
+        for (JsonNode it : items) {
+            if (it.path("id").asInt(-1) == itemId) {
+                return it;
+            }
+        }
+        return null;
+    }
+
+    // 사용자 pos 점 중 하나라도 이 객체 안쪽이면 흡수(병합) 대상.
+    private boolean absorbedByUserPos(JsonNode item, double[][] userPos) {
+        for (double[] p : userPos) {
+            if (pointInItem(item, p[0], p[1])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean pointInItem(JsonNode item, double x, double y) {
+        for (JsonNode loop : item.path("polygons")) {
+            if (pointInLoop(loop, x, y)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 광선 투사(ray casting) 점-다각형 포함 검사 (loop = [[x,y], ...] 0~1).
+    private boolean pointInLoop(JsonNode loop, double x, double y) {
+        if (!loop.isArray()) {
+            return false;
+        }
+        boolean inside = false;
+        int n = loop.size();
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            double xi = loop.get(i).path(0).asDouble();
+            double yi = loop.get(i).path(1).asDouble();
+            double xj = loop.get(j).path(0).asDouble();
+            double yj = loop.get(j).path(1).asDouble();
+            boolean intersect = ((yi > y) != (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
+    private OutlineCorrectionResponse noOp() {
+        return new OutlineCorrectionResponse(NO_OP_ITEM_ID, objectMapper.createArrayNode());
     }
 
     private String register(Photo photo) {

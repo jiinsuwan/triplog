@@ -131,6 +131,6 @@ public class PhotoController {
             @PathVariable Long photoId,
             @RequestBody RefineRequest request) {
         return ApiResponse.success("Outline refine applied.",
-                outlineCorrectionService.refine(userId, photoId, request.pos(), request.neg()));
+                outlineCorrectionService.refine(userId, photoId, request.itemId(), request.pos(), request.neg()));
     }
 }
