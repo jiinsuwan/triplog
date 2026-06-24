@@ -80,6 +80,35 @@ public class OutlineCorrectionService {
                 (neg != null) ? neg : new double[0][]);
     }
 
+    /** 삭제 = 잘못 잡힌 객체를 외곽선 통째로 제거(영속). 없으면 멱등(아무것도 안 함). */
+    public void deleteItem(Long userId, Long photoId, int itemId) {
+        photoService.requireOwnedPhoto(userId, photoId);
+        PhotoOutline outline = outlineMapper.findByPhotoId(photoId);
+        if (outline != null && outline.getStatus() == OutlineStatus.PENDING) {
+            throw new BusinessException(ErrorCode.OUTLINE_PROCESSING);
+        }
+        txTemplate.executeWithoutResult(status -> {
+            PhotoOutline locked = outlineMapper.findByPhotoIdForUpdate(photoId);
+            if (locked == null) {
+                return;   // 행 없음 → 지울 것 없음(멱등)
+            }
+            ArrayNode items = parseItems(locked.getItems());
+            ArrayNode rebuilt = objectMapper.createArrayNode();
+            boolean removed = false;
+            for (JsonNode it : items) {
+                if (it.path("id").asInt(-1) == itemId) {
+                    removed = true;   // 제외 = 삭제
+                } else {
+                    rebuilt.add(it);
+                }
+            }
+            if (removed) {
+                // 마지막 객체 삭제면 items=[] + status READY(FE 는 빈 items 를 "외곽선 없음"으로 처리).
+                outlineMapper.updateCorrection(photoId, writeJson(rebuilt), locked.getImageId());
+            }
+        });
+    }
+
     // 소유권 → 상태 확인 → (트랜잭션 밖) inference 호출 → 빈 결과면 no-op → (트랜잭션 안) items 병합 저장.
     private OutlineCorrectionResponse apply(Long userId, Long photoId, Function<String, JsonNode> op) {
         Photo photo = photoService.requireOwnedPhoto(userId, photoId);

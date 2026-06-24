@@ -133,4 +133,14 @@ public class PhotoController {
         return ApiResponse.success("Outline refine applied.",
                 outlineCorrectionService.refine(userId, photoId, request.itemId(), request.pos(), request.neg()));
     }
+
+    @Operation(summary = "Delete an outline item (owner only)")
+    @DeleteMapping("/{photoId}/outline/items/{itemId}")
+    public ApiResponse<Void> deleteOutlineItem(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @PathVariable int itemId) {
+        outlineCorrectionService.deleteItem(userId, photoId, itemId);
+        return ApiResponse.success("Outline item deleted.", null);
+    }
 }

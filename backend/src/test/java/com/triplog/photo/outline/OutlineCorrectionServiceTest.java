@@ -348,6 +348,59 @@ class OutlineCorrectionServiceTest {
     }
 
     @Test
+    void delete_removes_item_from_items() {
+        String existing = "[{\"id\":0,\"src\":\"det\"},{\"id\":3,\"src\":\"user\"}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+
+        service().deleteItem(USER, PHOTO, 3);
+
+        ArgumentCaptor<String> itemsCap = ArgumentCaptor.forClass(String.class);
+        verify(outlineMapper).updateCorrection(eq(PHOTO), itemsCap.capture(), eq("img-7"));
+        JsonNode saved = json(itemsCap.getValue());
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).get("id").asInt()).isEqualTo(0);
+    }
+
+    @Test
+    void delete_last_item_leaves_empty_items() {
+        String existing = "[{\"id\":3,\"src\":\"user\"}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+
+        service().deleteItem(USER, PHOTO, 3);
+
+        ArgumentCaptor<String> itemsCap = ArgumentCaptor.forClass(String.class);
+        verify(outlineMapper).updateCorrection(eq(PHOTO), itemsCap.capture(), eq("img-7"));
+        assertThat(json(itemsCap.getValue())).isEmpty();
+    }
+
+    @Test
+    void delete_missing_item_is_idempotent() {
+        String existing = "[{\"id\":0,\"src\":\"det\"}]";
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+        when(outlineMapper.findByPhotoIdForUpdate(PHOTO)).thenReturn(outline(OutlineStatus.READY, "img-7", existing));
+
+        service().deleteItem(USER, PHOTO, 99);
+
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
+    }
+
+    @Test
+    void delete_rejects_pending() {
+        when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
+        when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.PENDING, "img-7", "[]"));
+
+        assertThatThrownBy(() -> service().deleteItem(USER, PHOTO, 0))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUTLINE_PROCESSING);
+        verify(outlineMapper, never()).updateCorrection(any(), any(), any());
+    }
+
+    @Test
     void image_missing_twice_maps_to_503_without_write() {
         when(photoService.requireOwnedPhoto(USER, PHOTO)).thenReturn(ownedPhoto());
         when(outlineMapper.findByPhotoId(PHOTO)).thenReturn(outline(OutlineStatus.READY, "stale", "[]"));
