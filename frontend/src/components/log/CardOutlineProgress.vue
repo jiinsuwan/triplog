@@ -10,6 +10,7 @@ import { useCardStore } from '@/stores/card'
 
 const props = defineProps({
   photoIds: { type: Array, default: () => [] },
+  tripId: { type: [Number, String], default: null },
 })
 const emit = defineEmits(['back'])
 
@@ -64,7 +65,7 @@ function statusLabel(id) {
   </div>
 
   <!-- 외곽선 완료 → 풀스크린 에디터 -->
-  <CardEditor v-else :photo-ids="photoIds" @back="emit('back')" />
+  <CardEditor v-else :photo-ids="photoIds" :trip-id="tripId" @back="emit('back')" />
 </template>
 
 <style scoped>

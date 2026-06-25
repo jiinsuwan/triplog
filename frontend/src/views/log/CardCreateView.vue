@@ -76,7 +76,7 @@ watch(
 
   <!-- 에디터 단계: 풀스크린(외곽선 처리 → 에디터). 위저드 칼럼/스텝/푸터 없음. -->
   <div v-else class="cc-editor">
-    <CardOutlineProgress :photo-ids="card.photoIds" @back="goPrev" />
+    <CardOutlineProgress :photo-ids="card.photoIds" :trip-id="card.selectedTripId" @back="goPrev" />
   </div>
 </template>
 

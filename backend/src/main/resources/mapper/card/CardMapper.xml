@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.triplog.card.mapper.CardMapper">
+
+    <resultMap id="CardResultMap" type="com.triplog.card.domain.Card">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="tripId" column="trip_id"/>
+        <result property="photoId" column="photo_id"/>
+        <result property="storedFilename" column="stored_filename"/>
+        <result property="contentType" column="content_type"/>
+        <result property="sizeBytes" column="size_bytes"/>
+        <result property="width" column="width"/>
+        <result property="height" column="height"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="MemorySummaryResultMap" type="com.triplog.card.domain.MemorySummary">
+        <id property="tripId" column="trip_id"/>
+        <result property="title" column="title"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="region" column="region"/>
+        <result property="theme" column="theme"/>
+        <result property="cardCount" column="card_count"/>
+        <result property="coverCardId" column="cover_card_id"/>
+        <result property="coverWidth" column="cover_width"/>
+        <result property="coverHeight" column="cover_height"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO cards (user_id, trip_id, photo_id, stored_filename, content_type, size_bytes, width, height)
+        VALUES (#{userId}, #{tripId}, #{photoId}, #{storedFilename}, #{contentType}, #{sizeBytes}, #{width}, #{height})
+    </insert>
+
+    <update id="update">
+        UPDATE cards
+        SET stored_filename = #{storedFilename},
+            content_type = #{contentType},
+            size_bytes = #{sizeBytes},
+            width = #{width},
+            height = #{height}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="CardResultMap">
+        SELECT id, user_id, trip_id, photo_id, stored_filename, content_type, size_bytes,
+               width, height, created_at, updated_at
+        FROM cards
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByTripAndPhotoForUpdate" resultMap="CardResultMap">
+        SELECT id, user_id, trip_id, photo_id, stored_filename, content_type, size_bytes,
+               width, height, created_at, updated_at
+        FROM cards
+        WHERE trip_id = #{tripId}
+          AND photo_id = #{photoId}
+        FOR UPDATE
+    </select>
+
+    <select id="findByTripId" resultMap="CardResultMap">
+        SELECT id, user_id, trip_id, photo_id, stored_filename, content_type, size_bytes,
+               width, height, created_at, updated_at
+        FROM cards
+        WHERE trip_id = #{tripId}
+        ORDER BY created_at, id
+    </select>
+
+    <select id="findMemorySummariesByUser" resultMap="MemorySummaryResultMap">
+        SELECT t.id AS trip_id,
+               t.title,
+               t.start_date,
+               t.end_date,
+               t.region,
+               t.theme,
+               COUNT(c.id) AS card_count,
+               cover.id AS cover_card_id,
+               cover.width AS cover_width,
+               cover.height AS cover_height
+        FROM trips t
+        LEFT JOIN cards c ON c.trip_id = t.id
+        LEFT JOIN cards cover ON cover.id = (
+            SELECT c2.id
+            FROM cards c2
+            WHERE c2.trip_id = t.id
+            ORDER BY c2.updated_at DESC, c2.id DESC
+            LIMIT 1
+        )
+        WHERE t.user_id = #{userId}
+          AND t.status = 'past'
+        GROUP BY t.id, t.title, t.start_date, t.end_date, t.region, t.theme,
+                 cover.id, cover.width, cover.height
+        ORDER BY COALESCE(MAX(c.updated_at), t.end_date, t.start_date) DESC, t.id DESC
+    </select>
+
+    <select id="findStoredFilenamesByTrip" resultType="string">
+        SELECT stored_filename FROM cards WHERE trip_id = #{tripId}
+    </select>
+
+    <select id="findStoredFilenamesByUser" resultType="string">
+        SELECT stored_filename FROM cards WHERE user_id = #{userId}
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM cards
+        WHERE id = #{id}
+    </delete>
+</mapper>

@@ -11,6 +11,7 @@ import { useCardCaptions } from '@/composables/useCardCaptions'
 import { buildScene } from '@/card/render/buildScene'
 import { computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
+import { saveTripCard } from '@/api/cardApi'
 import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
 import CorrectionDialog from '@/components/log/CorrectionDialog.vue'
@@ -32,7 +33,10 @@ import { LAYER_CHIP, LAYER_CHIP_CLASS, useCardEditorLayers } from './useCardEdit
 import { useCardEditorRenderer } from './useCardEditorRenderer'
 import { resolvePhotoSettings } from './photoSettings'
 
-const props = defineProps({ photoIds: { type: Array, default: () => [] } })
+const props = defineProps({
+  photoIds: { type: Array, default: () => [] },
+  tripId: { type: [Number, String], default: null },
+})
 const emit = defineEmits(['back'])
 
 const card = useCardStore()
@@ -425,7 +429,7 @@ const { paintOutlines, scheduleRedraw } = useCardEditorRenderer({
   drawClosingBox,
   drawStickerBox,
 })
-const { exporting, exportNote, exportCurrent } = useCardEditorExport({
+const { exporting, exportNote, exportCurrent, composeCurrentBlob } = useCardEditorExport({
   currentId,
   contentRect,
   canvasDims,
@@ -703,11 +707,43 @@ watch(activeTool, () => {
 
 // 완성 = 사용자가 카드별로 직접 표시(자동 판단 아님). 필름스트립에서 사진마다 토글.
 const doneSet = ref(new Set())
+const savingCard = ref(false)
 const isDone = (id) => doneSet.value.has(id)
-function toggleDone(id) {
+async function toggleDone(id) {
+  if (!id) return
+
   const s = new Set(doneSet.value)
-  s.has(id) ? s.delete(id) : s.add(id)
-  doneSet.value = s
+  if (s.has(id)) {
+    s.delete(id)
+    doneSet.value = s
+    exportNote.value = ''
+    return
+  }
+
+  if (!props.tripId) {
+    exportNote.value = '여행 정보가 없어 추억에 저장할 수 없습니다.'
+    return
+  }
+  if (savingCard.value || exporting.value || !photoImg.value) return
+
+  savingCard.value = true
+  try {
+    const result = await composeCurrentBlob()
+    if (!result) return
+    if (result.photoId !== id || currentId.value !== id) {
+      exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
+      return
+    }
+
+    await saveTripCard(props.tripId, id, result.blob)
+    doneSet.value = new Set([...doneSet.value, id])
+    exportNote.value = '추억에 저장 완료'
+  } catch (e) {
+    const message = e?.response?.data?.message || e?.message || '다시 시도해 주세요.'
+    exportNote.value = `추억 저장 실패: ${message}`
+  } finally {
+    savingCard.value = false
+  }
 }
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
 // 뷰어 모드 = 현재 사진을 "편집 완료"로 표시한 상태. 편집 UI(도구·우패널·캔버스 조작)를 비활성(보기 전용)으로.
@@ -840,8 +876,14 @@ watch(
         <label class="tone-lbl">톤 낮춤 <input type="range" min="0" max="50" :value="Math.round(toneDown * 100)" @input="toneDown = Number($event.target.value) / 100" /></label>
       </fieldset>
       <span v-if="exportNote" class="ok">{{ exportNote }}</span>
-      <Button label="PNG 저장" icon="pi pi-download" size="small" severity="secondary" :disabled="exporting || !photoImg" @click="exportCurrent" />
-      <Button :label="viewerMode ? '수정' : '완료'" size="small" :severity="viewerMode ? 'secondary' : undefined" @click="toggleDone(currentId)" />
+      <Button label="PNG 저장" icon="pi pi-download" size="small" severity="secondary" :disabled="exporting || savingCard || !photoImg" @click="exportCurrent" />
+      <Button
+        :label="savingCard ? '저장 중' : viewerMode ? '수정' : '완료'"
+        size="small"
+        :severity="viewerMode ? 'secondary' : undefined"
+        :disabled="savingCard || exporting || !photoImg"
+        @click="toggleDone(currentId)"
+      />
     </header>
 
     <div class="ed-mid">

@@ -178,6 +178,7 @@ function parseDateTimeValue(value) {
       active="home"
       :show-search="false"
       :show-default-action="false"
+      :show-logs="isLoggedIn"
       :user-initial="userInitial"
       @create-trip="startTrip"
     >

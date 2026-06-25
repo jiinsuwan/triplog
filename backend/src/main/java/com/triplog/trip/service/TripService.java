@@ -2,6 +2,7 @@ package com.triplog.trip.service;
 
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
+import com.triplog.card.service.CardFileCleanup;
 import com.triplog.photo.service.PhotoTripCleanup;
 import com.triplog.trip.domain.Trip;
 import com.triplog.trip.domain.TripStatus;
@@ -24,10 +25,13 @@ public class TripService {
 
     private final TripMapper tripMapper;
     private final PhotoTripCleanup photoTripCleanup;
+    private final CardFileCleanup cardFileCleanup;
 
-    public TripService(TripMapper tripMapper, PhotoTripCleanup photoTripCleanup) {
+    public TripService(TripMapper tripMapper, PhotoTripCleanup photoTripCleanup,
+                       CardFileCleanup cardFileCleanup) {
         this.tripMapper = tripMapper;
         this.photoTripCleanup = photoTripCleanup;
+        this.cardFileCleanup = cardFileCleanup;
     }
 
     @Transactional
@@ -77,8 +81,9 @@ public class TripService {
     @Transactional
     public void delete(Long userId, Long tripId) {
         Trip trip = requireOwnedTrip(userId, tripId);
-        // 연결된 사진 파일을 커밋 후 삭제하도록 예약(trips 삭제 전에 파일명 확보, #37 / S2-LOG-03).
+        // 연결된 사진·카드 파일을 커밋 후 삭제하도록 예약(trips 삭제 전에 파일명 확보).
         photoTripCleanup.scheduleFileCleanupForTrip(trip.getId());
+        cardFileCleanup.scheduleFileCleanupForTrip(trip.getId());
         tripMapper.deleteById(trip.getId()); // FK ON DELETE CASCADE 로 photos row 동반 삭제
     }
 

@@ -14,3 +14,38 @@ export async function fetchCardCaption(photoId, { signal } = {}) {
   const { data } = await instance.post(`/photos/${photoId}/card-caption`, null, { signal, timeout: 0 })
   return data.data
 }
+
+export async function saveTripCard(tripId, photoId, blob, { signal } = {}) {
+  const formData = new FormData()
+  formData.append('photoId', String(photoId))
+  formData.append('file', blob, `triplog-card-${photoId}.png`)
+
+  const { data } = await instance.post(`/trips/${tripId}/cards`, formData, {
+    signal,
+    timeout: 0,
+  })
+  return data.data
+}
+
+export async function fetchTripCards(tripId, { signal } = {}) {
+  const { data } = await instance.get(`/trips/${tripId}/cards`, { signal })
+  return data.data ?? []
+}
+
+export async function fetchMemories({ signal } = {}) {
+  const { data } = await instance.get('/memories', { signal })
+  return data.data ?? []
+}
+
+export async function fetchCardImage(cardId, { signal } = {}) {
+  const { data } = await instance.get(`/cards/${cardId}/image`, {
+    signal,
+    responseType: 'blob',
+  })
+  return data
+}
+
+export async function deleteTripCard(cardId) {
+  const { data } = await instance.delete(`/cards/${cardId}`)
+  return data.data
+}

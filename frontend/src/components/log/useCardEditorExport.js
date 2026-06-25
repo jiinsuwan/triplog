@@ -73,7 +73,7 @@ export function useCardEditorExport({
     }
   }
 
-  async function exportCurrent() {
+  async function composeCurrentBlob() {
     if (exporting.value || !photoImg.value) return
     exporting.value = true
     exportNote.value = ''
@@ -112,8 +112,7 @@ export function useCardEditorExport({
         exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
         return
       }
-      triggerDownload(composed, `triplog-card-${exportId}.png`)
-      exportNote.value = '저장 완료'
+      return { blob: composed, photoId: exportId }
     } catch (e) {
       exportNote.value = `저장 실패: ${e.message}`
     } finally {
@@ -121,5 +120,17 @@ export function useCardEditorExport({
     }
   }
 
-  return { exporting, exportNote, exportCurrent }
+  async function exportCurrent() {
+    const result = await composeCurrentBlob()
+    if (!result) return
+    try {
+      const { blob: composed, photoId: exportId } = result
+      triggerDownload(composed, `triplog-card-${exportId}.png`)
+      exportNote.value = 'PNG 저장 완료'
+    } catch (e) {
+      exportNote.value = `저장 실패: ${e.message}`
+    }
+  }
+
+  return { exporting, exportNote, exportCurrent, composeCurrentBlob }
 }

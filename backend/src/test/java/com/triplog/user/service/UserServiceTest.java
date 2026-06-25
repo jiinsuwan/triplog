@@ -2,6 +2,7 @@ package com.triplog.user.service;
 
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
+import com.triplog.card.service.CardFileCleanup;
 import com.triplog.photo.service.PhotoTripCleanup;
 import com.triplog.user.domain.User;
 import com.triplog.user.dto.WithdrawUserRequest;
@@ -30,12 +31,14 @@ class UserServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private PhotoTripCleanup photoTripCleanup;
+    @Mock
+    private CardFileCleanup cardFileCleanup;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userMapper, passwordEncoder, photoTripCleanup);
+        userService = new UserService(userMapper, passwordEncoder, photoTripCleanup, cardFileCleanup);
     }
 
     @Test
@@ -47,10 +50,11 @@ class UserServiceTest {
 
         userService.withdraw(1L, new WithdrawUserRequest("password123"));
 
-        InOrder order = inOrder(userMapper, passwordEncoder, photoTripCleanup);
+        InOrder order = inOrder(userMapper, passwordEncoder, photoTripCleanup, cardFileCleanup);
         order.verify(userMapper).findByIdForUpdate(1L);
         order.verify(passwordEncoder).matches("password123", "encoded-password");
         order.verify(photoTripCleanup).scheduleFileCleanupForUser(1L);
+        order.verify(cardFileCleanup).scheduleFileCleanupForUser(1L);
         order.verify(userMapper).deleteById(1L);
     }
 
@@ -79,6 +83,7 @@ class UserServiceTest {
 
         verify(passwordEncoder, never()).matches(" ", "encoded-password");
         verify(photoTripCleanup, never()).scheduleFileCleanupForUser(1L);
+        verify(cardFileCleanup, never()).scheduleFileCleanupForUser(1L);
         verify(userMapper, never()).deleteById(1L);
     }
 
@@ -92,6 +97,7 @@ class UserServiceTest {
 
         verify(passwordEncoder, never()).matches(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(photoTripCleanup).scheduleFileCleanupForUser(1L);
+        verify(cardFileCleanup).scheduleFileCleanupForUser(1L);
         verify(userMapper).deleteById(1L);
     }
 
@@ -104,6 +110,7 @@ class UserServiceTest {
                         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.USER_NOT_FOUND));
 
         verify(photoTripCleanup, never()).scheduleFileCleanupForUser(1L);
+        verify(cardFileCleanup, never()).scheduleFileCleanupForUser(1L);
         verify(userMapper, never()).deleteById(1L);
     }
 

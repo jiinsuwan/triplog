@@ -103,6 +103,12 @@ const routes = [
     component: () => import('@/views/log/CardCreateView.vue'),
     meta: { requiresAuth: true, workspace: 'record' },
   },
+  {
+    path: '/logs',
+    name: 'logs',
+    component: () => import('@/views/log/LogsView.vue'),
+    meta: { requiresAuth: true },
+  },
 ]
 
 if (import.meta.env.DEV) {
