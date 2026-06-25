@@ -11,7 +11,8 @@ vi.mock('@/api/photoApi', () => ({
 }))
 
 import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
-import { unlinkPhotoFromTrip } from '@/api/photoApi'
+import { fetchItinerary } from '@/api/itineraryApi'
+import { fetchTripPhotos, unlinkPhotoFromTrip } from '@/api/photoApi'
 
 // effectScope 로 컴포저블을 띄운다(onMounted 는 인스턴스가 없어 no-op — load 는 직접 데이터 주입으로 대체).
 function setup() {
@@ -175,5 +176,35 @@ describe('removeFromTrip — 이 여행에서 빼기(unlink)', () => {
     expect(unlinkPhotoFromTrip).toHaveBeenCalledWith(1)
     expect(api.placement[1]).toBeUndefined()
     expect(api.photos.value.map((p) => p.id)).toEqual([2])
+  })
+})
+
+describe('externalDays — 외부 일정 주입(기록 뷰)', () => {
+  it('externalDays 가 있으면 fetchItinerary 를 호출하지 않고 주입된 days 로 사진만 로드한다', async () => {
+    const ext = [{ dayNumber: 1, date: '2024-05-01', stops: [stop(10, 1, '09:00')] }]
+    fetchTripPhotos.mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
+
+    const scope = effectScope()
+    let api
+    scope.run(() => {
+      api = usePhotoPlacement(3, { externalDays: () => ext })
+    })
+    await api.reload()
+
+    expect(fetchItinerary).not.toHaveBeenCalled() // 일정 중복 fetch 안 함(부모가 준 걸 재사용)
+    expect(fetchTripPhotos).toHaveBeenCalledWith(3)
+    expect(api.days.value).toEqual(ext)
+    expect(api.photos.value.map((p) => p.id)).toEqual([1, 2])
+  })
+
+  it('externalDays 가 없으면 기존대로 fetchItinerary 로 일정을 가져온다', async () => {
+    const scope = effectScope()
+    let api
+    scope.run(() => {
+      api = usePhotoPlacement(7)
+    })
+    await api.reload()
+
+    expect(fetchItinerary).toHaveBeenCalledWith(7)
   })
 })

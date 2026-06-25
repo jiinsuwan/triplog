@@ -10,7 +10,6 @@ import {
   CARD_STEPS,
   normalizeStepKey,
   nextStepKey,
-  prevStepKey,
   stepIndexOf,
   useCardStore,
 } from '@/stores/card'
@@ -21,7 +20,12 @@ const card = useCardStore()
 
 // 진입 시 여행 컨텍스트 세팅 + 선택 초기화. 아래 스텝 가드보다 먼저 동기 실행한다
 // (가드가 갓 초기화된 photoIds 를 봐야 에디터 딥링크를 올바로 막는다).
-card.startForTrip(route.query.tripId)
+// 단, 다녀옴 미리보기 팝업이 막 startForTrip+setPhotoIds 로 채워 step=editor 로 직행한 경우
+// (= 같은 여행 + photoIds 보유)는 재초기화를 건너뛰어 배치 결과를 보존한다.
+const entryTripId = Number(route.query.tripId)
+if (card.selectedTripId !== entryTripId || card.photoIds.length === 0) {
+  card.startForTrip(route.query.tripId)
+}
 
 // 같은 /cards/new 라우트에서 ?tripId 만 바뀌면 컴포넌트가 재사용돼 setup 이 다시 안 돈다.
 // tripId 변경 시 카드 상태를 재초기화한다(이전 여행 사진을 다른 여행 화면에서 편집하는 것 방지).
@@ -42,7 +46,8 @@ function goToStep(key) {
   router.push({ query: { ...route.query, step: key } })
 }
 const goNext = () => goToStep(nextStepKey(currentStepKey.value))
-const goPrev = () => goToStep(prevStepKey(currentStepKey.value))
+// 에디터에서 나가기 = 여행 목록으로. 옛 '고르기'(step=pick) 화면은 다녀옴 팝업이 대체하므로 경유하지 않는다.
+const leaveEditor = () => router.push({ name: 'trip-list' })
 
 // URL step 정규화 + 에디터 진입 가드.
 // 잘못된 step 은 첫 단계로, 사진 0장인데 에디터로 들어오면 고르기로 되돌린다(딥링크·새로고침 안정화).
@@ -76,7 +81,7 @@ watch(
 
   <!-- 에디터 단계: 풀스크린(외곽선 처리 → 에디터). 위저드 칼럼/스텝/푸터 없음. -->
   <div v-else class="cc-editor">
-    <CardOutlineProgress :photo-ids="card.photoIds" @back="goPrev" />
+    <CardOutlineProgress :photo-ids="card.photoIds" @back="leaveEditor" />
   </div>
 </template>
 

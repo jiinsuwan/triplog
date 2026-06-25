@@ -821,7 +821,7 @@ watch(
   <div class="ed" :class="{ viewer: viewerMode }">
     <!-- 상단: 출력 형식 + 저장/완료 -->
     <header class="ed-top">
-      <button class="back" @click="emit('back')">‹ 고르기</button>
+      <button class="back" @click="emit('back')">‹ 나가기</button>
       <span class="title">카드 {{ current + 1 }} / {{ photoIds.length }}</span>
       <span class="grow" />
       <fieldset class="fmt">

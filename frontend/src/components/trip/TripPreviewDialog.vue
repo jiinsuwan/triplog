@@ -1,9 +1,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { fetchItinerary } from '@/api/itineraryApi'
 import { BaseButton, BaseModal } from '@/components/common'
+import RecordPlacementBody from '@/components/log/record/RecordPlacementBody.vue'
 import TripInfoEditDialog from '@/components/trip/TripInfoEditDialog.vue'
+import { useCardStore } from '@/stores/card'
 import { useTripStore } from '@/stores/trip'
 import { formatTripDateRange, tripDisplayTags, tripDurationDays } from '@/utils/tripForm'
 import { isPastTripStatus } from '@/utils/tripStatus'
@@ -21,6 +24,10 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'open-places', 'deleted', 'updated'])
 const tripStore = useTripStore()
+const router = useRouter()
+const card = useCardStore()
+// 다녀옴 사진 배치에서 올라온 배치 사진 id(카드 대상). footer 의 "추억 만들러 가기" 활성·진입에 쓴다.
+const placedPhotoIds = ref([])
 
 const itinerary = ref(null)
 const loading = ref(false)
@@ -51,7 +58,12 @@ const dateMeta = computed(() => {
   return `${formatTripDateRange(props.trip)} · ${tripDurationDays(props.trip)}일`
 })
 const placeCountText = computed(() => `담은 장소 ${stopCount.value}곳`)
-const modalWidth = computed(() => (stopCount.value === 0 ? 'min(520px, 92vw)' : 'min(680px, 92vw)'))
+// 다녀옴(past) + 일정 있음 + 실제 여행(mock 데모 아님) 이면 사진 배치 타임라인(기록 뷰)을 보여준다.
+const showPlacement = computed(() => isPastTrip.value && !isMockTrip.value && stopCount.value > 0)
+const modalWidth = computed(() => {
+  if (showPlacement.value) return 'min(760px, 92vw)'
+  return stopCount.value === 0 ? 'min(520px, 92vw)' : 'min(680px, 92vw)'
+})
 const metaChips = computed(() => [
   props.trip?.region || '지역 미정',
   props.trip?.theme || '테마 미정',
@@ -115,6 +127,17 @@ async function loadItinerary() {
 
 function close() {
   emit('update:modelValue', false)
+}
+
+// 다녀옴 팝업에서 배치한 사진을 들고 카드 에디터로 진입한다.
+// startForTrip + setPhotoIds 로 카드 컨텍스트를 미리 채운 뒤 step=editor 로 직행한다.
+// (CardCreateView 는 같은 여행 + photoIds 가 이미 있으면 진입 시 재초기화를 건너뛴다.)
+function goEditor(placedIds) {
+  if (!props.trip?.id) return
+  card.startForTrip(props.trip.id)
+  card.setPhotoIds(placedIds)
+  close()
+  router.push({ name: 'card-create', query: { tripId: props.trip.id, step: 'editor' } })
 }
 
 function openPlaces() {
@@ -224,6 +247,15 @@ function mapPinStyle(index) {
         </BaseButton>
       </div>
 
+      <RecordPlacementBody
+        v-else-if="showPlacement"
+        :key="trip.id"
+        :days="plannedDays"
+        :trip-id="trip.id"
+        :region="trip.region"
+        @update:placed="placedPhotoIds = $event"
+      />
+
       <div v-else class="trip-preview-dialog__body">
         <div class="trip-preview-dialog__map" aria-label="여행 경로 미리보기">
           <div class="trip-preview-dialog__map-grid"></div>
@@ -289,7 +321,7 @@ function mapPinStyle(index) {
           정보 수정
         </BaseButton>
         <BaseButton
-          v-if="!isMockTrip"
+          v-if="!isMockTrip && !showPlacement"
           variant="ghost"
           type="button"
           class="trip-preview-dialog__delete"
@@ -307,6 +339,16 @@ function mapPinStyle(index) {
           @click="openPlaces"
         >
           계획 수정하기 →
+        </BaseButton>
+        <BaseButton
+          v-if="showPlacement"
+          variant="primary"
+          type="button"
+          data-testid="trip-preview-record"
+          :disabled="!placedPhotoIds.length"
+          @click="goEditor(placedPhotoIds)"
+        >
+          추억 만들러 가기 →
         </BaseButton>
       </footer>
     </section>
@@ -484,6 +526,13 @@ function mapPinStyle(index) {
   font-size: 13px;
   font-weight: 600;
   margin: 0 0 4px;
+}
+
+/* 다녀옴 사진 배치(RecordPlacementBody)도 메타칩·구분선과 같은 inner-width 로 정렬한다. */
+.trip-preview-dialog > :deep(.rec) {
+  justify-self: center;
+  width: var(--preview-inner-width);
+  padding: 16px 0 6px;
 }
 
 .trip-preview-dialog__body {
