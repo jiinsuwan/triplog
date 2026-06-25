@@ -71,24 +71,6 @@ const places = [
 ]
 
 describe('TripPlaceSearchView itinerary editor', () => {
-  it('장소 담기 화면은 목업 기준 상단 흐름과 담기 UI를 표시한다', async () => {
-    const wrapper = mount(TripPlaceSearchView, {
-      global: {
-        stubs: primeVueStubs(),
-      },
-    })
-    await flushPromises()
-    await flushPromises()
-
-    expect(wrapper.find('.workspace-topbar').exists()).toBe(true)
-    expect(wrapper.find('.workspace-steps').text()).toContain('① 장소 담기')
-    expect(wrapper.find('.workspace-steps').text()).toContain('② 일정 배치')
-    expect(wrapper.find('.workspace-next-button').exists()).toBe(true)
-    expect(wrapper.find('.workspace-title h1').text()).toContain('주변 장소를 담아요')
-    expect(wrapper.findAll('.category-row button').length).toBeGreaterThan(1)
-    expect(wrapper.findAll('.place-row__pocket')).toHaveLength(places.length)
-  })
-
   beforeEach(() => {
     setActivePinia(createPinia())
     resetMockItineraryData()
@@ -102,6 +84,24 @@ describe('TripPlaceSearchView itinerary editor', () => {
     loadKakaoMaps.mockRejectedValue(new Error('Kakao SDK unavailable in test'))
   })
 
+  it('장소 담기 화면은 목업 기준 상단 흐름과 담기 UI를 표시한다', async () => {
+    const wrapper = mount(TripPlaceSearchView, {
+      global: {
+        stubs: primeVueStubs(),
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.find('.place-header').exists()).toBe(true)
+    expect(wrapper.find('.step-card').text()).toContain('1 장소 담기')
+    expect(wrapper.find('.step-card').text()).toContain('2 일정 배치')
+    expect(wrapper.find('.route-start-button').exists()).toBe(true)
+    expect(wrapper.find('.place-header h1').text()).toContain('주변 장소를 담아요')
+    expect(wrapper.findAll('.search-card button').length).toBeGreaterThan(1)
+    expect(wrapper.findAll('.place-row__pocket')).toHaveLength(places.length)
+  })
+
   it('경로 생성 모드는 담긴 장소와 일정 장소만 지도 마커로 표시한다', async () => {
     routeMock.query = { mode: 'itinerary' }
     const wrapper = mount(TripPlaceSearchView, {
@@ -112,7 +112,7 @@ describe('TripPlaceSearchView itinerary editor', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(wrapper.findAll('[role="tab"]')).toHaveLength(3)
+    expect(wrapper.findAll('.day-tabs button')).toHaveLength(3)
     expect(wrapper.findAll('.fallback-pin')).toHaveLength(0)
     expect(wrapper.findAll('.route-stop-card')).toHaveLength(0)
   })
@@ -139,7 +139,7 @@ describe('TripPlaceSearchView itinerary editor', () => {
     expect(wrapper.findAll('.route-stop-card')).toHaveLength(2)
     expect(wrapper.findAll('.route-stop-card .p-select')).toHaveLength(0)
     expect(wrapper.findAll('.route-leg .p-select')).toHaveLength(1)
-    expect(wrapper.findAll('.route-stop-actions button')).toHaveLength(2)
+    expect(wrapper.findAll('.route-stop-delete')).toHaveLength(2)
     expect(wrapper.findAll('button[aria-label$="위로 이동"]')).toHaveLength(0)
     expect(wrapper.findAll('button[aria-label$="아래로 이동"]')).toHaveLength(0)
     expect(wrapper.text()).toContain('전주한옥마을')
@@ -207,7 +207,7 @@ describe('TripPlaceSearchView itinerary editor', () => {
 
     const stopNames = wrapper.findAll('.route-stop-main strong').map((item) => item.text())
     expect(stopNames).toEqual(['경기전'])
-    expect(wrapper.text()).toContain('전주한옥마을을(를) 루트에서 제거했습니다.')
+    expect(wrapper.text()).toContain('전주한옥마을을(를) 경로 후보로 되돌렸습니다.')
   })
 
   it('장소 담기 화면으로 돌아가도 이미 루트에 담긴 장소를 담긴 장소 목록에 표시한다', async () => {
@@ -283,6 +283,10 @@ function primeVueStubs() {
     ProgressSpinner: {
       template: '<div />',
     },
+    RouterLink: {
+      props: ['to'],
+      template: '<a><slot /></a>',
+    },
     Select: {
       props: ['modelValue', 'options', 'optionLabel', 'optionValue'],
       emits: ['update:modelValue', 'change'],
@@ -290,7 +294,7 @@ function primeVueStubs() {
         <select
           class="p-select"
           :value="modelValue"
-          @change="$emit('update:modelValue', $event.target.value); $emit('update:model-value', $event.target.value); $emit('change', $event)"
+          @change="$emit('update:modelValue', $event.target.value); $emit('change', $event)"
         >
           <option
             v-for="option in options"

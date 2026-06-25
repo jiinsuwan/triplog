@@ -1721,16 +1721,19 @@ async function updateLegTransport(stop, transport) {
 async function updateManualTravelDuration(stop) {
   const draft = stopDraft(stop)
   const manualTravelDurationMinutes = normalizeManualTravelMinutes(draft.manualTravelMinutes)
+  const nextStop = nextRouteStop(stop)
   if (!manualTravelDurationMinutes) {
     resetStopDraft(stop)
     return
   }
+  if (!nextStop) return
 
   try {
-    await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
-      selectedTime: draft.selectedTime,
-      memo: stayMemoFromMinutes(draft.stayMinutes),
-      transport: draft.transport,
+    const nextDraft = stopDraft(nextStop)
+    await itineraryStore.updateStop(tripId.value, activeDayNumber.value, nextStop.id, {
+      selectedTime: nextDraft.selectedTime,
+      memo: stayMemoFromMinutes(nextDraft.stayMinutes),
+      transport: nextDraft.transport,
       manualTravelDurationMinutes,
     })
     await itineraryStore.fetchTripItinerary(tripId.value, trip.value)
@@ -1739,6 +1742,11 @@ async function updateManualTravelDuration(stop) {
     resetStopDraft(stop)
     // store error를 오른쪽 일정 패널에서 표시한다.
   }
+}
+
+function nextRouteStop(stop) {
+  const index = activeDisplayStops.value.findIndex((candidate) => candidate.id === stop?.id)
+  return index >= 0 ? activeDisplayStops.value[index + 1] : null
 }
 
 async function deleteStop(stop) {
@@ -2178,8 +2186,9 @@ function routeLegSummary(fromStop, toStop) {
   const option = transportOption(routeLegMode(fromStop))
   const estimate = routeLegEstimate(fromStop, toStop)
   const duration = formatTravelDuration(estimate?.durationSeconds)
+  const durationLabel = estimate?.status === 'manual' && duration ? `직접 ${duration}` : duration
   const distance = formatTravelDistance(estimate?.distanceMeters)
-  return [option.label, duration || '계산 중', distance].filter(Boolean).join(' · ')
+  return [option.label, durationLabel || '계산 중', distance].filter(Boolean).join(' · ')
 }
 
 function routeLegTitle(fromStop, toStop) {
@@ -2797,9 +2806,20 @@ function normalizeSearchText(value = '') {
                       <span class="route-stop-resize route-stop-resize--bottom" @pointerdown.stop.prevent="startStayResize(stop, 'bottom', $event)"></span>
                     </article>
                     <div v-if="index < activeDisplayStops.length - 1" class="route-leg" :style="routeLegTimelineStyle(stop, activeDisplayStops[index + 1])">
-                      <div class="route-leg__details">
+                      <div class="route-leg__details" :class="{ 'has-manual': isManualTravelInputVisible(stop) }">
                         <Select :model-value="routeLegMode(stop)" :options="TRANSPORT_VIEW_OPTIONS" option-label="label" option-value="value" :disabled="itineraryStore.mutating" @pointerdown.stop @update:model-value="updateLegTransport(stop, $event)" />
                         <em :title="routeLegTitle(stop, activeDisplayStops[index + 1])">{{ routeLegSummary(stop, activeDisplayStops[index + 1]) }}</em>
+                        <label v-if="isManualTravelInputVisible(stop)" class="route-leg__manual">
+                          <InputText
+                            :model-value="stopDraft(stop).manualTravelMinutes"
+                            class="route-leg__manual-input"
+                            inputmode="numeric"
+                            aria-label="대중교통 이동 시간 직접 입력"
+                            @update:model-value="setStopDraft(stop, { manualTravelMinutes: $event })"
+                            @change="updateManualTravelDuration(stop)"
+                          />
+                          <span>분</span>
+                        </label>
                       </div>
                     </div>
                   </template>
