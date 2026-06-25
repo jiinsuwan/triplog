@@ -501,8 +501,20 @@ function confirmRegen() {
   regenAsk.value = false
   // 재생성 = 이 사진 텍스트 전체 리셋. 직접 추가한 텍스트도 함께 비운다(경고에 명시).
   clearCurrentTexts()
+  resetCurrentOverrides() // 사진별 문구·마무리 숨김/위치/회전 override도 초기화(새 문구가 옛 상태 물려받지 않게)
   card.clearCaption(currentId.value) // 캐시 비워 재생성 허용(전체 새로)
   genCaption(currentId.value)
+}
+// 현재 사진의 문구·마무리 override(숨김/위치/회전)를 모두 지운다. 재생성 시 같은 itemId 새 문구가
+// 옛 숨김·위치·회전을 물려받는 문제 방지(리뷰 P1).
+function resetCurrentOverrides() {
+  const prefix = `${currentId.value}:`
+  hiddenCaption.value = new Set([...hiddenCaption.value].filter((k) => !k.startsWith(prefix)))
+  for (const k of Object.keys(captionPos)) if (k.startsWith(prefix)) delete captionPos[k]
+  for (const k of Object.keys(captionRot)) if (k.startsWith(prefix)) delete captionRot[k]
+  hiddenClosing.value = new Set([...hiddenClosing.value].filter((id) => id !== currentId.value))
+  delete closingPos[currentId.value]
+  delete closingRot[currentId.value]
 }
 function cancelRegen() {
   regenAsk.value = false

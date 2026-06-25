@@ -102,6 +102,11 @@ export function useCardEditorExport({
           scale: fontScale.value,
         },
       )
+      // export 도중 사진이 바뀌면 overlay(live refs)가 다른 사진 것이 되므로, 합성 전에 먼저 가드(리뷰 P2).
+      if (currentId.value !== exportId) {
+        exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
+        return
+      }
       const composed = await composeOverlays(blob)
       if (currentId.value !== exportId) {
         exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'

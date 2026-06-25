@@ -8,7 +8,10 @@ const ready = new Map() // src -> HTMLImageElement(로드 완료)
 function loadWhite(src) {
   if (loading.has(src)) return loading.get(src)
   const p = fetch(src)
-    .then((r) => r.text())
+    .then((r) => {
+      if (!r.ok) throw new Error(`sticker fetch ${r.status}: ${src}`)
+      return r.text()
+    })
     .then(
       (svg) =>
         new Promise((resolve, reject) => {
@@ -20,10 +23,14 @@ function loadWhite(src) {
             ready.set(src, img)
             resolve(img)
           }
-          img.onerror = reject
+          img.onerror = () => reject(new Error(`sticker decode 실패: ${src}`))
           img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(white)
         }),
     )
+    .catch((e) => {
+      loading.delete(src) // 실패는 캐시하지 않는다 — 다음 호출에서 재시도 가능(리뷰 P2)
+      throw e
+    })
   loading.set(src, p)
   return p
 }
