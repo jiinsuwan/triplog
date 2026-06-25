@@ -20,8 +20,12 @@ import {
   drawSelectionBox,
   paintEditorLine,
   paintEditorText,
+  paintEditorSticker,
+  stickerBox,
   lineRotHandle,
 } from './cardEditorCanvas'
+import { STICKERS } from './stickers'
+import { getStickerImage } from './stickerImage'
 import { useCardEditorDrag } from './useCardEditorDrag'
 import { useCardEditorExport } from './useCardEditorExport'
 import { LAYER_CHIP, LAYER_CHIP_CLASS, useCardEditorLayers } from './useCardEditorLayers'
@@ -251,6 +255,13 @@ const {
   selectedText,
   lines,
   selectedLine,
+  stickers,
+  stickersByPhoto,
+  selectedStickerId,
+  selectedSticker,
+  selectSticker,
+  addSticker,
+  removeSticker,
   clearSelection,
   selectItem,
   selectText,
@@ -404,12 +415,15 @@ const { paintOutlines, scheduleRedraw } = useCardEditorRenderer({
   selectedItemId,
   selectedKind,
   selectedCaption,
+  selectedSticker,
   isObjectOn,
   outlineStyleOf,
   drawLines,
   drawTexts,
+  drawStickers,
   drawCaptionBox,
   drawClosingBox,
+  drawStickerBox,
 })
 const { exporting, exportNote, exportCurrent } = useCardEditorExport({
   currentId,
@@ -426,6 +440,7 @@ const { exporting, exportNote, exportCurrent } = useCardEditorExport({
   toneDown,
   texts,
   lines,
+  stickers,
   isCaptionOn,
   isObjectOn,
   applyCaptionOverrides,
@@ -499,7 +514,8 @@ watch(currentId, () => {
 // 우패널·좌측 도구 하이라이트를 결정하는 단일 컨텍스트. 선택한 요소의 family 가 우선, 없으면 현재 도구.
 //   외곽선→ai / 문구·텍스트→text / 선→line. activeTool(캔버스 생성·선택 동작)은 건드리지 않는다.
 const panelContext = computed(() => {
-  if (selectedOutline.value) return 'ai'
+  if (selectedSticker.value) return 'deco'
+  if (selectedOutline.value) return 'line'
   if (selectedCaption.value || selectedText.value || selectedClosing.value) return 'text'
   if (selectedLine.value) return 'line'
   return activeTool.value === 'select' ? 'ai' : activeTool.value
@@ -534,6 +550,18 @@ function drawClosingBox(ctx, W, H) {
   const b = closingBox()
   if (b) drawSelectionBox(ctx, b, getClosingRot(), { W, H })
 }
+// 스티커 그리기 — 흰색 이미지(currentColor→흰색 재색칠, 캐시). 로드 완료 시 재렌더.
+function drawStickers(ctx, dims) {
+  const { W, H } = dims
+  for (const s of stickers.value) {
+    if (s.hidden) continue
+    paintEditorSticker(ctx, s, getStickerImage(s.src, scheduleRedraw), { W, H })
+  }
+}
+function drawStickerBox(ctx, W, H) {
+  const s = selectedSticker.value
+  if (s && !s.hidden) drawSelectionBox(ctx, stickerBox(s, { W, H }), s.rotation ?? 0, { W, H, handleScale: 0.5 })
+}
 
 function drawLines(ctx, dims) {
   const { W, H } = dims
@@ -547,7 +575,7 @@ function drawLines(ctx, dims) {
       ctx.strokeStyle = '#3182f6'
       ctx.lineWidth = Math.max(2, W * 0.003)
       ctx.beginPath()
-      ctx.arc(hx * W, hy * H, Math.max(7, W * 0.012), 0, Math.PI * 2)
+      ctx.arc(hx * W, hy * H, Math.max(7, W * 0.012) * 0.5, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
       ctx.restore()
@@ -563,7 +591,7 @@ function drawLines(ctx, dims) {
     ctx.lineTo(rhx, rhy)
     ctx.stroke()
     ctx.beginPath()
-    ctx.arc(rhx, rhy, Math.max(6, W * 0.011), 0, Math.PI * 2)
+    ctx.arc(rhx, rhy, Math.max(6, W * 0.011) * 0.5, 0, Math.PI * 2)
     ctx.fillStyle = '#3182f6'
     ctx.fill()
     ctx.strokeStyle = '#fff'
@@ -653,6 +681,7 @@ function closingBox() {
 // 텍스트/선 선택·내용·위치 변경 시 다시 그린다(여기서 — texts/lines 선언 뒤라 TDZ 없음).
 watch([selectedTextId, texts], scheduleRedraw, { deep: true, flush: 'post' })
 watch([selectedLineId, lines], scheduleRedraw, { deep: true, flush: 'post' })
+watch([selectedStickerId, stickers], scheduleRedraw, { deep: true, flush: 'post' })
 // 도구를 바꾸면 선택을 해제한다 — 선/텍스트가 선택된 채로 다른 도구가 막히던 문제 해소.
 watch(activeTool, () => {
   clearSelection()
@@ -688,9 +717,12 @@ const { onCanvasPointerDown } = useCardEditorDrag({
   items,
   texts,
   lines,
+  stickers,
   selectedText,
   selectedCaption,
   selectedLine,
+  selectedSticker,
+  selectSticker,
   selectedKind,
   selectedItemId,
   getCaptionRot,
@@ -869,29 +901,6 @@ watch(
 
           <!-- AI 컨텍스트: (외곽선 선택 시) 선 모양 개별 편집 + 외곽선 보정·문구 생성 -->
           <template v-if="panelContext === 'ai'">
-            <template v-if="selectedOutline">
-              <label class="lbl">외곽선 (선택)</label>
-              <label class="ctl-lbl">선 두께</label>
-              <div class="stepper">
-                <button class="step" title="얇게" @click="setOutlineStyle(selectedItemId, { width: Math.max(0.3, Math.round((outlineStyleOf(selectedItemId).width - 0.1) * 10) / 10) })">−</button>
-                <input type="range" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
-                <button class="step" title="굵게" @click="setOutlineStyle(selectedItemId, { width: Math.min(8, Math.round((outlineStyleOf(selectedItemId).width + 0.1) * 10) / 10) })">＋</button>
-                <input class="num" type="number" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
-              </div>
-              <div class="row">
-                <span>선 스타일</span>
-                <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'solid'" @change="setOutlineStyle(selectedItemId, { style: 'solid' })" /> 실선</label>
-                <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'dashed'" @change="setOutlineStyle(selectedItemId, { style: 'dashed' })" /> 점선</label>
-              </div>
-              <div v-if="outlineStyleOf(selectedItemId).style === 'dashed'" class="row dash-row">
-                <span>길이</span>
-                <input type="range" min="2" max="30" step="1" :value="outlineStyleOf(selectedItemId).dashLen" @input="setOutlineStyle(selectedItemId, { dashLen: Number($event.target.value) })" /><span class="numv">{{ outlineStyleOf(selectedItemId).dashLen }}</span>
-                <span>간격</span>
-                <input type="range" min="1" max="30" step="1" :value="outlineStyleOf(selectedItemId).dashGap" @input="setOutlineStyle(selectedItemId, { dashGap: Number($event.target.value) })" /><span class="numv">{{ outlineStyleOf(selectedItemId).dashGap }}</span>
-              </div>
-              <label class="chk"><input type="checkbox" :checked="applyOutlineAll" @change="setOutlineAll($event.target.checked)" /> 모든 외곽선에 같이 적용</label>
-              <hr class="sep" />
-            </template>
             <div class="act-row">
               <button class="act-btn" :disabled="!photoImg" @click="correctionOpen = true">
                 <i class="pi pi-pencil" />외곽선 보정
@@ -960,7 +969,30 @@ watch(
 
           <!-- 선 컨텍스트: (선택 시) 굵기·스타일·화살표 -->
           <template v-else-if="panelContext === 'line'">
-            <template v-if="selectedLine">
+            <!-- 외곽선(객체 테두리) 선택 시 = 선 모양 수정(두께·점선/실선·전체적용) -->
+            <template v-if="selectedOutline">
+              <label class="lbl">외곽선 (선택)</label>
+              <label class="ctl-lbl">선 두께</label>
+              <div class="stepper">
+                <button class="step" title="얇게" @click="setOutlineStyle(selectedItemId, { width: Math.max(0.3, Math.round((outlineStyleOf(selectedItemId).width - 0.1) * 10) / 10) })">−</button>
+                <input type="range" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
+                <button class="step" title="굵게" @click="setOutlineStyle(selectedItemId, { width: Math.min(8, Math.round((outlineStyleOf(selectedItemId).width + 0.1) * 10) / 10) })">＋</button>
+                <input class="num" type="number" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
+              </div>
+              <div class="row">
+                <span>선 스타일</span>
+                <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'solid'" @change="setOutlineStyle(selectedItemId, { style: 'solid' })" /> 실선</label>
+                <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'dashed'" @change="setOutlineStyle(selectedItemId, { style: 'dashed' })" /> 점선</label>
+              </div>
+              <div v-if="outlineStyleOf(selectedItemId).style === 'dashed'" class="row dash-row">
+                <span>길이</span>
+                <input type="range" min="2" max="30" step="1" :value="outlineStyleOf(selectedItemId).dashLen" @input="setOutlineStyle(selectedItemId, { dashLen: Number($event.target.value) })" /><span class="numv">{{ outlineStyleOf(selectedItemId).dashLen }}</span>
+                <span>간격</span>
+                <input type="range" min="1" max="30" step="1" :value="outlineStyleOf(selectedItemId).dashGap" @input="setOutlineStyle(selectedItemId, { dashGap: Number($event.target.value) })" /><span class="numv">{{ outlineStyleOf(selectedItemId).dashGap }}</span>
+              </div>
+              <label class="chk"><input type="checkbox" :checked="applyOutlineAll" @change="setOutlineAll($event.target.checked)" /> 모든 외곽선에 같이 적용</label>
+            </template>
+            <template v-else-if="selectedLine">
               <label class="lbl">선 (선택)</label>
               <label class="ctl-lbl">굵기</label>
               <div class="stepper">
@@ -984,7 +1016,14 @@ watch(
           </template>
 
           <!-- 장식 컨텍스트 -->
-          <p v-else-if="panelContext === 'deco'" class="muted small">장식은 곧 제공됩니다.</p>
+          <template v-else-if="panelContext === 'deco'">
+            <div class="sticker-palette">
+              <button v-for="st in STICKERS" :key="st.id" class="sticker-btn" :title="st.id" @click="addSticker(st)">
+                <img :src="st.src" alt="" />
+              </button>
+            </div>
+            <button v-if="selectedSticker" class="del-btn" @click="removeSticker(selectedStickerId)"><i class="pi pi-trash" /> 스티커 삭제</button>
+          </template>
         </div>
 
         <div class="section layers">
@@ -1008,7 +1047,7 @@ watch(
               </button>
               <span class="chip tag" :class="LAYER_CHIP_CLASS[row.kind]">{{ LAYER_CHIP[row.kind] }}</span>
               <button
-                v-if="row.kind === 'text' || row.kind === 'caption' || row.kind === 'line'"
+                v-if="row.kind === 'text' || row.kind === 'caption' || row.kind === 'line' || row.kind === 'sticker'"
                 class="del-one"
                 title="삭제"
                 @click="removeLayerRow(row)"
@@ -1333,6 +1372,35 @@ watch(
   border: 0;
   border-top: 1px solid var(--line2);
   margin: 12px 0;
+}
+/* 스티커 팔레트 — 클릭해 캔버스에 추가(흰색은 캔버스에서, 팔레트는 종이 위 검은 선) */
+.sticker-palette {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  /* 팔레트만 내부 스크롤 — 아래 삭제 버튼이 바깥 스크롤 없이 보이도록 높이 제한 */
+  max-height: clamp(160px, 34vh, 360px);
+  overflow-y: auto;
+  padding: 2px;
+}
+.sticker-btn {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-card);
+  cursor: pointer;
+  padding: 7px;
+}
+.sticker-btn:hover {
+  border-color: var(--accent);
+  background: var(--paper-dim);
+}
+.sticker-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 /* 외곽선 전체 적용 체크박스 */
 .chk {

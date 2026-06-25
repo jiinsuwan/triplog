@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { exportCardPng } from '@/card/render/exportCard'
-import { paintEditorLine, paintEditorText } from './cardEditorCanvas'
+import { paintEditorLine, paintEditorText, paintEditorSticker } from './cardEditorCanvas'
+import { ensureStickerImages, getStickerImage } from './stickerImage'
 
 function triggerDownload(blob, name) {
   const url = URL.createObjectURL(blob)
@@ -28,6 +29,7 @@ export function useCardEditorExport({
   toneDown,
   texts,
   lines,
+  stickers,
   isCaptionOn,
   isObjectOn,
   applyCaptionOverrides,
@@ -42,16 +44,18 @@ export function useCardEditorExport({
     const img = photoImg.value
     const vText = texts.value.filter((t) => !t.hidden && t.text.trim())
     const vLine = lines.value.filter((l) => !l.hidden)
+    const vSticker = stickers.value.filter((s) => !s.hidden)
     const hasOutline = items.value.some(
       (it) => isObjectOn(it.id) && Array.isArray(it.polygons) && it.polygons.length,
     )
-    if (!vText.length && !vLine.length && !hasOutline) return blob
+    if (!vText.length && !vLine.length && !vSticker.length && !hasOutline) return blob
     try {
       try {
         await document.fonts.load(`64px "${fontFamily.value}"`)
       } catch {
         /* 폰트 로드 실패 — 폴백 폰트로 진행 */
       }
+      if (vSticker.length) await ensureStickerImages(vSticker.map((s) => s.src)) // 스티커 흰색 이미지 로드 보장
       const bmp = await createImageBitmap(blob)
       const cv = document.createElement('canvas')
       cv.width = bmp.width
@@ -61,6 +65,7 @@ export function useCardEditorExport({
       if (img && hasOutline) paintOutlines(ctx, img, bmp.width, bmp.height, { forExport: true })
       for (const l of vLine) paintEditorLine(ctx, l, { W: bmp.width, H: bmp.height })
       for (const t of vText) paintEditorText(ctx, t, editorTextOpts(bmp.width, bmp.height))
+      for (const s of vSticker) paintEditorSticker(ctx, s, getStickerImage(s.src), { W: bmp.width, H: bmp.height })
       const composed = await new Promise((res) => cv.toBlob(res, 'image/png'))
       return composed || blob
     } catch {

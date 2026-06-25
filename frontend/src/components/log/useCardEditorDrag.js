@@ -6,6 +6,7 @@ import {
   lineEndpointAt,
   lineRotHandle,
   nearLine,
+  stickerBox,
 } from './cardEditorCanvas'
 
 export function useCardEditorDrag({
@@ -23,6 +24,9 @@ export function useCardEditorDrag({
   selectedText,
   selectedCaption,
   selectedLine,
+  selectedSticker,
+  stickers,
+  selectSticker,
   selectedKind,
   selectedItemId,
   getCaptionRot,
@@ -133,6 +137,36 @@ export function useCardEditorDrag({
       }
     }
 
+    // 선택된 스티커의 변형 핸들(회전/크기) — 스티커별 scale·rotation.
+    if (selectedSticker.value && !selectedSticker.value.hidden) {
+      const ss = selectedSticker.value
+      const b = stickerBox(ss, { W, H })
+      const h = boxHandleAt(b, ss.rotation ?? 0, nx, ny, { W, H })
+      if (h === 'rotate') {
+        drag.value = { kind: 'sticker-rotate', id: ss.id, cx: b.cx, cy: b.cy }
+        bindCanvasDrag(e)
+        return
+      }
+      if (h === 'resize') {
+        drag.value = { kind: 'sticker-resize', id: ss.id, cx: b.cx, cy: b.cy, d0: Math.hypot((nx - b.cx) * W, (ny - b.cy) * H) || 1, s0: ss.scale ?? 1 }
+        bindCanvasDrag(e)
+        return
+      }
+    }
+
+    // 스티커 본체(맨 위부터) → 선택 + 이동. 텍스트보다 위에 그려지므로 먼저 잡는다.
+    for (let i = stickers.value.length - 1; i >= 0; i--) {
+      const s = stickers.value[i]
+      if (s.hidden) continue
+      const b = stickerBox(s, { W, H })
+      if (Math.abs(nx - b.cx) <= b.hw + 0.01 && Math.abs(ny - b.cy) <= b.hh + 0.01) {
+        drag.value = { kind: 'sticker', id: s.id, dx: nx - s.x, dy: ny - s.y }
+        selectSticker(s.id)
+        bindCanvasDrag(e)
+        return
+      }
+    }
+
     for (let i = texts.value.length - 1; i >= 0; i--) {
       const t = texts.value[i]
       if (t.hidden) continue
@@ -160,13 +194,7 @@ export function useCardEditorDrag({
       }
     }
 
-    if (activeTool.value === 'line') {
-      const l = addLine(nx, ny, nx, ny)
-      selectLine(l.id)
-      drag.value = { kind: 'line-ep', id: l.id, ep: '2' }
-      bindCanvasDrag(e)
-      return
-    }
+    // (선 그리기 폐기 — 선 도구는 외곽선 선 모양 편집용. 직선만 되던 자유 선 생성은 제거.)
     if (activeTool.value === 'text') {
       const t = addText(nx, ny)
       drag.value = { kind: 'text', id: t.id, dx: 0, dy: 0 }
@@ -259,6 +287,25 @@ export function useCardEditorDrag({
         const { W, H } = canvasDims.value
         const dpx = Math.hypot((nx - t.x) * W, (ny - t.y) * H)
         fontScale.value = Math.min(3, Math.max(0.4, currentDrag.s0 * (dpx / currentDrag.d0)))
+      }
+    } else if (currentDrag.kind === 'sticker') {
+      const s = stickers.value.find((x) => x.id === currentDrag.id)
+      if (s) {
+        s.x = clamp01(nx - currentDrag.dx)
+        s.y = clamp01(ny - currentDrag.dy)
+      }
+    } else if (currentDrag.kind === 'sticker-rotate') {
+      const s = stickers.value.find((x) => x.id === currentDrag.id)
+      if (s) {
+        const { W, H } = canvasDims.value
+        s.rotation = Math.round((Math.atan2((ny - currentDrag.cy) * H, (nx - currentDrag.cx) * W) * 180) / Math.PI + 90)
+      }
+    } else if (currentDrag.kind === 'sticker-resize') {
+      const s = stickers.value.find((x) => x.id === currentDrag.id)
+      if (s) {
+        const { W, H } = canvasDims.value
+        const dpx = Math.hypot((nx - currentDrag.cx) * W, (ny - currentDrag.cy) * H)
+        s.scale = Math.min(4, Math.max(0.2, currentDrag.s0 * (dpx / currentDrag.d0)))
       }
     } else if (currentDrag.kind === 'line-ep') {
       const l = lines.value.find((x) => x.id === currentDrag.id)

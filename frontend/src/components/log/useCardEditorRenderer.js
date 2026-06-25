@@ -22,12 +22,15 @@ export function useCardEditorRenderer({
   selectedItemId,
   selectedKind,
   selectedCaption,
+  selectedSticker,
   isObjectOn,
   outlineStyleOf,
   drawLines,
   drawTexts,
+  drawStickers,
   drawCaptionBox,
   drawClosingBox,
+  drawStickerBox,
 }) {
   let blurCache = null
   let contentCanvas = null
@@ -177,23 +180,7 @@ export function useCardEditorRenderer({
       ctx.stroke()
     }
     ctx.restore()
-
-    if (!forExport && Array.isArray(item.center)) {
-      const [cx, cy] = cf.ptPx(item.center[0], item.center[1])
-      const r = Math.max(11, W * 0.016)
-      ctx.save()
-      ctx.setLineDash([])
-      ctx.fillStyle = selected ? '#f04452' : '#3182f6'
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#fff'
-      ctx.font = `700 ${Math.round(r * 1.2)}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(no), cx, cy)
-      ctx.restore()
-    }
+    // (캔버스 외곽선 번호 배지 제거 — 레이어 패널 번호와 기준이 달라 혼동. 선택 표시는 빨강 외곽선으로.)
   }
 
   function renderOutlineCache(img, frameW, frameH, forExport) {
@@ -248,8 +235,10 @@ export function useCardEditorRenderer({
     paintOutlines(ctx, img, fw, fh)
     drawLines(ctx, { W: fw, H: fh })
     drawTexts(ctx, { W: fw, H: fh })
+    drawStickers(ctx, { W: fw, H: fh })
     if (selectedCaption.value) drawCaptionBox(ctx, fw, fh)
     if (selectedKind.value === 'closing') drawClosingBox(ctx, fw, fh)
+    if (selectedSticker.value) drawStickerBox(ctx, fw, fh)
   }
 
   function scheduleRedraw() {

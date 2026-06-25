@@ -41,7 +41,7 @@ export function measureEditorText(ctx, t, { W, fontFamily, fontScale }) {
 
 export function drawEditorTextBox(ctx, t, { W, H, fontFamily, fontScale }) {
   const m = measureEditorText(ctx, t, { W, fontFamily, fontScale })
-  const r = Math.max(6, W * 0.011)
+  const r = Math.max(6, W * 0.011) * 0.5
   ctx.save()
   ctx.translate(t.x * W, t.y * H)
   ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
@@ -71,12 +71,12 @@ export function drawEditorTextBox(ctx, t, { W, H, fontFamily, fontScale }) {
   ctx.restore()
 }
 
-export function drawSelectionBox(ctx, box, rotDeg, { W, H }) {
+export function drawSelectionBox(ctx, box, rotDeg, { W, H, handleScale = 0.5 }) {
   const cx = box.cx * W
   const cy = box.cy * H
   const hw = box.hw * W
   const hh = box.hh * H
-  const r = Math.max(6, W * 0.011)
+  const r = Math.max(6, W * 0.011) * handleScale
   const rotOff = Math.max(20, W * 0.032)
   ctx.save()
   ctx.translate(cx, cy)
@@ -122,6 +122,27 @@ export function boxHandleAt(box, rotDeg, nx, ny, { W, H }) {
   if (Math.hypot(lx, ly - (-hh - rotOff)) < hr) return 'rotate'
   if ([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].some(([hx, hy]) => Math.hypot(lx - hx, ly - hy) < hr)) return 'resize'
   return null
+}
+
+// 스티커 = 정사각 두들. scale 1 = 카드 폭의 STICKER_BASE 만큼. 흰색 이미지로 그린다.
+export const STICKER_BASE = 0.14
+
+// 스티커 박스(캔버스 0~1 중심·반폭). 정사각(px)이라 hw=W기준, hh=H기준으로 나눈다.
+export function stickerBox(s, { W, H }) {
+  const px = W * STICKER_BASE * (s.scale ?? 1)
+  return { cx: s.x, cy: s.y, hw: px / 2 / W, hh: px / 2 / H }
+}
+
+export function paintEditorSticker(ctx, s, img, { W, H }) {
+  if (!img) return
+  const px = W * STICKER_BASE * (s.scale ?? 1)
+  ctx.save()
+  ctx.translate(s.x * W, s.y * H)
+  ctx.rotate(((s.rotation ?? 0) * Math.PI) / 180)
+  ctx.shadowColor = 'rgba(0,0,0,0.45)' // 밝은 사진 위에서도 흰 선이 읽히게 옅은 그림자
+  ctx.shadowBlur = Math.max(2, px * 0.05)
+  ctx.drawImage(img, -px / 2, -px / 2, px, px)
+  ctx.restore()
 }
 
 export function arrowHead(ctx, tipX, tipY, fromX, fromY, size) {
