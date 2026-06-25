@@ -150,10 +150,13 @@ select {
 .ds-avatar {
   align-items: center;
   background: linear-gradient(135deg, var(--accent-soft), var(--accent));
+  border: none;
   border-radius: 50%;
   color: var(--on-fill);
+  cursor: pointer;
   display: grid;
   flex: 0 0 auto;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 700;
   height: 31px;

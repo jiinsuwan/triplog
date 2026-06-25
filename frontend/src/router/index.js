@@ -36,12 +36,6 @@ const routes = [
     component: () => import('@/views/auth/OAuthCallbackView.vue'),
   },
   {
-    path: '/profile',
-    name: 'profile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
     path: '/trips',
     name: 'trip-list',
     component: TripListView,

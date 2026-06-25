@@ -79,6 +79,16 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value
   }
 
+  // 프로필 수정(닉네임). 서버가 갱신된 프로필을 돌려주므로 그대로 user 에 반영한다.
+  // profileImg 는 현재 화면에서 수정하지 않으므로 기존 값을 함께 보내 보존한다.
+  async function updateProfile({ nickname }) {
+    user.value = await authApi.updateProfile({
+      nickname,
+      profileImg: user.value?.profileImg ?? null,
+    })
+    return user.value
+  }
+
   // 401 시 인터셉터가 호출한다. /auth/refresh 로 토큰을 재발급받아 새 access 토큰을 반환한다.
   // 인터셉터 재귀를 피하려고 공용 instance 가 아닌 기본 axios 로 직접 호출한다.
   async function refresh() {
@@ -112,6 +122,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     withdraw,
     fetchMe,
+    updateProfile,
     refresh,
   }
 })

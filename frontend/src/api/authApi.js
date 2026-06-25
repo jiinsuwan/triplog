@@ -49,3 +49,10 @@ export function withdraw(password) {
 export function getMe() {
   return instance.get('/users/me').then((res) => res.data.data)
 }
+
+// PUT /users/me (보호) → UserProfileResponse
+// 백엔드 UpdateUserProfileRequest = { nickname(필수), profileImg(옵션) }.
+// 매퍼가 profileImg 를 그대로 덮으므로, 닉네임만 바꿀 때도 기존 profileImg 를 함께 보내 보존한다.
+export function updateProfile({ nickname, profileImg }) {
+  return instance.put('/users/me', { nickname, profileImg }).then((res) => res.data.data)
+}

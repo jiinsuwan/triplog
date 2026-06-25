@@ -1,5 +1,10 @@
 <script setup>
+import { ref } from 'vue'
+
 import BaseButton from './BaseButton.vue'
+import AccountDialog from './AccountDialog.vue'
+
+const accountOpen = ref(false)
 
 defineProps({
   active: {
@@ -53,7 +58,10 @@ defineEmits(['create-trip'])
           </BaseButton>
         </slot>
       </div>
-      <RouterLink class="ds-avatar" to="/profile" aria-label="프로필">{{ userInitial }}</RouterLink>
+      <button type="button" class="ds-avatar" aria-label="프로필" @click="accountOpen = true">
+        {{ userInitial }}
+      </button>
     </div>
+    <AccountDialog v-model="accountOpen" />
   </header>
 </template>

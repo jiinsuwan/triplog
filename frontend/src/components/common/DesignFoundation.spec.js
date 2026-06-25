@@ -9,7 +9,7 @@ import TripStamp from './TripStamp.vue'
 import TripTicket from './TripTicket.vue'
 
 describe('design foundation components', () => {
-  it('can hide topbar search and default create action while keeping profile access', () => {
+  it('can hide topbar search and default create action while opening profile via avatar', async () => {
     const wrapper = mount(AppTopBar, {
       props: {
         active: 'home',
@@ -23,6 +23,12 @@ describe('design foundation components', () => {
             props: ['to'],
             template: '<a :href="typeof to === \'string\' ? to : to.path"><slot /></a>',
           },
+          // 계정 팝업은 store/router 에 의존하므로 단위 테스트에선 stub 으로 대체하고
+          // 아바타 클릭 → modelValue 토글만 검증한다.
+          AccountDialog: {
+            props: ['modelValue'],
+            template: '<div class="account-dialog-stub">{{ modelValue }}</div>',
+          },
         },
       },
     })
@@ -30,8 +36,14 @@ describe('design foundation components', () => {
     expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
     expect(wrapper.find('.ds-topbar__actions').text()).toBe('')
     expect(wrapper.text()).not.toContain('새 여행')
-    expect(wrapper.find('.ds-avatar').attributes('href')).toBe('/profile')
-    expect(wrapper.find('.ds-avatar').text()).toBe('지')
+
+    const avatar = wrapper.find('.ds-avatar')
+    expect(avatar.element.tagName).toBe('BUTTON')
+    expect(avatar.text()).toBe('지')
+    expect(wrapper.find('.account-dialog-stub').text()).toBe('false')
+
+    await avatar.trigger('click')
+    expect(wrapper.find('.account-dialog-stub').text()).toBe('true')
   })
 
   it('renders trip ticket d-day and tag fallbacks', () => {
