@@ -41,7 +41,11 @@ export const useTripStore = defineStore('trip', () => {
     error.value = ''
 
     try {
-      const created = await tripApi.createTrip(payload)
+      const response = await tripApi.createTrip(payload)
+      const created = {
+        ...response,
+        createdAt: response.createdAt ?? new Date().toISOString(),
+      }
       trips.value = [created, ...trips.value.filter((trip) => trip.id !== created.id)]
       total.value += 1
       return created
@@ -75,7 +79,11 @@ export const useTripStore = defineStore('trip', () => {
     error.value = ''
 
     try {
-      const updated = await tripApi.updateTrip(id, payload)
+      const response = await tripApi.updateTrip(id, payload)
+      const updated = {
+        ...response,
+        updatedAt: response.updatedAt ?? new Date().toISOString(),
+      }
       selectedTrip.value = updated
       upsertTrip(updated)
       return updated
