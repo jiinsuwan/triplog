@@ -60,6 +60,8 @@ public class CardService {
         ImageSize imageSize = validatePng(file);
 
         Card existing = cardMapper.findByTripAndPhotoForUpdate(tripId, photoId);
+        // existing 은 아래 card 와 같은 객체라, 새 파일명으로 덮어쓰기 전에 옛 파일명을 먼저 캡처한다.
+        String oldStoredName = existing == null ? null : existing.getStoredFilename();
         String newStoredName = photoStorage.store(file, PNG_EXTENSION);
         registerRollbackCleanup(newStoredName);
 
@@ -73,7 +75,6 @@ public class CardService {
         card.setWidth(imageSize.width());
         card.setHeight(imageSize.height());
 
-        String oldStoredName = existing == null ? null : existing.getStoredFilename();
         if (existing == null) {
             cardMapper.insert(card);
         } else {
