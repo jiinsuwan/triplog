@@ -199,3 +199,28 @@ describe('buildScene — 톤·옵션', () => {
     expect(() => buildScene({ items: sampleItems, captions: sampleCaptions, canvas })).toThrow();
   });
 });
+
+// 미리보기=export 일관성의 핵심: 사용자가 준 회전·위치 override 가 레이어 끝까지 전파돼야 한다(S4-LOG-02).
+describe('buildScene — 회전·위치 override 전파 (회귀 가드)', () => {
+  it('note 레이어가 obj.rotation 을 전파한다', () => {
+    const scene = build({ captions: { objects: [{ itemId: 0, anchor: 0, note: ['기울인 문구'], rotation: 17 }] } });
+    expect(scene.layers.find((l) => l.kind === 'note').rotation).toBe(17);
+  });
+
+  it('rotation 미지정 note 는 0', () => {
+    expect(build().layers.find((l) => l.kind === 'note').rotation).toBe(0);
+  });
+
+  it('closing 레이어가 position·rotation 을 전파한다', () => {
+    const scene = build({ captions: { closing: { text: '끝', position: { x: 0.3, y: 0.4 }, rotation: -12 } } });
+    const closing = scene.layers.find((l) => l.kind === 'closing');
+    expect(closing.position).toEqual({ x: 0.3, y: 0.4 });
+    expect(closing.rotation).toBe(-12);
+  });
+
+  it('position·rotation 미지정 closing 은 position=null, rotation=0', () => {
+    const closing = build().layers.find((l) => l.kind === 'closing');
+    expect(closing.position).toBeNull();
+    expect(closing.rotation).toBe(0);
+  });
+});

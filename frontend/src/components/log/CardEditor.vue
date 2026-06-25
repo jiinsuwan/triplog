@@ -9,12 +9,23 @@ import Button from 'primevue/button'
 import { usePhotoContent } from '@/composables/usePhotoContent'
 import { useCardCaptions } from '@/composables/useCardCaptions'
 import { buildScene } from '@/card/render/buildScene'
-import { renderCard } from '@/card/render/renderCore'
-import { exportCardPng, computeFitRect } from '@/card/render/exportCard'
+import { computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
 import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
 import CorrectionDialog from '@/components/log/CorrectionDialog.vue'
+import {
+  clamp01,
+  drawEditorTextBox,
+  drawSelectionBox,
+  paintEditorLine,
+  paintEditorText,
+  lineRotHandle,
+} from './cardEditorCanvas'
+import { useCardEditorDrag } from './useCardEditorDrag'
+import { useCardEditorExport } from './useCardEditorExport'
+import { LAYER_CHIP, LAYER_CHIP_CLASS, useCardEditorLayers } from './useCardEditorLayers'
+import { useCardEditorRenderer } from './useCardEditorRenderer'
 import { resolvePhotoSettings } from './photoSettings'
 
 const props = defineProps({ photoIds: { type: Array, default: () => [] } })
@@ -42,7 +53,6 @@ watch(activeTool, (v) => {
 function setMode(m) {
   activeTool.value = m === 'select' ? 'select' : lastCreateTool
 }
-const activeToolLabel = computed(() => TOOLS.find((t) => t.key === activeTool.value)?.label ?? '')
 
 const FIXED = { W: 1080, H: 1920 }
 const current = ref(0)
@@ -56,14 +66,10 @@ const outlineWidth = ref(1)
 const outlineStyle = ref('solid') // 'solid' | 'dashed'
 const dashLen = ref(12) // 점선 길이·간격(× W*0.001)
 const dashGap = ref(9)
-const selectedItemId = ref(null)
-const selectedKind = ref(null) // 객체 선택 시 종류: 'outline' | 'caption' (외곽선·문구 독립 선택)
-// 선택 상태(객체/텍스트/선)는 loadCurrent 가 사진 전환 때 초기화하므로 먼저 선언한다(TDZ 방지).
-const selectedTextId = ref(null)
-const selectedLineId = ref(null)
 // 9:16 고정 포맷의 여백 채움(사진을 자르지 않고 contain 후 남는 공간을 채운다).
 const padFill = ref('blur') // 'blur' | 'solid'
 const padColor = ref('#fdf8ee')
+const drag = ref(null) // 렌더러와 드래그 상태기계가 공유하는 현재 포인터 작업.
 
 // 캔버스(프레임) 크기 = 출력 크기. native=사진비율, fixed=1080×1920.
 const canvasDims = computed(() => {
@@ -146,7 +152,7 @@ function toggleCaption(id) {
 const captionPos = reactive({})
 const getCaptionPos = (id) => captionPos[keyOf(id)] ?? null
 function setCaptionPos(id, x, y) {
-  captionPos[keyOf(id)] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
+  captionPos[keyOf(id)] = { x: clamp01(x), y: clamp01(y) }
 }
 // 문구 기울기(°) override — 사진별. 텍스트의 rotation 과 동일 개념(외곽선만 회전 제외). 없으면 0.
 const captionRot = reactive({})
@@ -206,7 +212,7 @@ function toggleClosing() {
 const closingPos = reactive({})
 const getClosingPos = () => closingPos[currentId.value] ?? null
 function setClosingPos(x, y) {
-  closingPos[currentId.value] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }
+  closingPos[currentId.value] = { x: clamp01(x), y: clamp01(y) }
 }
 // 마무리 기울기(°) override — 사진별. 텍스트·문구와 동일 개념.
 const closingRot = reactive({})
@@ -233,7 +239,49 @@ function updateClosingText(text) {
     response: { ...existing.response, closing: { ...(existing.response.closing || {}), text } },
   })
 }
-// (통합 레이어 목록 layerRows 는 texts/lines 선언 뒤에 정의 — 아래.)
+const {
+  selectedItemId,
+  selectedKind,
+  selectedTextId,
+  selectedLineId,
+  selectedOutline,
+  selectedCaption,
+  selectedClosing,
+  texts,
+  selectedText,
+  lines,
+  selectedLine,
+  clearSelection,
+  selectItem,
+  selectText,
+  selectLine,
+  addText,
+  updateTextValue,
+  setTextProp,
+  removeText,
+  clearCurrentTexts,
+  addLine,
+  removeLine,
+  setLineProp,
+  layerRows,
+  layerOn,
+  toggleLayerRow,
+  selectLayerRow,
+  isLayerActive,
+  removeLayerRow,
+} = useCardEditorLayers({
+  currentId,
+  items,
+  captionByItem,
+  closing,
+  card,
+  isObjectOn,
+  toggleObject,
+  isCaptionOn,
+  toggleCaption,
+  isClosingOn,
+  toggleClosing,
+})
 
 let disposed = false
 onScopeDispose(() => {
@@ -285,9 +333,7 @@ async function loadCurrent() {
   zoom.value = 1 // 사진 전환 시 맞춤(100%)으로 리셋 — 사진별 배율 간섭 방지
   const seq = ++reqSeq
   photoImg.value = null
-  selectedItemId.value = null
-  selectedTextId.value = null
-  selectedLineId.value = null
+  clearSelection()
   try {
     const img = await decode(await load(id))
     if (!disposed && seq === reqSeq) photoImg.value = img
@@ -312,151 +358,6 @@ const scene = computed(() => {
     // 외곽선은 에디터 paintOutlines 가 전담(두께·점선·흰색·visibility 조절) — renderCore sketch 외곽선 끔.
     style: { toneDown: toneDown.value, outline: false },
   })
-})
-
-// 외곽선 패스(카드 최종 외곽선). 미리보기·export 공용 — 같은 소스라 미리보기=저장 일치.
-//   forExport=true 면 편집 보조(번호 배지·선택 빨강) 없이 흰 외곽선만. frameW/H = 그릴 캔버스 크기
-//   (미리보기=canvasDims, export=PNG bmp). 외곽선은 레터박스 안쪽 사진 콘텐츠 사각형에 맞춘다.
-function paintOutlines(ctx, img, frameW, frameH, { forExport = false } = {}) {
-  const { cw, ch, dx, dy } =
-    format.value === 'fixed'
-      ? computeFitRect(img.naturalWidth, img.naturalHeight, frameW, frameH)
-      : { cw: frameW, ch: frameH, dx: 0, dy: 0 }
-  const W = cw
-  const cf = makeCoverFit(img.naturalWidth, img.naturalHeight, cw, ch)
-  const base = Math.max(1, W * 0.002)
-  ctx.save()
-  ctx.translate(dx, dy) // 콘텐츠 사각형 기준으로 그린다(레터박스 오프셋)
-  let no = 0
-  for (const item of items.value) {
-    no += 1 // 레이어 목록과 같은 번호(숨겨도 번호 유지)
-    if (!isObjectOn(item.id)) continue
-    const sel = !forExport && item.id === selectedItemId.value && selectedKind.value === 'outline'
-    // 외곽선은 카드 최종처럼 흰색. (편집 미리보기에서) 선택된 것만 빨강으로 구분.
-    const color = sel ? 'rgba(240,68,82,0.95)' : 'rgba(255,255,255,0.96)'
-    const st = outlineStyleOf(item.id) // 객체별 선 모양(없으면 전역 기본)
-
-    ctx.save()
-    ctx.lineWidth = base * st.width
-    ctx.strokeStyle = color
-    ctx.shadowColor = 'rgba(0,0,0,0.45)'
-    ctx.shadowBlur = base
-    ctx.setLineDash(st.style === 'dashed' ? [W * 0.001 * st.dashLen, W * 0.001 * st.dashGap] : [])
-    for (const loop of Array.isArray(item.polygons) ? item.polygons : []) {
-      if (!Array.isArray(loop) || loop.length < 3) continue
-      ctx.beginPath()
-      loop.forEach(([x, y], i) => {
-        const [px, py] = cf.ptPx(x, y)
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
-      })
-      ctx.closePath()
-      ctx.stroke()
-    }
-    ctx.restore()
-
-    // 번호 배지(객체 중심) — 레이어 매칭용 편집 보조. export 에는 안 들어간다.
-    if (!forExport && Array.isArray(item.center)) {
-      const [cx, cy] = cf.ptPx(item.center[0], item.center[1])
-      const r = Math.max(11, W * 0.016)
-      ctx.save()
-      ctx.setLineDash([])
-      ctx.fillStyle = sel ? '#f04452' : '#3182f6' // 번호 배지는 고정색(흰 외곽선이라 보이게)
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#fff'
-      ctx.font = `700 ${Math.round(r * 1.2)}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(no), cx, cy)
-      ctx.restore()
-    }
-  }
-  ctx.restore() // translate 해제
-}
-
-// 블러 여백 배경은 사진·프레임 크기에만 의존 → 캐시(매 redraw 마다 blur 필터 재계산 방지).
-let blurCache = null
-function blurBg(img, W, H) {
-  const key = `${img.src}|${W}x${H}`
-  if (blurCache?.key === key) return blurCache.canvas
-  const c = document.createElement('canvas')
-  c.width = W
-  c.height = H
-  const cx = c.getContext('2d')
-  const { dw, dh, ox, oy } = makeCoverFit(img.naturalWidth, img.naturalHeight, W, H)
-  cx.filter = `blur(${Math.round(W * 0.03)}px)`
-  cx.drawImage(img, ox, oy, dw, dh)
-  cx.filter = 'none'
-  cx.fillStyle = 'rgba(20,14,8,0.18)'
-  cx.fillRect(0, 0, W, H)
-  blurCache = { key, canvas: c }
-  return c
-}
-// 9:16 여백 채움(자르지 않고 contain 후 남는 공간) — 블러(캐시) 또는 단색.
-function drawPadding(ctx, img, W, H) {
-  if (padFill.value === 'solid') {
-    ctx.fillStyle = padColor.value
-    ctx.fillRect(0, 0, W, H)
-    return
-  }
-  ctx.drawImage(blurBg(img, W, H), 0, 0)
-}
-
-// fixed 여백 합성용 콘텐츠 캔버스 — 매 프레임 createElement 대신 재사용(드래그 중 GC 압박 감소).
-let contentCanvas = null
-function getContentCanvas(cw, ch) {
-  if (!contentCanvas) contentCanvas = document.createElement('canvas')
-  if (contentCanvas.width !== cw) contentCanvas.width = cw
-  if (contentCanvas.height !== ch) contentCanvas.height = ch
-  return contentCanvas
-}
-function redraw() {
-  const el = canvasEl.value
-  const sc = scene.value
-  const img = photoImg.value
-  if (!el || !sc || !img || !fontReady.value) return
-  const { W: fw, H: fh } = canvasDims.value // 프레임(출력) 크기
-  const { cw, ch, dx, dy } = contentRect.value
-  // 같은 값 재대입도 백버퍼를 재할당하므로 크기가 바뀔 때만. 잔상은 아래 renderCard clearRect /
-  //   drawPadding 전체덮기가 지운다.
-  if (el.width !== fw || el.height !== fh) {
-    el.width = fw
-    el.height = fh
-  }
-  // 표시 크기 = 맞춤배율 × zoom. 내부 해상도와 같은 시점에 설정해 사진 전환 시 stretch 방지.
-  const dispScale = fitScale.value * zoom.value
-  el.style.width = Math.round(fw * dispScale) + 'px'
-  el.style.height = Math.round(fh * dispScale) + 'px'
-  const ctx = el.getContext('2d', { willReadFrequently: true })
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  if (dx > 0 || dy > 0) {
-    // fixed: 여백 채움 → 콘텐츠를 별도 캔버스에 그려 가운데 얹는다(export 와 동일).
-    drawPadding(ctx, img, fw, fh)
-    const content = getContentCanvas(cw, ch)
-    renderCard(content.getContext('2d', { willReadFrequently: true }), sc, { photo: img }, { skipLuminance: !!drag, noteFont: fontFamily.value, closingFont: fontFamily.value, scale: fontScale.value })
-    ctx.drawImage(content, dx, dy)
-  } else {
-    renderCard(ctx, sc, { photo: img }, { skipLuminance: !!drag, noteFont: fontFamily.value, closingFont: fontFamily.value, scale: fontScale.value }) // native: 프레임 전체가 콘텐츠
-  }
-  paintOutlines(ctx, img, fw, fh)
-  drawLines(ctx, { W: fw, H: fh })
-  drawTexts(ctx, { W: fw, H: fh })
-  if (selectedCaption.value) drawCaptionBox(ctx, fw, fh)
-  if (selectedKind.value === 'closing') drawClosingBox(ctx, fw, fh)
-}
-
-// 리드로 코얼레스 — 슬라이더 드래그 등 빠른 변경은 프레임당 1회만 그린다(이벤트마다 X).
-let rafId = null
-function scheduleRedraw() {
-  if (rafId != null) return
-  rafId = requestAnimationFrame(() => {
-    rafId = null
-    redraw()
-  })
-}
-onScopeDispose(() => {
-  if (rafId != null) cancelAnimationFrame(rafId)
 })
 
 // --- 사진별 편집 설정 독립 ---
@@ -484,6 +385,54 @@ function applySettings(saved) {
   const s = resolvePhotoSettings(saved)
   for (const k in PHOTO_SETTING_REFS) PHOTO_SETTING_REFS[k].value = s[k]
 }
+const { paintOutlines, scheduleRedraw } = useCardEditorRenderer({
+  canvasEl,
+  scene,
+  photoImg,
+  fontReady,
+  canvasDims,
+  contentRect,
+  fitScale,
+  zoom,
+  drag,
+  format,
+  padFill,
+  padColor,
+  fontFamily,
+  fontScale,
+  items,
+  selectedItemId,
+  selectedKind,
+  selectedCaption,
+  isObjectOn,
+  outlineStyleOf,
+  drawLines,
+  drawTexts,
+  drawCaptionBox,
+  drawClosingBox,
+})
+const { exporting, exportNote, exportCurrent } = useCardEditorExport({
+  currentId,
+  contentRect,
+  canvasDims,
+  card,
+  items,
+  photoImg,
+  format,
+  padFill,
+  padColor,
+  fontFamily,
+  fontScale,
+  toneDown,
+  texts,
+  lines,
+  isCaptionOn,
+  isObjectOn,
+  applyCaptionOverrides,
+  closingForScene,
+  paintOutlines,
+  editorTextOpts,
+})
 // 사진 전환: 이전 사진(prevId) 설정 저장 → 새 사진 설정 복원 → 이미지 로드. prevId 캡처가 핵심.
 watch(
   currentId,
@@ -510,12 +459,6 @@ watch(fontFamily, async (f) => {
   if (!disposed) scheduleRedraw()
 })
 
-const selectedOutline = computed(() =>
-  selectedKind.value === 'outline' ? (items.value.find((it) => it.id === selectedItemId.value) ?? null) : null,
-)
-const selectedCaption = computed(() =>
-  selectedKind.value === 'caption' ? (captionByItem.value[selectedItemId.value] ?? null) : null,
-)
 function updateCaptionText(text) {
   const existing = card.captions[currentId.value]
   if (!existing) return
@@ -542,8 +485,7 @@ function generateCaption() {
 function confirmRegen() {
   regenAsk.value = false
   // 재생성 = 이 사진 텍스트 전체 리셋. 직접 추가한 텍스트도 함께 비운다(경고에 명시).
-  textsByPhoto[currentId.value] = []
-  selectedTextId.value = null
+  clearCurrentTexts()
   card.clearCaption(currentId.value) // 캐시 비워 재생성 허용(전체 새로)
   genCaption(currentId.value)
 }
@@ -554,16 +496,8 @@ watch(currentId, () => {
   regenAsk.value = false
 })
 
-// --- 추가 텍스트 요소(왼쪽 텍스트 도구) — 직접 추가/편집/드래그/저장 ---
-// 사진별 추가 텍스트 { id, text, x, y(0~1 중심), size(배율), rotation(도), color, hidden }.
-const textsByPhoto = reactive({})
-let textSeq = 0
-const texts = computed(() => textsByPhoto[currentId.value] ?? [])
-const selectedText = computed(() => texts.value.find((t) => t.id === selectedTextId.value) ?? null)
-
 // 우패널·좌측 도구 하이라이트를 결정하는 단일 컨텍스트. 선택한 요소의 family 가 우선, 없으면 현재 도구.
 //   외곽선→ai / 문구·텍스트→text / 선→line. activeTool(캔버스 생성·선택 동작)은 건드리지 않는다.
-const selectedClosing = computed(() => (selectedKind.value === 'closing' ? closing.value : null))
 const panelContext = computed(() => {
   if (selectedOutline.value) return 'ai'
   if (selectedCaption.value || selectedText.value || selectedClosing.value) return 'text'
@@ -573,320 +507,37 @@ const panelContext = computed(() => {
 // 좌측 도구 클릭 = 컨텍스트 전환. 현재 선택을 풀고 그 도구로 들어간다(선택이 컨텍스트를 가리지 않게).
 function pickTool(key) {
   activeTool.value = key
-  selectedItemId.value = null
-  selectedKind.value = null
-  selectedTextId.value = null
-  selectedLineId.value = null
-}
-
-function addText(x = 0.5, y = 0.5) {
-  const list = textsByPhoto[currentId.value] || (textsByPhoto[currentId.value] = [])
-  const t = { id: `t${++textSeq}`, text: '텍스트', x, y, size: 1, rotation: 0, color: '#ffffff', hidden: false }
-  list.push(t)
-  selectItem(null)
-  selectedTextId.value = t.id
-  return t
-}
-function updateTextValue(text) {
-  if (selectedText.value) selectedText.value.text = text
-}
-function setTextProp(prop, val) {
-  if (selectedText.value) selectedText.value[prop] = val
-}
-function removeText(id) {
-  const list = textsByPhoto[currentId.value]
-  if (!list) return
-  const i = list.findIndex((t) => t.id === id)
-  if (i >= 0) list.splice(i, 1)
-  if (selectedTextId.value === id) selectedTextId.value = null
-}
-function toggleText(t) {
-  t.hidden = !t.hidden
-}
-// 객체/텍스트 선택은 상호 배타.
-function selectItem(id, kind = 'outline') {
-  selectedItemId.value = id
-  selectedKind.value = id == null ? null : kind
-  if (id != null) {
-    selectedTextId.value = null
-    selectedLineId.value = null
-  }
-}
-function selectText(id) {
-  selectedTextId.value = id
-  if (id != null) {
-    selectedItemId.value = null
-    selectedLineId.value = null
-  }
+  clearSelection()
 }
 
 // --- 레이어 선택 + 표시/숨김(클립스튜디오식). 눈 아이콘으로 행별 즉시 토글(투명도로 상태 표시). ---
 
-const TEXT_LH = 1.4 // 줄 높이 배수(폰트 size 대비)
-// 추가 텍스트를 그린다(편집·export 공용 로직). 손글씨 폰트 + 크기·회전·색 + 여러 줄(\n).
-function paintText(ctx, t, W, H) {
-  const size = Math.round(W * 0.05 * fontScale.value)
-  const lines = String(t.text ?? '').split('\n')
-  const lh = size * TEXT_LH
-  ctx.save()
-  ctx.translate(t.x * W, t.y * H)
-  ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.font = `${size}px "${fontFamily.value}", sans-serif`
-  ctx.lineWidth = Math.max(2, W * 0.004)
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)'
-  ctx.fillStyle = t.color ?? '#ffffff'
-  const y0 = -((lines.length - 1) * lh) / 2 // 줄 블록을 중심에 세로 정렬
-  lines.forEach((ln, i) => {
-    const y = y0 + i * lh
-    ctx.strokeText(ln, 0, y)
-    ctx.fillText(ln, 0, y)
-  })
-  ctx.restore()
-}
-// 텍스트 박스 메트릭(중심 기준 반폭/반높이, px). 여러 줄 = 가장 긴 줄 폭 + 줄 수만큼 높이. 회전 핸들 거리 포함.
-function textMetrics(ctx, t, W) {
-  const size = W * 0.05 * fontScale.value
-  ctx.font = `${Math.round(size)}px "${fontFamily.value}", sans-serif`
-  const lines = String(t.text || ' ').split('\n')
-  const lh = size * TEXT_LH
-  const tw = Math.max(...lines.map((ln) => ctx.measureText(ln || ' ').width))
-  const totalH = Math.max(lh, lines.length * lh)
-  return { size, hw: tw / 2 + size * 0.3, hh: totalH / 2 + size * 0.08, rotOff: Math.max(20, W * 0.032) }
-}
-// 선택된 텍스트의 변형 박스(모서리=크기, 위 핸들=회전) — 캔버스에서 직접 조절.
-function drawTextBox(ctx, t, W, H) {
-  const m = textMetrics(ctx, t, W)
-  const r = Math.max(6, W * 0.011)
-  ctx.save()
-  ctx.translate(t.x * W, t.y * H)
-  ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
-  ctx.strokeStyle = '#3182f6'
-  ctx.lineWidth = Math.max(1.5, W * 0.002)
-  ctx.setLineDash([W * 0.006, W * 0.004])
-  ctx.strokeRect(-m.hw, -m.hh, m.hw * 2, m.hh * 2)
-  ctx.setLineDash([])
-  const rotY = -m.hh - m.rotOff
-  ctx.beginPath()
-  ctx.moveTo(0, -m.hh)
-  ctx.lineTo(0, rotY)
-  ctx.stroke()
-  ctx.fillStyle = '#fff'
-  for (const [hx, hy] of [[-m.hw, -m.hh], [m.hw, -m.hh], [m.hw, m.hh], [-m.hw, m.hh]]) {
-    ctx.beginPath()
-    ctx.arc(hx, hy, r, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.stroke()
-  }
-  ctx.beginPath()
-  ctx.arc(0, rotY, r, 0, Math.PI * 2)
-  ctx.fillStyle = '#3182f6'
-  ctx.fill()
-  ctx.strokeStyle = '#fff'
-  ctx.stroke()
-  ctx.restore()
+function editorTextOpts(W, H) {
+  return { W, H, fontFamily: fontFamily.value, fontScale: fontScale.value }
 }
 function drawTexts(ctx, dims) {
   const { W, H } = dims
   for (const t of texts.value) {
     if (t.hidden) continue
-    paintText(ctx, t, W, H)
+    paintEditorText(ctx, t, editorTextOpts(W, H))
   }
   const st = selectedText.value
-  if (st && !st.hidden) drawTextBox(ctx, st, W, H)
-}
-// 공유 선택 박스(점선 + 모서리=크기 핸들 + 위 핸들=회전) — 문구·마무리 공용. box=캔버스 0~1, rotDeg=기울기.
-function drawSelBox(ctx, box, rotDeg, W, H) {
-  const cx = box.cx * W
-  const cy = box.cy * H
-  const hw = box.hw * W
-  const hh = box.hh * H
-  const r = Math.max(6, W * 0.011)
-  const rotOff = Math.max(20, W * 0.032)
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate((rotDeg * Math.PI) / 180)
-  ctx.strokeStyle = '#3182f6'
-  ctx.lineWidth = Math.max(1.5, W * 0.002)
-  ctx.setLineDash([W * 0.006, W * 0.004])
-  ctx.strokeRect(-hw, -hh, hw * 2, hh * 2)
-  ctx.setLineDash([])
-  const rotY = -hh - rotOff
-  ctx.beginPath()
-  ctx.moveTo(0, -hh)
-  ctx.lineTo(0, rotY)
-  ctx.stroke()
-  ctx.fillStyle = '#fff'
-  for (const [hx, hy] of [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]) {
-    ctx.beginPath()
-    ctx.arc(hx, hy, r, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.stroke()
-  }
-  ctx.beginPath()
-  ctx.arc(0, rotY, r, 0, Math.PI * 2)
-  ctx.fillStyle = '#3182f6'
-  ctx.fill()
-  ctx.strokeStyle = '#fff'
-  ctx.stroke()
-  ctx.restore()
-}
-// 선택 박스의 핸들 hit-test(공유) — 'rotate' | 'resize' | null. box=캔버스 0~1, rotDeg=기울기.
-function boxHandleAt(box, rotDeg, nx, ny, W, H) {
-  const cx = box.cx * W
-  const cy = box.cy * H
-  const hw = box.hw * W
-  const hh = box.hh * H
-  const rotOff = Math.max(20, W * 0.032)
-  const hr = Math.max(11, W * 0.02)
-  const rad = (rotDeg * Math.PI) / 180
-  const dx = nx * W - cx
-  const dy = ny * H - cy
-  const lx = dx * Math.cos(-rad) - dy * Math.sin(-rad)
-  const ly = dx * Math.sin(-rad) + dy * Math.cos(-rad)
-  if (Math.hypot(lx, ly - (-hh - rotOff)) < hr) return 'rotate'
-  if ([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].some(([hx, hy]) => Math.hypot(lx - hx, ly - hy) < hr)) return 'resize'
-  return null
+  if (st && !st.hidden) drawEditorTextBox(ctx, st, editorTextOpts(W, H))
 }
 // 선택된 문구 박스 — 텍스트와 동일한 박스+회전/크기 핸들(회전은 captionRot 반영).
 function drawCaptionBox(ctx, W, H) {
   const b = captionBox(selectedItemId.value)
-  if (b) drawSelBox(ctx, b, getCaptionRot(selectedItemId.value), W, H)
+  if (b) drawSelectionBox(ctx, b, getCaptionRot(selectedItemId.value), { W, H })
 }
 // 선택된 마무리 박스 — 동일한 박스+핸들(회전은 closingRot 반영).
 function drawClosingBox(ctx, W, H) {
   const b = closingBox()
-  if (b) drawSelBox(ctx, b, getClosingRot(), W, H)
+  if (b) drawSelectionBox(ctx, b, getClosingRot(), { W, H })
 }
 
-// --- 선 요소(직선/화살표) — 선 도구로 캔버스에 끌어 그린다 ---
-// 사진별 선 { id, x1,y1,x2,y2 (0~1), color, width(배율), style, arrow, hidden }.
-const linesByPhoto = reactive({})
-let lineSeq = 0
-const lines = computed(() => linesByPhoto[currentId.value] ?? [])
-const selectedLine = computed(() => lines.value.find((l) => l.id === selectedLineId.value) ?? null)
-function addLine(x1, y1, x2, y2) {
-  const list = linesByPhoto[currentId.value] || (linesByPhoto[currentId.value] = [])
-  const l = { id: `l${++lineSeq}`, x1, y1, x2, y2, color: '#ffffff', width: 1, style: 'solid', arrow: 'none', hidden: false }
-  list.push(l)
-  return l
-}
-function removeLine(id) {
-  const list = linesByPhoto[currentId.value]
-  if (!list) return
-  const i = list.findIndex((l) => l.id === id)
-  if (i >= 0) list.splice(i, 1)
-  if (selectedLineId.value === id) selectedLineId.value = null
-}
-function toggleLine(l) {
-  l.hidden = !l.hidden
-}
-function setLineProp(prop, val) {
-  if (selectedLine.value) selectedLine.value[prop] = val
-}
-function selectLine(id) {
-  selectedLineId.value = id
-  if (id != null) {
-    selectedItemId.value = null
-    selectedTextId.value = null
-  }
-}
-
-// 통합 레이어 목록: 텍스트·선·외곽선·문구·마무리를 한 배열로(전체 순번 1..N). 묶지 않는다.
-// 문구(AI 생성)와 텍스트(직접 입력)는 같은 "텍스트" 한 종류 — 생성 경로만 다르다. 칩·스타일 동일.
-const LAYER_CHIP = { text: '텍스트', line: '선', outline: '외곽선', caption: '텍스트', closing: '마무리' }
-const LAYER_CHIP_CLASS = { text: 'text', line: 'line', outline: '', caption: 'text', closing: 'closing' }
-const layerRows = computed(() => {
-  const rows = []
-  for (const t of texts.value) rows.push({ kind: 'text', id: t.id, label: t.text || '(빈 텍스트)' })
-  for (const l of lines.value) rows.push({ kind: 'line', id: l.id, label: l.arrow !== 'none' ? '화살표' : '선' })
-  for (const item of items.value) {
-    rows.push({ kind: 'outline', id: item.id, label: item.label || '객체' })
-    const cap = captionByItem.value[item.id]
-    if (cap) rows.push({ kind: 'caption', id: item.id, label: (cap.note || []).join(' ') })
-  }
-  if (closing.value) rows.push({ kind: 'closing', id: 'closing', label: closing.value.text })
-  return rows.map((r, i) => ({ ...r, no: i + 1 }))
-})
-function layerOn(row) {
-  if (row.kind === 'text') return !texts.value.find((t) => t.id === row.id)?.hidden
-  if (row.kind === 'line') return !lines.value.find((l) => l.id === row.id)?.hidden
-  if (row.kind === 'outline') return isObjectOn(row.id)
-  if (row.kind === 'caption') return isCaptionOn(row.id)
-  if (row.kind === 'closing') return isClosingOn.value
-  return true
-}
-function toggleLayerRow(row) {
-  if (row.kind === 'text') {
-    const t = texts.value.find((x) => x.id === row.id)
-    if (t) t.hidden = !t.hidden
-  } else if (row.kind === 'line') {
-    const l = lines.value.find((x) => x.id === row.id)
-    if (l) l.hidden = !l.hidden
-  } else if (row.kind === 'outline') toggleObject(row.id)
-  else if (row.kind === 'caption') toggleCaption(row.id)
-  else if (row.kind === 'closing') toggleClosing()
-}
-function selectLayerRow(row) {
-  if (row.kind === 'text') selectText(row.id)
-  else if (row.kind === 'line') selectLine(row.id)
-  else if (row.kind === 'outline') selectItem(row.id, 'outline')
-  else if (row.kind === 'caption') selectItem(row.id, 'caption')
-  else if (row.kind === 'closing') selectItem('closing', 'closing')
-}
-function isLayerActive(row) {
-  if (row.kind === 'text') return row.id === selectedTextId.value
-  if (row.kind === 'line') return row.id === selectedLineId.value
-  if (row.kind === 'outline') return row.id === selectedItemId.value && selectedKind.value === 'outline'
-  if (row.kind === 'caption') return row.id === selectedItemId.value && selectedKind.value === 'caption'
-  if (row.kind === 'closing') return selectedKind.value === 'closing'
-  return false
-}
-function removeLayerRow(row) {
-  if (row.kind === 'text') removeText(row.id)
-  else if (row.kind === 'caption') card.removeCaptionObject(currentId.value, row.id) // 문구(=텍스트)도 삭제
-  else if (row.kind === 'line') removeLine(row.id)
-}
-// 화살촉.
-function arrowHead(ctx, tipX, tipY, fromX, fromY, size) {
-  const a = Math.atan2(tipY - fromY, tipX - fromX)
-  ctx.beginPath()
-  ctx.moveTo(tipX, tipY)
-  ctx.lineTo(tipX - size * Math.cos(a - 0.42), tipY - size * Math.sin(a - 0.42))
-  ctx.lineTo(tipX - size * Math.cos(a + 0.42), tipY - size * Math.sin(a + 0.42))
-  ctx.closePath()
-  ctx.fill()
-}
-function paintLine(ctx, l, W, H) {
-  const x1 = l.x1 * W, y1 = l.y1 * H, x2 = l.x2 * W, y2 = l.y2 * H
-  const lw = Math.max(3, W * 0.008 * (l.width ?? 1))
-  const dash = l.style === 'dashed' ? [lw * 2.5, lw * 1.8] : []
-  const drawStroke = (color, width, headSize) => {
-    ctx.strokeStyle = color
-    ctx.fillStyle = color
-    ctx.lineWidth = width
-    ctx.setLineDash(dash)
-    ctx.beginPath()
-    ctx.moveTo(x1, y1)
-    ctx.lineTo(x2, y2)
-    ctx.stroke()
-    ctx.setLineDash([])
-    if (l.arrow === 'end' || l.arrow === 'both') arrowHead(ctx, x2, y2, x1, y1, headSize)
-    if (l.arrow === 'both') arrowHead(ctx, x1, y1, x2, y2, headSize)
-  }
-  ctx.save()
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  // 밝은 사진에서도 보이도록 어두운 외곽선을 먼저 깔고 그 위에 본 색을 그린다.
-  const halo = lw + Math.max(2, lw * 0.8)
-  drawStroke('rgba(0,0,0,0.55)', halo, halo * 2.6)
-  drawStroke(l.color ?? '#ffffff', lw, lw * 3.4)
-  ctx.restore()
-}
 function drawLines(ctx, dims) {
   const { W, H } = dims
-  for (const l of lines.value) if (!l.hidden) paintLine(ctx, l, W, H)
+  for (const l of lines.value) if (!l.hidden) paintEditorLine(ctx, l, { W, H })
   // 선택된 선의 끝점 핸들(편집 보조 — export 엔 안 들어감).
   const sl = selectedLine.value
   if (sl && !sl.hidden) {
@@ -902,7 +553,7 @@ function drawLines(ctx, dims) {
       ctx.restore()
     }
     // 회전 핸들(중점에서 수직으로) — 길이 유지하며 회전.
-    const [rhx, rhy] = lineRotHandle(sl, W, H)
+    const [rhx, rhy] = lineRotHandle(sl, { W, H })
     const mx = ((sl.x1 + sl.x2) / 2) * W, my = ((sl.y1 + sl.y2) / 2) * H
     ctx.save()
     ctx.strokeStyle = '#3182f6'
@@ -920,31 +571,7 @@ function drawLines(ctx, dims) {
     ctx.restore()
   }
 }
-// 선 회전 핸들 위치(px) = 중점 + 수직 오프셋.
-function lineRotHandle(l, W, H) {
-  const mx = ((l.x1 + l.x2) / 2) * W, my = ((l.y1 + l.y2) / 2) * H
-  const dxp = (l.x2 - l.x1) * W, dyp = (l.y2 - l.y1) * H
-  const len = Math.hypot(dxp, dyp) || 1
-  const off = Math.max(22, W * 0.035)
-  return [mx + (-dyp / len) * off, my + (dxp / len) * off]
-}
-// 점(nx,ny 0~1)이 선분에 충분히 가까운지(본체 hit). 화면 비율 보정 없이 정규화 거리 근사.
-function nearLine(l, nx, ny) {
-  const dx = l.x2 - l.x1, dy = l.y2 - l.y1
-  const len2 = dx * dx + dy * dy || 1e-6
-  let tt = ((nx - l.x1) * dx + (ny - l.y1) * dy) / len2
-  tt = Math.max(0, Math.min(1, tt))
-  const px = l.x1 + tt * dx, py = l.y1 + tt * dy
-  return Math.hypot(nx - px, ny - py) < 0.02
-}
-function lineEndpointAt(l, nx, ny) {
-  if (Math.hypot(nx - l.x1, ny - l.y1) < 0.03) return '1'
-  if (Math.hypot(nx - l.x2, ny - l.y2) < 0.03) return '2'
-  return null
-}
 
-// 캔버스 드래그로 텍스트/선 이동·그리기. drag = { kind, ... }.
-let drag = null
 // AI 문구 박스(캔버스 0~1) — hit-test/드래그용. 중심 = override 또는 anchor, 크기 = 노트 측정.
 function captionBox(itemId) {
   const o = captionByItem.value[itemId]
@@ -1023,276 +650,12 @@ function closingBox() {
     hh: (cs * 0.95) / cd.H,
   }
 }
-function bindCanvasDrag(e) {
-  window.addEventListener('pointermove', onCanvasPointerMove)
-  window.addEventListener('pointerup', onCanvasPointerUp)
-  e.preventDefault()
-}
-function onCanvasPointerDown(e) {
-  if (viewerMode.value) return // 편집 완료(뷰어) 상태에서는 캔버스 편집 차단
-  const el = canvasEl.value
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  const nx = (e.clientX - rect.left) / rect.width
-  const ny = (e.clientY - rect.top) / rect.height
-  const { W, H } = canvasDims.value
-  const ctx = el.getContext('2d')
-
-  // 0) 선택된 텍스트의 변형 핸들(회전/크기) — 박스가 텍스트 위라 최우선.
-  const stx = selectedText.value
-  if (stx && !stx.hidden) {
-    const m = textMetrics(ctx, stx, W)
-    const cx = stx.x * W, cy = stx.y * H
-    const rad = ((stx.rotation ?? 0) * Math.PI) / 180
-    const dx = nx * W - cx, dy = ny * H - cy
-    const lx = dx * Math.cos(-rad) - dy * Math.sin(-rad)
-    const ly = dx * Math.sin(-rad) + dy * Math.cos(-rad)
-    const hr = Math.max(11, W * 0.02)
-    if (Math.hypot(lx, ly - (-m.hh - m.rotOff)) < hr) {
-      drag = { kind: 'text-rotate', id: stx.id }
-      bindCanvasDrag(e)
-      return
-    }
-    if ([[-m.hw, -m.hh], [m.hw, -m.hh], [m.hw, m.hh], [-m.hw, m.hh]].some(([hx, hy]) => Math.hypot(lx - hx, ly - hy) < hr)) {
-      drag = { kind: 'text-resize', id: stx.id, d0: Math.hypot(dx, dy) || 1, s0: fontScale.value }
-      bindCanvasDrag(e)
-      return
-    }
-  }
-
-  // 0.5) 선택된 문구의 변형 핸들(회전/크기) — 박스 중심 고정 기준.
-  if (selectedCaption.value) {
-    const b = captionBox(selectedItemId.value)
-    if (b) {
-      const h = boxHandleAt(b, getCaptionRot(selectedItemId.value), nx, ny, W, H)
-      if (h === 'rotate') {
-        drag = { kind: 'caption-rotate', id: selectedItemId.value, cx: b.cx, cy: b.cy }
-        bindCanvasDrag(e)
-        return
-      }
-      if (h === 'resize') {
-        drag = { kind: 'caption-resize', cx: b.cx, cy: b.cy, d0: Math.hypot((nx - b.cx) * W, (ny - b.cy) * H) || 1, s0: fontScale.value }
-        bindCanvasDrag(e)
-        return
-      }
-    }
-  }
-
-  // 0.6) 선택된 마무리의 변형 핸들(회전/크기)
-  if (selectedKind.value === 'closing') {
-    const b = closingBox()
-    if (b) {
-      const h = boxHandleAt(b, getClosingRot(), nx, ny, W, H)
-      if (h === 'rotate') {
-        drag = { kind: 'closing-rotate', cx: b.cx, cy: b.cy }
-        bindCanvasDrag(e)
-        return
-      }
-      if (h === 'resize') {
-        drag = { kind: 'closing-resize', cx: b.cx, cy: b.cy, d0: Math.hypot((nx - b.cx) * W, (ny - b.cy) * H) || 1, s0: fontScale.value }
-        bindCanvasDrag(e)
-        return
-      }
-    }
-  }
-
-  // 1) 선택된 선: 회전 핸들(길이 유지 회전) → 끝점 핸들(방향·길이)
-  if (selectedLine.value && !selectedLine.value.hidden) {
-    const sl = selectedLine.value
-    const [rhx, rhy] = lineRotHandle(sl, W, H)
-    if (Math.hypot(nx * W - rhx, ny * H - rhy) < Math.max(11, W * 0.02)) {
-      const dxp = (sl.x2 - sl.x1) * W, dyp = (sl.y2 - sl.y1) * H
-      drag = { kind: 'line-rotate', id: sl.id, halfLen: Math.hypot(dxp, dyp) / 2 }
-      bindCanvasDrag(e)
-      return
-    }
-    const ep = lineEndpointAt(sl, nx, ny)
-    if (ep) {
-      drag = { kind: 'line-ep', id: sl.id, ep }
-      bindCanvasDrag(e)
-      return
-    }
-  }
-  // 2) 텍스트(위에서부터) — 박스 근사(회전 무시 축정렬). 여러 줄 = 가장 긴 줄 폭·줄 수 높이.
-  for (let i = texts.value.length - 1; i >= 0; i--) {
-    const t = texts.value[i]
-    if (t.hidden) continue
-    const fs = W * 0.05 * fontScale.value
-    ctx.font = `${Math.round(fs)}px "${fontFamily.value}", sans-serif`
-    const tlines = String(t.text ?? '').split('\n')
-    const w = Math.max(...tlines.map((ln) => ctx.measureText(ln || ' ').width)) / W
-    const h = (fs * 1.4 * Math.max(1, tlines.length)) / H
-    if (Math.abs(nx - t.x) <= w / 2 + 0.02 && Math.abs(ny - t.y) <= h / 2 + 0.01) {
-      drag = { kind: 'text', id: t.id, dx: nx - t.x, dy: ny - t.y }
-      selectText(t.id)
-      bindCanvasDrag(e)
-      return
-    }
-  }
-  // 3) 선 본체(위에서부터) → 선택 + 본체 이동
-  for (let i = lines.value.length - 1; i >= 0; i--) {
-    const l = lines.value[i]
-    if (l.hidden) continue
-    if (nearLine(l, nx, ny)) {
-      drag = { kind: 'line-body', id: l.id, dx: nx - l.x1, dy: ny - l.y1, lx2: l.x2 - l.x1, ly2: l.y2 - l.y1 }
-      selectLine(l.id)
-      bindCanvasDrag(e)
-      return
-    }
-  }
-  // 4) 선 도구 활성 + 빈 곳 → 새 선 그리기(끝점을 끌어 완성)
-  if (activeTool.value === 'line') {
-    const l = addLine(nx, ny, nx, ny)
-    selectLine(l.id)
-    drag = { kind: 'line-ep', id: l.id, ep: '2' }
-    bindCanvasDrag(e)
-    return
-  }
-  // 5) 텍스트 도구 활성 + 빈 곳 → 클릭 위치에 텍스트 추가(끌어서 자리 잡기)
-  if (activeTool.value === 'text') {
-    const t = addText(nx, ny)
-    drag = { kind: 'text', id: t.id, dx: 0, dy: 0 }
-    bindCanvasDrag(e)
-    return
-  }
-  // 5.5) AI 문구(캡션) 클릭 → 선택 + 드래그 이동
-  for (const item of items.value) {
-    const b = captionBox(item.id)
-    if (!b) continue
-    if (Math.abs(nx - b.cx) <= b.hw + 0.012 && Math.abs(ny - b.cy) <= b.hh + 0.012) {
-      selectItem(item.id, 'caption')
-      drag = { kind: 'caption', id: item.id, dx: nx - b.cx, dy: ny - b.cy }
-      bindCanvasDrag(e)
-      return
-    }
-  }
-  // 5.6) 마무리 멘트 클릭 → 선택 + 드래그 이동(캡션과 동일)
-  const cb = closingBox()
-  if (cb && Math.abs(nx - cb.cx) <= cb.hw + 0.012 && Math.abs(ny - cb.cy) <= cb.hh + 0.012) {
-    selectItem('closing', 'closing')
-    drag = { kind: 'closing', dx: nx - cb.cx, dy: ny - cb.cy }
-    bindCanvasDrag(e)
-    return
-  }
-  // 6) 빈 곳 클릭(선택 모드 등) → 선택 해제
-  selectedItemId.value = null
-  selectedTextId.value = null
-  selectedLineId.value = null
-}
-function onCanvasPointerMove(e) {
-  if (!drag) return
-  const el = canvasEl.value
-  if (!el) return
-  const rect = el.getBoundingClientRect()
-  const nx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-  const ny = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
-  if (drag.kind === 'text') {
-    const t = texts.value.find((x) => x.id === drag.id)
-    if (t) {
-      t.x = Math.min(1, Math.max(0, nx - drag.dx))
-      t.y = Math.min(1, Math.max(0, ny - drag.dy))
-    }
-  } else if (drag.kind === 'caption') {
-    // 콘텐츠 영역(레터박스 안)으로 제한 — 9:16 패딩에 떨어뜨려도 표시와 어긋나지 않게.
-    const cr = contentRect.value
-    const cd = canvasDims.value
-    const minX = cr.dx / cd.W
-    const maxX = (cr.dx + cr.cw) / cd.W
-    const minY = cr.dy / cd.H
-    const maxY = (cr.dy + cr.ch) / cd.H
-    setCaptionPos(
-      drag.id,
-      Math.min(maxX, Math.max(minX, nx - drag.dx)),
-      Math.min(maxY, Math.max(minY, ny - drag.dy)),
-    )
-  } else if (drag.kind === 'closing') {
-    // 마무리도 콘텐츠 영역 안으로 제한(캡션과 동일).
-    const cr = contentRect.value
-    const cd = canvasDims.value
-    const minX = cr.dx / cd.W
-    const maxX = (cr.dx + cr.cw) / cd.W
-    const minY = cr.dy / cd.H
-    const maxY = (cr.dy + cr.ch) / cd.H
-    setClosingPos(
-      Math.min(maxX, Math.max(minX, nx - drag.dx)),
-      Math.min(maxY, Math.max(minY, ny - drag.dy)),
-    )
-  } else if (drag.kind === 'caption-rotate') {
-    const { W, H } = canvasDims.value
-    setCaptionRot(drag.id, Math.round((Math.atan2((ny - drag.cy) * H, (nx - drag.cx) * W) * 180) / Math.PI + 90))
-  } else if (drag.kind === 'caption-resize') {
-    const { W, H } = canvasDims.value
-    const dpx = Math.hypot((nx - drag.cx) * W, (ny - drag.cy) * H)
-    fontScale.value = Math.min(3, Math.max(0.4, drag.s0 * (dpx / drag.d0)))
-  } else if (drag.kind === 'closing-rotate') {
-    const { W, H } = canvasDims.value
-    setClosingRot(Math.round((Math.atan2((ny - drag.cy) * H, (nx - drag.cx) * W) * 180) / Math.PI + 90))
-  } else if (drag.kind === 'closing-resize') {
-    const { W, H } = canvasDims.value
-    const dpx = Math.hypot((nx - drag.cx) * W, (ny - drag.cy) * H)
-    fontScale.value = Math.min(3, Math.max(0.4, drag.s0 * (dpx / drag.d0)))
-  } else if (drag.kind === 'text-rotate') {
-    const t = texts.value.find((x) => x.id === drag.id)
-    if (t) {
-      const { W, H } = canvasDims.value
-      t.rotation = Math.round((Math.atan2((ny - t.y) * H, (nx - t.x) * W) * 180) / Math.PI + 90)
-    }
-  } else if (drag.kind === 'text-resize') {
-    const t = texts.value.find((x) => x.id === drag.id)
-    if (t) {
-      const { W, H } = canvasDims.value
-      const dpx = Math.hypot((nx - t.x) * W, (ny - t.y) * H)
-      fontScale.value = Math.min(3, Math.max(0.4, drag.s0 * (dpx / drag.d0))) // 리사이즈 = 전역 크기 조절
-    }
-  } else if (drag.kind === 'line-ep') {
-    const l = lines.value.find((x) => x.id === drag.id)
-    if (l) {
-      if (drag.ep === '1') { l.x1 = nx; l.y1 = ny } else { l.x2 = nx; l.y2 = ny }
-    }
-  } else if (drag.kind === 'line-body') {
-    const l = lines.value.find((x) => x.id === drag.id)
-    if (l) {
-      const x1 = Math.min(1, Math.max(0, nx - drag.dx))
-      const y1 = Math.min(1, Math.max(0, ny - drag.dy))
-      l.x1 = x1; l.y1 = y1; l.x2 = x1 + drag.lx2; l.y2 = y1 + drag.ly2
-    }
-  } else if (drag.kind === 'line-rotate') {
-    const l = lines.value.find((x) => x.id === drag.id)
-    if (l) {
-      const { W, H } = canvasDims.value
-      const mx = (l.x1 + l.x2) / 2, my = (l.y1 + l.y2) / 2
-      // 핸들은 선과 수직 → 선 각도 = (중점→포인터) - 90°. 길이는 유지.
-      const ang = Math.atan2((ny - my) * H, (nx - mx) * W) - Math.PI / 2
-      const hx = (drag.halfLen * Math.cos(ang)) / W
-      const hy = (drag.halfLen * Math.sin(ang)) / H
-      l.x1 = mx - hx; l.y1 = my - hy; l.x2 = mx + hx; l.y2 = my + hy
-    }
-  }
-}
-function onCanvasPointerUp() {
-  // 클릭만 한(거의 점) 새 선은 버린다.
-  if (drag?.kind === 'line-ep') {
-    const l = lines.value.find((x) => x.id === drag.id)
-    if (l && Math.hypot(l.x2 - l.x1, l.y2 - l.y1) < 0.02) removeLine(l.id)
-  }
-  drag = null
-  scheduleRedraw() // 드래그 종료 → 풀 품질(음영) 재렌더
-  window.removeEventListener('pointermove', onCanvasPointerMove)
-  window.removeEventListener('pointerup', onCanvasPointerUp)
-}
-onScopeDispose(() => {
-  window.removeEventListener('pointermove', onCanvasPointerMove)
-  window.removeEventListener('pointerup', onCanvasPointerUp)
-})
-
 // 텍스트/선 선택·내용·위치 변경 시 다시 그린다(여기서 — texts/lines 선언 뒤라 TDZ 없음).
 watch([selectedTextId, texts], scheduleRedraw, { deep: true, flush: 'post' })
 watch([selectedLineId, lines], scheduleRedraw, { deep: true, flush: 'post' })
 // 도구를 바꾸면 선택을 해제한다 — 선/텍스트가 선택된 채로 다른 도구가 막히던 문제 해소.
 watch(activeTool, () => {
-  selectedItemId.value = null
-  selectedTextId.value = null
-  selectedLineId.value = null
+  clearSelection()
 })
 
 // (우측 패널 분할 리사이저 = 죽은 코드라 제거. 레이어 패널은 CSS 고정 높이로 위치 안 밀림.)
@@ -1308,6 +671,46 @@ function toggleDone(id) {
 const doneCount = computed(() => props.photoIds.filter((id) => isDone(id)).length)
 // 뷰어 모드 = 현재 사진을 "편집 완료"로 표시한 상태. 편집 UI(도구·우패널·캔버스 조작)를 비활성(보기 전용)으로.
 const viewerMode = computed(() => isDone(currentId.value))
+// 뷰어(편집 완료) 진입 시 캔버스에 남는 선택 표시(박스·핸들·외곽선 빨강)를 지운다.
+watch(viewerMode, (on) => {
+  if (on) clearSelection()
+})
+
+const { onCanvasPointerDown } = useCardEditorDrag({
+  drag,
+  viewerMode,
+  canvasEl,
+  canvasDims,
+  contentRect,
+  activeTool,
+  fontFamily,
+  fontScale,
+  items,
+  texts,
+  lines,
+  selectedText,
+  selectedCaption,
+  selectedLine,
+  selectedKind,
+  selectedItemId,
+  getCaptionRot,
+  getClosingRot,
+  setCaptionRot,
+  setClosingRot,
+  setCaptionPos,
+  setClosingPos,
+  addLine,
+  selectLine,
+  removeLine,
+  addText,
+  selectText,
+  selectItem,
+  clearSelection,
+  scheduleRedraw,
+  captionBox,
+  closingBox,
+  editorTextOpts,
+})
 
 // 캔버스 줌(확대/축소/맞춤). 하단 필름스트립 썸네일 크기 배율.
 let stageRo = null
@@ -1351,87 +754,6 @@ onScopeDispose(() => {
   window.removeEventListener('pointermove', onFilmResizeMove)
   window.removeEventListener('pointerup', onFilmResizeUp)
 })
-
-const exporting = ref(false)
-const exportNote = ref('')
-function triggerDownload(blob, name) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-async function exportCurrent() {
-  if (exporting.value || !photoImg.value) return
-  exporting.value = true
-  exportNote.value = ''
-  // 이 사진 기준으로 저장한다. export 는 비동기(await)라 그 사이 필름스트립 전환이 가능하므로,
-  // 합성 후 사진이 바뀌었으면(stale) 저장을 취소한다 — 잘못된 합성 PNG 다운로드 방지.
-  const exportId = currentId.value
-  try {
-    const cr = contentRect.value
-    const cd = canvasDims.value
-    const visibleObjects = (card.captions[currentId.value]?.response?.objects ?? [])
-      .filter((o) => isCaptionOn(o.itemId))
-      .map((o) => applyCaptionOverrides(o, cr, cd))
-    const inputs = {
-      items: items.value,
-      captions: { objects: visibleObjects, closing: closingForScene(cr, cd) },
-      photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
-      // 미리보기 scene 과 동일: 외곽선은 paintOutlines(composeOverlays)가 전담 → buildScene sketch 외곽선 끔.
-      // (이게 빠지면 문구 생성된 객체는 buildScene sketch + paintOutlines 가 겹쳐 PNG 외곽선 중복)
-      style: { toneDown: toneDown.value, outline: false },
-    }
-    const blob = await exportCardPng(inputs, { photo: photoImg.value }, { format: format.value, pad: padFill.value, bg: padColor.value, noteFont: fontFamily.value, closingFont: fontFamily.value, scale: fontScale.value })
-    const composed = await composeOverlays(blob)
-    if (currentId.value !== exportId) {
-      exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
-      return
-    }
-    triggerDownload(composed, `triplog-card-${exportId}.png`)
-    exportNote.value = '저장 완료'
-  } catch (e) {
-    exportNote.value = `저장 실패: ${e.message}`
-  } finally {
-    exporting.value = false
-  }
-}
-
-// export 결과(PNG blob) 위에 외곽선·선·텍스트를 합성한다(렌더 모듈은 이 요소들을 모르므로 후처리).
-// 외곽선은 미리보기와 동일한 paintOutlines 로 그려 미리보기=저장을 맞춘다(문구 유무 무관).
-// 좌표는 프레임(출력 크기) 기준 정규화 — 미리보기와 export 프레임이 같아 native·fixed 모두 정확.
-async function composeOverlays(blob) {
-  const img = photoImg.value
-  const vText = texts.value.filter((t) => !t.hidden && t.text.trim())
-  const vLine = lines.value.filter((l) => !l.hidden)
-  const hasOutline = items.value.some(
-    (it) => isObjectOn(it.id) && Array.isArray(it.polygons) && it.polygons.length,
-  )
-  if (!vText.length && !vLine.length && !hasOutline) return blob
-  try {
-    // 폰트가 아직 안 굳었으면 폴백(sans-serif)으로 구워지므로, 합성 전에 손글씨 폰트를 보장한다.
-    try {
-      await document.fonts.load(`64px "${fontFamily.value}"`)
-    } catch {
-      /* 폰트 로드 실패 — 폴백 폰트로 진행 */
-    }
-    const bmp = await createImageBitmap(blob)
-    const cv = document.createElement('canvas')
-    cv.width = bmp.width
-    cv.height = bmp.height
-    const ctx = cv.getContext('2d')
-    ctx.drawImage(bmp, 0, 0)
-    if (img && hasOutline) paintOutlines(ctx, img, bmp.width, bmp.height, { forExport: true }) // 외곽선(맨 아래)
-    for (const l of vLine) paintLine(ctx, l, bmp.width, bmp.height) // 선
-    for (const t of vText) paintText(ctx, t, bmp.width, bmp.height) // 텍스트(위)
-    return await new Promise((res) => cv.toBlob(res, 'image/png'))
-  } catch {
-    return blob
-  }
-}
 
 // 필름스트립 썸네일(9:16 cover-fit) objectURL.
 const thumbUrls = ref({})
@@ -1831,12 +1153,6 @@ watch(
     radial-gradient(circle, var(--line) 1px, transparent 1px) 0 0 / 18px 18px,
     var(--line2);
 }
-.stage-canvas {
-  position: relative;
-  margin: auto; /* 작을 때 가운데, 클 때 스크롤 */
-  display: flex;
-  align-items: center;
-}
 .fallback-hint {
   position: absolute;
   top: 52px; /* 상단 선택/생성 토글 아래 */
@@ -1997,11 +1313,6 @@ watch(
   background: var(--paper-card);
   color: var(--ink);
   cursor: pointer;
-}
-.tool-block {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line2);
 }
 /* 전역(사진 공통) 글씨 — 개별 설정과 디자인으로 구분되게 옅은 박스로 묶는다. */
 .global-type {

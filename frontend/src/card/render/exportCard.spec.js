@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { computeFitRect, exportCardPng, FIXED_W, FIXED_H } from './exportCard.js';
+import * as renderCore from './renderCore.js';
 
 describe('computeFitRect — 9:16(1080×1920) contain 레터박스 맞춤', () => {
   it('정확히 9:16 사진은 패딩 없이 틀을 꽉 채운다', () => {
@@ -129,6 +130,15 @@ describe('exportCardPng — 입력 검증 + 출력 캔버스 크기', () => {
     const created = installCanvasMock();
     await exportCardPng(inputs(960, 1280), { photo: img(960, 1280) }, { format: 'native' });
     expect(created[0]).toMatchObject({ width: 960, height: 1280 });
+  });
+
+  // 회귀 가드: 전역 글씨 크기(scale)가 renderCard 까지 전달돼야 미리보기=저장 글씨 크기가 일치한다.
+  it('전역 글씨 크기(scale)를 renderCard 에 전달한다', async () => {
+    installCanvasMock();
+    const spy = vi.spyOn(renderCore, 'renderCard');
+    await exportCardPng(inputs(1000, 1000), { photo: img(1000, 1000) }, { format: 'native', scale: 1.6 });
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls[0][3].scale).toBe(1.6);
   });
 
   it('fixed: 출력 틀 캔버스가 1080×1920', async () => {
