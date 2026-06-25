@@ -12,6 +12,14 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  hideHeader: {
+    type: Boolean,
+    default: false,
+  },
+  width: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -133,11 +141,12 @@ onBeforeUnmount(restorePageState)
         class="ds-modal base-modal"
         role="dialog"
         aria-modal="true"
-        :aria-labelledby="title ? titleId : undefined"
-        :aria-label="title ? undefined : '대화상자'"
+        :aria-labelledby="title && !hideHeader ? titleId : undefined"
+        :aria-label="title && hideHeader ? title : title ? undefined : '대화상자'"
+        :style="width ? { width } : undefined"
         tabindex="-1"
       >
-        <header class="base-modal__header">
+        <header v-if="!hideHeader" class="base-modal__header">
           <h2 :id="titleId">{{ title }}</h2>
           <BaseButton variant="ghost" size="small" aria-label="닫기" @click="close">닫기</BaseButton>
         </header>

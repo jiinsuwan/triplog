@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,8 +10,14 @@ const routerMock = vi.hoisted(() => ({
   push: vi.fn(),
 }))
 
+const fetchItineraryMock = vi.hoisted(() => vi.fn())
+
 vi.mock('vue-router', () => ({
   useRouter: () => routerMock,
+}))
+
+vi.mock('@/api/itineraryApi', () => ({
+  fetchItinerary: fetchItineraryMock,
 }))
 
 function mountHomeView() {
@@ -22,6 +28,7 @@ function mountHomeView() {
           props: ['to'],
           template: '<a :href="typeof to === \'string\' ? to : to.path"><slot /></a>',
         },
+        Teleport: true,
       },
     },
   })
@@ -29,10 +36,12 @@ function mountHomeView() {
 
 describe('HomeView', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     setActivePinia(createPinia())
     localStorage.clear()
     routerMock.push.mockClear()
-    vi.restoreAllMocks()
+    fetchItineraryMock.mockReset()
+    fetchItineraryMock.mockResolvedValue({ dayCount: 0, days: [] })
   })
 
   it('renders the public scrapbook home without exposing logs navigation', () => {
@@ -45,6 +54,7 @@ describe('HomeView', () => {
     expect(wrapper.text()).not.toContain('오사카 가을 여행')
     expect(wrapper.text()).not.toContain('후쿠오카 주말 여행')
     expect(wrapper.text()).not.toContain('교토 단풍 기록')
+    expect(wrapper.get('main').classes()).toContain('page-canvas')
     expect(wrapper.find('.ds-tabs').text()).not.toContain('LOGS')
     expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-start-trip-top"]').exists()).toBe(false)
@@ -110,7 +120,57 @@ describe('HomeView', () => {
     expect(tripStore.fetchTripList).toHaveBeenCalled()
   })
 
-  it('opens authenticated resume action without login redirects', async () => {
+  it('keeps planning drafts out of upcoming trips and resumes the latest unfinished trip', async () => {
+    const auth = useAuthStore()
+    const tripStore = useTripStore()
+    auth.setTokens('access', 'refresh')
+    auth.user = { nickname: '지인' }
+    tripStore.trips = [
+      {
+        id: 1,
+        title: '오래된 계획',
+        region: '전주',
+        theme: '골목',
+        status: 'planning',
+        startDate: '2026-06-24',
+        endDate: '2026-06-26',
+        createdAt: '2026-06-20T09:00:00',
+      },
+      {
+        id: 2,
+        title: '최근 수정 계획',
+        region: '제주',
+        theme: '바다',
+        status: 'planning',
+        startDate: '2026-07-01',
+        endDate: '2026-07-03',
+        updatedAt: '2026-06-25T12:00:00',
+      },
+      {
+        id: 3,
+        title: '확정된 여행',
+        region: '부산',
+        theme: '미식',
+        status: 'upcoming',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+      },
+    ]
+    vi.spyOn(auth, 'fetchMe').mockResolvedValue(auth.user)
+    vi.spyOn(tripStore, 'fetchTripList').mockResolvedValue({ items: tripStore.trips, total: 3 })
+
+    const wrapper = mountHomeView()
+    const resumeText = wrapper.get('[data-testid="home-resume-trip"]').text()
+    const upcomingText = wrapper.get('.home-upcoming').text()
+
+    expect(resumeText).toContain('최근 수정 계획')
+    expect(resumeText).not.toContain('오래된 계획')
+    expect(upcomingText).toContain('확정된 여행')
+    expect(upcomingText).not.toContain('최근 수정 계획')
+    expect(upcomingText).not.toContain('오래된 계획')
+  })
+
+  it('opens authenticated home tickets in the shared trip preview dialog', async () => {
     const auth = useAuthStore()
     const tripStore = useTripStore()
     auth.setTokens('access', 'refresh')
@@ -131,12 +191,64 @@ describe('HomeView', () => {
     const wrapper = mountHomeView()
 
     await wrapper.get('[data-testid="home-resume-trip"]').trigger('click')
+    await flushPromises()
 
     expect(wrapper.find('[data-testid="home-start-trip-top"]').exists()).toBe(false)
-    expect(routerMock.push).toHaveBeenCalledWith({
-      name: 'trip-detail',
-      params: { tripId: 9 },
+    expect(routerMock.push).not.toHaveBeenCalled()
+    expect(fetchItineraryMock).toHaveBeenCalledWith(9, { trip: expect.objectContaining({ id: 9 }) })
+    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('제주 바람 여행')
+    expect(wrapper.find('[data-testid="trip-preview-detail"]').exists()).toBe(true)
+  })
+
+  it('opens upcoming and memory home items in the shared trip preview dialog', async () => {
+    const auth = useAuthStore()
+    const tripStore = useTripStore()
+    auth.setTokens('access', 'refresh')
+    auth.user = { nickname: '지인' }
+    tripStore.trips = [
+      {
+        id: 10,
+        title: '확정 부산 여행',
+        region: '부산',
+        theme: '바다',
+        status: 'upcoming',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+      },
+      {
+        id: 11,
+        title: '전주 기록 여행',
+        region: '전주',
+        theme: '골목',
+        status: 'past',
+        startDate: '2026-05-01',
+        endDate: '2026-05-03',
+      },
+    ]
+    vi.spyOn(auth, 'fetchMe').mockResolvedValue(auth.user)
+    vi.spyOn(tripStore, 'fetchTripList').mockResolvedValue({ items: tripStore.trips, total: 2 })
+
+    const wrapper = mountHomeView()
+
+    await wrapper.get('.home-upcoming .home-ticket-button').trigger('click')
+    await flushPromises()
+
+    expect(fetchItineraryMock).toHaveBeenCalledWith(10, {
+      trip: expect.objectContaining({ id: 10 }),
     })
+    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('확정 부산 여행')
+
+    await wrapper.get('.trip-preview-dialog__close').trigger('click')
+    await wrapper.get('.home-memories .home-polaroid-button').trigger('click')
+    await flushPromises()
+
+    expect(fetchItineraryMock).toHaveBeenCalledWith(11, {
+      trip: expect.objectContaining({ id: 11 }),
+    })
+    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('전주 기록 여행')
   })
 
   it('renders unissued planning ticket and opens create flow without planned trips', async () => {
@@ -155,17 +267,48 @@ describe('HomeView', () => {
     expect(wrapper.text()).toContain('새 여행 계획하기')
     expect(wrapper.text()).toContain('TripLog로 여행을 계획해보세요.')
     expect(wrapper.find('.home-resume .ds-ticket__meta').text()).toBe('TripLog·여행을 계획해보세요.')
-    expect(wrapper.findAll('.ds-ticket')).toHaveLength(1)
+    expect(wrapper.findAll('.ds-ticket').length).toBeGreaterThanOrEqual(2)
     expect(wrapper.find('.ds-ticket--unissued').exists()).toBe(true)
-    expect(wrapper.find('.ds-ticket__barcode').exists()).toBe(false)
+    expect(wrapper.find('.home-resume .ds-ticket__barcode').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-empty-create"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-upcoming-empty"]').exists()).toBe(true)
-    expect(wrapper.find('.home-upcoming .ds-ticket').exists()).toBe(false)
-    expect(wrapper.find('.home-stamp-placeholder').exists()).toBe(true)
-    expect(wrapper.text()).toContain('계획된 여행이 아직 없어요')
+    expect(wrapper.find('[data-testid="home-upcoming-empty"]').exists()).toBe(false)
+    expect(wrapper.find('.home-upcoming .ds-ticket').exists()).toBe(true)
+    expect(wrapper.find('.home-stamp-placeholder').exists()).toBe(false)
+    expect(wrapper.find('.home-stamps .ds-stamp').exists()).toBe(true)
+    expect(wrapper.text()).toContain('강릉 주말 바다')
+    expect(wrapper.text()).toContain('전주 한옥 골목')
 
     await wrapper.get('[data-testid="home-empty-create"]').trigger('click')
 
     expect(routerMock.push).toHaveBeenCalledWith('/trips/new')
+  })
+
+  it('opens home preview mock tickets with the same itinerary-style dialog', async () => {
+    const auth = useAuthStore()
+    const tripStore = useTripStore()
+    auth.setTokens('access', 'refresh')
+    tripStore.trips = []
+    tripStore.total = 0
+    vi.spyOn(auth, 'fetchMe').mockResolvedValue(auth.user)
+    vi.spyOn(tripStore, 'fetchTripList').mockResolvedValue({ items: [], total: 0 })
+
+    const wrapper = mountHomeView()
+
+    await wrapper.get('.home-upcoming .home-ticket-button').trigger('click')
+    await flushPromises()
+
+    expect(fetchItineraryMock).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('안목해변')
+    expect(wrapper.text()).toContain('강릉 커피거리')
+
+    await wrapper.get('.trip-preview-dialog__close').trigger('click')
+    await wrapper.get('.home-memories .home-polaroid-button').trigger('click')
+    await flushPromises()
+
+    expect(fetchItineraryMock).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('전주 한옥마을')
+    expect(wrapper.text()).toContain('경기전')
   })
 })

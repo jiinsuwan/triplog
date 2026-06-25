@@ -23,6 +23,7 @@ import {
   validateTripForm,
 } from '@/utils/tripForm'
 import { isPastTripStatus, tripStatusLabel, tripStatusSeverity } from '@/utils/tripStatus'
+import { getTripTicketColor } from '@/utils/tripTicket'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,7 +79,7 @@ const endDateModel = computed({
   },
 })
 const ticketStatus = computed(() => (isPastTrip.value ? 'MEMORY TICKET' : 'TRIP TICKET'))
-const ticketColor = computed(() => (isPastTrip.value ? 'khaki' : 'mustard'))
+const ticketColor = computed(() => getTripTicketColor(trip.value))
 const ticketSerial = computed(() => {
   const sourceTrip = trip.value
   const year = sourceTrip?.startDate?.slice(0, 4) || new Date().getFullYear()

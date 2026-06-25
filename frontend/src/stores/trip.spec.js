@@ -91,8 +91,9 @@ describe('trip 스토어', () => {
       status: 'planning',
     })
 
-    expect(result).toEqual(created)
-    expect(store.trips[0]).toEqual(created)
+    expect(result).toEqual(expect.objectContaining(created))
+    expect(result.createdAt).toEqual(expect.any(String))
+    expect(store.trips[0]).toEqual(result)
     expect(store.trips).toHaveLength(2)
     expect(store.total).toBe(2)
     expect(store.creating).toBe(false)
@@ -155,9 +156,10 @@ describe('trip 스토어', () => {
       status: 'planning',
     })
 
-    expect(result).toEqual(updated)
-    expect(store.selectedTrip).toEqual(updated)
-    expect(store.trips[0]).toEqual(updated)
+    expect(result).toEqual(expect.objectContaining(updated))
+    expect(result.updatedAt).toEqual(expect.any(String))
+    expect(store.selectedTrip).toEqual(result)
+    expect(store.trips[0]).toEqual(result)
     expect(store.updating).toBe(false)
   })
 

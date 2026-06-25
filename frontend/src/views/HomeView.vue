@@ -1,22 +1,90 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { AppTopBar, BaseButton, TripPolaroid, TripStamp, TripTicket } from '@/components/common'
+import TripPreviewDialog from '@/components/trip/TripPreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
-import { formatTripDateRange, tripDurationDays } from '@/utils/tripForm'
-import { isPastTripStatus } from '@/utils/tripStatus'
+import { formatTripDateRange, tripDisplayTags, tripDurationDays } from '@/utils/tripForm'
+import { TRIP_STATUS, isPastTripStatus, normalizeTripStatus } from '@/utils/tripStatus'
+import { getTripTicketColor } from '@/utils/tripTicket'
 
 const router = useRouter()
 const auth = useAuthStore()
 const tripStore = useTripStore()
+const previewDialogOpen = ref(false)
+const selectedTrip = ref(null)
 
 const memoryTones = [
   'radial-gradient(80% 70% at 60% 35%, #d39a5a, #9a4b2a 60%, #5a2c18)',
   'radial-gradient(80% 70% at 40% 40%, #7bb0ad, #3d8079 60%, #235650)',
   'radial-gradient(80% 70% at 50% 30%, #8a6a9e, #4a3566 65%, #2a1d3e)',
 ]
+
+const homePreviewTrips = {
+  upcoming: [
+    {
+      id: -101,
+      title: '강릉 주말 바다',
+      startDate: '2026-07-04',
+      endDate: '2026-07-06',
+      region: '강릉',
+      theme: '바다 산책',
+      status: TRIP_STATUS.UPCOMING,
+      tags: ['#바다', '#카페'],
+      serial: 'TL-NEXT-001',
+      mock: true,
+      itinerary: {
+        dayCount: 3,
+        days: [
+          {
+            dayNumber: 1,
+            date: '2026-07-04',
+            stops: [
+              { id: 'mock-next-1', place: { name: '안목해변', category: '바다' }, startTime: '10:00' },
+              { id: 'mock-next-2', place: { name: '강릉 커피거리', category: '카페' }, startTime: '13:00' },
+            ],
+          },
+          {
+            dayNumber: 2,
+            date: '2026-07-05',
+            stops: [
+              { id: 'mock-next-3', place: { name: '경포호 산책길', category: '산책' }, startTime: '11:00' },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+  past: [
+    {
+      id: -201,
+      title: '전주 한옥 골목',
+      startDate: '2026-03-14',
+      endDate: '2026-03-16',
+      region: '전주',
+      theme: '골목 미식',
+      status: TRIP_STATUS.PAST,
+      tags: ['#한옥', '#골목'],
+      serial: 'TL-MEM-001',
+      mock: true,
+      itinerary: {
+        dayCount: 3,
+        days: [
+          {
+            dayNumber: 1,
+            date: '2026-03-14',
+            stops: [
+              { id: 'mock-memory-1', place: { name: '전주 한옥마을', category: '문화' }, startTime: '10:30' },
+              { id: 'mock-memory-2', place: { name: '경기전', category: '역사' }, startTime: '14:00' },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+}
 
 const isLoggedIn = computed(() => auth.isAuthenticated)
 const displayName = computed(() => {
@@ -26,13 +94,19 @@ const displayName = computed(() => {
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase() || 'T')
 
 const planningTrips = computed(() =>
-  tripStore.trips.filter((trip) => !isPastTripStatus(trip.status)),
+  tripStore.trips.filter((trip) => normalizeTripStatus(trip.status) === TRIP_STATUS.PLANNING),
+)
+const confirmedUpcomingTrips = computed(() =>
+  tripStore.trips.filter((trip) => normalizeTripStatus(trip.status) === TRIP_STATUS.UPCOMING),
 )
 const pastTrips = computed(() =>
   tripStore.trips.filter((trip) => isPastTripStatus(trip.status)),
 )
 const sortedPlanningTrips = computed(() =>
-  [...planningTrips.value].sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate)),
+  [...planningTrips.value].sort((a, b) => activityValue(b) - activityValue(a)),
+)
+const sortedUpcomingTrips = computed(() =>
+  [...confirmedUpcomingTrips.value].sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate)),
 )
 const sortedPastTrips = computed(() =>
   [...pastTrips.value].sort(
@@ -40,15 +114,20 @@ const sortedPastTrips = computed(() =>
   ),
 )
 const resumeTrip = computed(() => sortedPlanningTrips.value[0] || null)
-const upcomingTrips = computed(() =>
-  sortedPlanningTrips.value.filter((trip) => trip.id !== resumeTrip.value?.id).slice(0, 2),
-)
+const upcomingTrips = computed(() => {
+  const trips = sortedUpcomingTrips.value.slice(0, 2)
+  return trips.length ? trips : homePreviewTrips.upcoming
+})
 const hasPlanningTrips = computed(() => planningTrips.value.length > 0)
 const resumeTitle = computed(() => {
   if (!isLoggedIn.value) return '새 여행 시작하기'
   return hasPlanningTrips.value ? '이어서 계획하기' : '새 여행 계획하기'
 })
-const recentMemories = computed(() => sortedPastTrips.value.slice(0, 3))
+const displayPastTrips = computed(() => {
+  const trips = sortedPastTrips.value
+  return trips.length ? trips : homePreviewTrips.past
+})
+const recentMemories = computed(() => displayPastTrips.value.slice(0, 3))
 const totalTrips = computed(() => tripStore.trips.length)
 const totalDays = computed(() =>
   tripStore.trips.reduce((sum, trip) => sum + tripDurationDays(trip), 0),
@@ -86,7 +165,22 @@ function openTrip(trip) {
     openTrips()
     return
   }
-  router.push({ name: 'trip-detail', params: { tripId: trip.id } })
+
+  selectedTrip.value = trip
+  previewDialogOpen.value = true
+}
+
+function goPlaces(trip) {
+  if (!trip || trip.mock) return
+  router.push({ name: 'trip-place-search', params: { tripId: trip.id } })
+}
+
+function handleTripDeleted() {
+  selectedTrip.value = null
+}
+
+function handleTripUpdated(trip) {
+  selectedTrip.value = trip
 }
 
 function ticketStatus(trip) {
@@ -94,14 +188,14 @@ function ticketStatus(trip) {
 }
 
 function ticketSerial(trip) {
+  if (trip.serial) return trip.serial
+
   const year = trip.startDate?.slice(0, 4) || new Date().getFullYear()
   return `TL-${year}-${String(trip.id).padStart(4, '0')}`
 }
 
 function ticketColor(trip, index = 0) {
-  if (isPastTripStatus(trip.status)) return 'khaki'
-  const colors = ['mustard', 'blue', 'sage', 'burgundy', 'plum']
-  return colors[index % colors.length]
+  return getTripTicketColor(trip, index)
 }
 
 function ticketDday(trip) {
@@ -115,7 +209,7 @@ function ticketDday(trip) {
 }
 
 function tripTags(trip) {
-  return [trip.region, trip.theme].filter(Boolean)
+  return tripDisplayTags(trip)
 }
 
 function stampTitle(trip) {
@@ -130,10 +224,26 @@ function dateValue(value) {
   if (!value) return Number.MAX_SAFE_INTEGER
   return new Date(`${value}T00:00:00`).getTime()
 }
+
+function activityValue(trip) {
+  const value = trip.updatedAt || trip.modifiedAt || trip.createdAt || trip.startDate || trip.endDate
+  const timestamp = parseDateTimeValue(value)
+
+  if (Number.isFinite(timestamp)) return timestamp
+  return Number(trip.id) || 0
+}
+
+function parseDateTimeValue(value) {
+  if (!value) return Number.NaN
+
+  const normalizedValue = String(value)
+  const dateText = normalizedValue.includes('T') ? normalizedValue : `${normalizedValue}T00:00:00`
+  return new Date(dateText).getTime()
+}
 </script>
 
 <template>
-  <div class="home-page">
+  <div class="home-page page-bg">
     <AppTopBar
       active="home"
       :show-search="false"
@@ -148,7 +258,7 @@ function dateValue(value) {
       </template>
     </AppTopBar>
 
-    <main class="home-scrap" aria-labelledby="home-title">
+    <main class="home-scrap page-canvas" aria-labelledby="home-title">
       <header class="home-scrap__head">
         <div>
           <h1 v-if="isLoggedIn" id="home-title">
@@ -229,7 +339,7 @@ function dateValue(value) {
             <h2 id="home-resume-title">{{ resumeTitle }}</h2>
             <p>
               <template v-if="isLoggedIn && resumeTrip">
-                가장 최근에 보던 여행이에요 · 눌러서 이어가기
+                가장 최근에 만들거나 수정한 여행이에요 · 눌러서 이어가기
               </template>
               <template v-else-if="isLoggedIn">TripLog로 여행을 계획해보세요.</template>
               <template v-else>로그인하면 최근 여행 티켓에서 바로 이어갈 수 있어요.</template>
@@ -303,9 +413,9 @@ function dateValue(value) {
         <section class="home-stamps" aria-labelledby="home-stamps-title">
           <h2 id="home-stamps-title" class="home-label">다녀온 도장</h2>
           <div class="home-stamps__note">
-            <template v-if="isLoggedIn && pastTrips.length">
+            <template v-if="isLoggedIn && displayPastTrips.length">
               <TripStamp
-                v-for="trip in pastTrips.slice(0, 4)"
+                v-for="trip in displayPastTrips.slice(0, 4)"
                 :key="trip.id"
                 :title="stampTitle(trip)"
                 :stage="3"
@@ -376,7 +486,7 @@ function dateValue(value) {
                   :dates="formatTripDateRange(trip)"
                   :serial="ticketSerial(trip)"
                   :status="ticketStatus(trip)"
-                  :color="ticketColor(trip, index + 1)"
+                  :color="ticketColor(trip, index)"
                   :dday="ticketDday(trip)"
                   :tags="tripTags(trip)"
                 />
@@ -389,30 +499,30 @@ function dateValue(value) {
         </section>
       </section>
     </main>
+
+    <TripPreviewDialog
+      v-model="previewDialogOpen"
+      :trip="selectedTrip"
+      @open-places="goPlaces"
+      @deleted="handleTripDeleted"
+      @updated="handleTripUpdated"
+    />
   </div>
 </template>
 
 <style scoped>
-.home-page {
-  min-height: 100vh;
-}
-
 .home-scrap {
-  --ds-surface: var(--paper);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 12px 34px -18px rgba(60, 40, 20, 0.4);
-  margin: 18px auto 42px;
-  max-width: 1200px;
-  padding: 26px 36px 34px;
+  display: flex;
+  flex-direction: column;
 }
 
 .home-scrap__head {
   align-items: flex-end;
+  border-bottom: 1px solid var(--line);
   display: flex;
   gap: 20px;
   justify-content: flex-start;
+  padding-bottom: 20px;
 }
 
 .home-scrap__head h1 {
@@ -438,12 +548,16 @@ function dateValue(value) {
 .home-drawer {
   align-items: stretch;
   display: grid;
-  gap: 30px 28px;
+  flex: 1 1 auto;
+  gap: 30px 26px;
   grid-template-areas:
     'stats resume resume'
     'stamps memories upcoming';
   grid-template-columns: 0.92fr 1.5fr 1fr;
-  margin-top: 20px;
+  grid-template-rows: minmax(0, 266px) minmax(0, 1fr);
+  height: auto;
+  margin-top: 22px;
+  min-height: 0;
 }
 
 .home-stats {
@@ -462,7 +576,8 @@ function dateValue(value) {
   display: flex;
   flex-direction: column;
   grid-area: resume;
-  padding: 15px 18px 18px;
+  min-height: 0;
+  padding: 14px 18px 16px;
 }
 
 .home-stamps {
@@ -488,8 +603,8 @@ function dateValue(value) {
   background: rgba(255, 253, 248, 0.58);
   border: 1px dashed rgba(190, 166, 126, 0.64);
   border-radius: 12px;
-  min-height: 166px;
-  padding: 14px;
+  min-height: 0;
+  padding: 10px 12px;
 }
 
 .home-stamps {
@@ -502,8 +617,8 @@ function dateValue(value) {
   );
   border: 1px solid #e3d7bd;
   border-radius: 8px;
-  min-height: 166px;
-  padding: 14px;
+  min-height: 0;
+  padding: 10px 12px;
 }
 
 .home-stats,
@@ -572,7 +687,7 @@ function dateValue(value) {
 }
 
 .home-resume__head {
-  margin-bottom: 13px;
+  margin-bottom: 0;
 }
 
 .home-resume__head h2 {
@@ -589,14 +704,17 @@ function dateValue(value) {
 }
 
 .home-resume :deep(.ds-ticket) {
-  --ticket-w: 640px;
+  --ticket-w: 560px;
   max-width: 100%;
 }
 
 .home-resume .home-ticket-button {
+  align-items: center;
   display: flex;
+  flex: 1 1 auto;
   justify-content: center;
-  margin-top: auto;
+  margin-top: 10px;
+  min-height: 0;
 }
 
 .home-ticket-button,
@@ -620,7 +738,7 @@ function dateValue(value) {
 .home-ticket-button:focus-visible,
 .home-polaroid-button:focus-visible {
   border-radius: var(--radius);
-  box-shadow: 0 0 0 3px rgba(194, 105, 63, 0.24);
+  box-shadow: none;
   outline: none;
 }
 
@@ -632,15 +750,15 @@ function dateValue(value) {
   display: flex;
   flex: 1;
   flex-wrap: wrap;
-  gap: 14px 12px;
+  gap: 10px;
   justify-content: center;
   min-height: 0;
-  padding: 10px 6px 8px;
+  padding: 6px 4px;
 }
 
 .home-stamps__note :deep(.ds-stamp) {
-  height: 98px;
-  width: 98px;
+  height: 82px;
+  width: 82px;
 }
 
 .home-stamps__note :deep(.ds-stamp-stage-2) {
@@ -674,14 +792,14 @@ function dateValue(value) {
 .home-memories__strip {
   display: flex;
   flex: 1;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
   overflow-x: auto;
   padding-bottom: 6px;
 }
 
 .home-memories__strip :deep(.ds-polaroid) {
-  --pola-w: 146px;
+  --pola-w: 124px;
   flex: 0 0 auto;
 }
 
@@ -689,7 +807,7 @@ function dateValue(value) {
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 14px;
+  gap: 12px;
 }
 
 .home-upcoming-empty {
@@ -706,16 +824,29 @@ function dateValue(value) {
 }
 
 .home-upcoming :deep(.ds-ticket) {
-  --ticket-w: 300px;
+  --ticket-w: 280px;
   max-width: 100%;
 }
 
-@media (max-width: 980px) {
-  .home-scrap {
-    margin: 14px 16px 36px;
-    padding: 24px;
-  }
+.home-upcoming :deep(.ds-ticket__body) {
+  padding: 0.82em 1em;
+}
 
+.home-upcoming :deep(.ds-ticket__title) {
+  font-size: 1.18em;
+  line-height: 1.28;
+  white-space: normal;
+}
+
+.home-upcoming :deep(.ds-ticket__label) {
+  letter-spacing: 0.2em;
+}
+
+.home-upcoming :deep(.ds-ticket__meta) {
+  font-size: 0.8em;
+}
+
+@media (max-width: 980px) {
   .home-drawer {
     grid-template-areas:
       'resume resume'
@@ -726,13 +857,6 @@ function dateValue(value) {
 }
 
 @media (max-width: 720px) {
-  .home-scrap {
-    border-radius: 0;
-    border-width: 1px 0;
-    margin: 0 0 32px;
-    padding: 22px 16px 28px;
-  }
-
   .home-scrap__head {
     align-items: flex-start;
     flex-direction: column;
@@ -751,6 +875,9 @@ function dateValue(value) {
       'stamps'
       'memories';
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    height: auto;
+    min-height: 0;
   }
 
   .home-resume {

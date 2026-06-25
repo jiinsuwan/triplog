@@ -1,55 +1,290 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { AppTopBar, BaseButton, EmptyState, TripTicket } from '@/components/common'
+import { AppTopBar, BaseButton, TripTicket } from '@/components/common'
+import TripCreateDialog from '@/components/trip/TripCreateDialog.vue'
+import TripPreviewDialog from '@/components/trip/TripPreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
-import { formatTripDateRange, tripDurationDays } from '@/utils/tripForm'
-import { isPastTripStatus } from '@/utils/tripStatus'
+import { formatTripDateRange, tripDisplayTags } from '@/utils/tripForm'
+import { TRIP_STATUS, isPastTripStatus, normalizeTripStatus } from '@/utils/tripStatus'
+import { getTripTicketColor } from '@/utils/tripTicket'
 
 const router = useRouter()
 const auth = useAuthStore()
 const tripStore = useTripStore()
 
-const planningTrips = computed(() =>
-  tripStore.trips.filter((trip) => !isPastTripStatus(trip.status)),
-)
-const pastTrips = computed(() =>
-  tripStore.trips.filter((trip) => isPastTripStatus(trip.status)),
-)
-const totalCount = computed(() => tripStore.trips.length)
+const createDialogOpen = ref(false)
+const previewDialogOpen = ref(false)
+const selectedTrip = ref(null)
+const planningGridRef = ref(null)
+const planningOverflow = ref(false)
+let resizeObserver = null
+let ticketDragState = null
+let suppressClickUntil = 0
+
+const DRAG_CLICK_THRESHOLD = 12
+
+const previewMockTrips = {
+  upcoming: [
+    {
+      id: -101,
+      title: '강릉 주말 바다',
+      startDate: '2026-07-04',
+      endDate: '2026-07-06',
+      region: '강릉',
+      theme: '바다 산책',
+      status: TRIP_STATUS.UPCOMING,
+      tags: ['#바다', '#카페'],
+      serial: 'TL-NEXT-001',
+      mock: true,
+      itinerary: {
+        dayCount: 3,
+        days: [
+          {
+            dayNumber: 1,
+            date: '2026-07-04',
+            stops: [
+              { id: 'mock-next-1', place: { name: '안목해변', category: '바다' }, startTime: '10:00' },
+              { id: 'mock-next-2', place: { name: '강릉 커피거리', category: '카페' }, startTime: '13:00' },
+            ],
+          },
+          {
+            dayNumber: 2,
+            date: '2026-07-05',
+            stops: [
+              { id: 'mock-next-3', place: { name: '경포호 산책길', category: '산책' }, startTime: '11:00' },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+  past: [
+    {
+      id: -201,
+      title: '전주 한옥 골목',
+      startDate: '2026-03-14',
+      endDate: '2026-03-16',
+      region: '전주',
+      theme: '골목 미식',
+      status: 'past',
+      tags: ['#한옥', '#골목'],
+      serial: 'TL-MEM-001',
+      mock: true,
+      itinerary: {
+        dayCount: 3,
+        days: [
+          {
+            dayNumber: 1,
+            date: '2026-03-14',
+            stops: [
+              { id: 'mock-memory-1', place: { name: '전주 한옥마을', category: '문화' }, startTime: '10:30' },
+              { id: 'mock-memory-2', place: { name: '경기전', category: '역사' }, startTime: '14:00' },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+}
+
 const displayName = computed(() => {
   const user = auth.user
   return user?.nickname || user?.name || user?.email?.split('@')[0] || 'T'
 })
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase() || 'T')
+const allTrips = computed(() => tripStore.trips ?? [])
+const planningTrips = computed(() =>
+  allTrips.value.filter((trip) => normalizeTripStatus(trip.status) === TRIP_STATUS.PLANNING),
+)
+const upcomingTrips = computed(() =>
+  allTrips.value.filter((trip) => normalizeTripStatus(trip.status) === TRIP_STATUS.UPCOMING),
+)
+const pastTrips = computed(() => allTrips.value.filter((trip) => isPastTripStatus(trip.status)))
+const sections = computed(() => [
+  {
+    key: 'planning',
+    title: '계획 중',
+    trips: planningTrips.value,
+  },
+  {
+    key: 'upcoming',
+    title: '곧 떠날 여행',
+    trips: upcomingTrips.value.length ? upcomingTrips.value : previewMockTrips.upcoming,
+  },
+  {
+    key: 'past',
+    title: '다녀온 여행',
+    trips: pastTrips.value.length ? pastTrips.value : previewMockTrips.past,
+  },
+])
+const visibleSections = computed(() => sections.value)
 
 onMounted(() => {
   tripStore.fetchTripList().catch(() => {})
+  nextTick(syncPlanningOverflow)
+
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(syncPlanningOverflow)
+    if (planningGridRef.value) {
+      resizeObserver.observe(planningGridRef.value)
+    }
+  }
 })
 
-function goCreate() {
-  router.push({ name: 'trip-create' })
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+})
+
+watch(
+  () => planningTrips.value.length,
+  () => nextTick(syncPlanningOverflow),
+)
+
+function openCreateDialog() {
+  createDialogOpen.value = true
 }
 
-function goDetail(trip) {
-  router.push({ name: 'trip-detail', params: { tripId: trip.id } })
+function handleCreateClick(event) {
+  if (shouldSuppressClick(event)) return
+  openCreateDialog()
 }
 
-function tripStatusText(status) {
-  return isPastTripStatus(status) ? 'MEMORY TICKET' : 'TRIP TICKET'
+function openPreview(trip) {
+  selectedTrip.value = trip
+  previewDialogOpen.value = true
+}
+
+function handleTicketClick(trip, event) {
+  if (shouldSuppressClick(event)) return
+  openPreview(trip)
+}
+
+function goPlaces(trip) {
+  router.push({ name: 'trip-place-search', params: { tripId: trip.id } })
+}
+
+function handleTripCreated({ trip, destination }) {
+  if (destination === 'places' && trip?.id) {
+    goPlaces(trip)
+    return
+  }
+  selectedTrip.value = trip
+  previewDialogOpen.value = true
+}
+
+function handleTripDeleted() {
+  selectedTrip.value = null
+}
+
+function handleTripUpdated(trip) {
+  selectedTrip.value = trip
+}
+
+function setPlanningGridRef(element) {
+  if (element === planningGridRef.value) return
+
+  if (planningGridRef.value) {
+    resizeObserver?.unobserve(planningGridRef.value)
+  }
+
+  planningGridRef.value = element
+
+  if (element) {
+    resizeObserver?.observe(element)
+  }
+
+  nextTick(syncPlanningOverflow)
+}
+
+function syncPlanningOverflow() {
+  const element = planningGridRef.value
+  planningOverflow.value = !!element && element.scrollWidth > element.clientWidth + 1
+}
+
+function startTicketDrag(event) {
+  if (event.button != null && event.button !== 0) return
+  if (event.target?.closest?.('[data-ticket-drag-ignore]')) return
+
+  const element = event.currentTarget
+  ticketDragState = {
+    element,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    scrollLeft: element.scrollLeft,
+    dragging: false,
+    captured: false,
+  }
+}
+
+function moveTicketDrag(event) {
+  if (!ticketDragState || ticketDragState.pointerId !== event.pointerId) return
+
+  const deltaX = event.clientX - ticketDragState.startX
+  const deltaY = event.clientY - ticketDragState.startY
+
+  if (!ticketDragState.dragging && Math.hypot(deltaX, deltaY) > DRAG_CLICK_THRESHOLD) {
+    ticketDragState.dragging = true
+    ticketDragState.captured = true
+    ticketDragState.element.classList.add('is-dragging')
+    ticketDragState.element.setPointerCapture?.(event.pointerId)
+  }
+
+  if (!ticketDragState.dragging) return
+
+  event.preventDefault()
+  ticketDragState.element.scrollLeft = ticketDragState.scrollLeft - deltaX
+}
+
+function endTicketDrag(event) {
+  if (!ticketDragState || ticketDragState.pointerId !== event.pointerId) return
+
+  const { element, dragging, captured } = ticketDragState
+  element.classList.remove('is-dragging')
+  if (captured) {
+    element.releasePointerCapture?.(event.pointerId)
+  }
+  ticketDragState = null
+
+  if (dragging) {
+    suppressClickUntil = Date.now() + 250
+  }
+}
+
+function cancelTicketDrag(event) {
+  if (!ticketDragState) return
+
+  ticketDragState.element.classList.remove('is-dragging')
+  if (ticketDragState.captured) {
+    ticketDragState.element.releasePointerCapture?.(event.pointerId)
+  }
+  ticketDragState = null
+}
+
+function shouldSuppressClick(event) {
+  if (Date.now() > suppressClickUntil) return false
+
+  event?.preventDefault()
+  event?.stopPropagation()
+  return true
+}
+
+function ticketStatus(trip) {
+  return isPastTripStatus(trip.status) ? 'MEMORY TICKET' : 'TRIP TICKET'
 }
 
 function ticketSerial(trip) {
+  if (trip.serial) return trip.serial
+
   const year = trip.startDate?.slice(0, 4) || new Date().getFullYear()
   return `TL-${year}-${String(trip.id).padStart(4, '0')}`
 }
 
 function ticketColor(trip, index) {
-  if (isPastTripStatus(trip.status)) return 'khaki'
-  const colors = ['mustard', 'blue', 'sage', 'burgundy', 'plum']
-  return colors[index % colors.length]
+  return getTripTicketColor(trip, index)
 }
 
 function ticketDday(trip) {
@@ -63,42 +298,34 @@ function ticketDday(trip) {
 }
 
 function tripTags(trip) {
-  return [trip.region, trip.theme].filter(Boolean)
+  return tripDisplayTags(trip)
 }
 
 function stampTitle(trip) {
   return (trip.region || 'TRIP').slice(0, 4)
 }
+
+function sectionEmptyText(section) {
+  if (section.key === 'upcoming') return '곧 떠날 여행이 아직 없습니다.'
+  if (section.key === 'past') return '다녀온 여행이 아직 없습니다.'
+  return '아직 만든 여행이 없습니다.'
+}
 </script>
 
 <template>
-  <div class="trip-list-page">
+  <div class="trip-list-page page-bg">
     <AppTopBar
       active="trips"
-      search-placeholder="여행, 지역 검색"
+      :show-search="false"
       :user-initial="userInitial"
-      @create-trip="goCreate"
-    >
-      <template #actions>
-        <BaseButton variant="primary" data-testid="trip-list-create-top" @click="goCreate">
-          새 여행
-        </BaseButton>
-      </template>
-    </AppTopBar>
+      :show-default-action="false"
+    />
 
-    <main class="trip-list-shell" aria-labelledby="trip-list-title">
+    <main class="trip-list-shell page-canvas" aria-labelledby="trip-list-title">
       <header class="trip-list-head">
         <div>
-          <p class="ds-tag-hand">My trip tickets</p>
           <h1 id="trip-list-title">나의 여행</h1>
-          <p>
-            계획 중인 여행과 다녀온 기록을 티켓으로 모아봅니다.
-          </p>
-        </div>
-        <div class="trip-list-head__summary" aria-label="여행 요약">
-          <span>전체 {{ totalCount }}개</span>
-          <span>계획 {{ planningTrips.length }}개</span>
-          <span>기록 {{ pastTrips.length }}개</span>
+          <p>계획한 여행과 다녀온 기록을 한 곳에서.</p>
         </div>
       </header>
 
@@ -111,152 +338,155 @@ function stampTitle(trip) {
         <strong>여행 목록을 불러오는 중입니다.</strong>
       </section>
 
-      <EmptyState
-        v-else-if="!tripStore.hasTrips"
-        icon="TL"
-        title="아직 만든 여행이 없습니다."
-        description="제목, 기간, 지역, 테마를 정해 첫 여행 티켓을 만들어보세요."
-        action-label="첫 여행 만들기"
-        @action="goCreate"
-      />
-
       <template v-else>
-        <section class="trip-list-section" aria-labelledby="planning-trips-title">
+        <section
+          v-for="section in visibleSections"
+          :key="section.key"
+          class="trip-list-section"
+          :aria-labelledby="`trip-section-${section.key}`"
+        >
           <header class="trip-list-section__head">
-            <div>
-              <h2 id="planning-trips-title">계획 중</h2>
-              <p>장소와 일정을 채워갈 여행입니다.</p>
-            </div>
-            <span>{{ planningTrips.length }}개</span>
+            <h2 :id="`trip-section-${section.key}`">
+              {{ section.title }}
+              <em>{{ section.trips.length }}</em>
+            </h2>
+            <BaseButton
+              v-if="section.key === 'planning' && planningOverflow"
+              variant="ghost"
+              size="small"
+              class="trip-list-section__quick-add"
+              data-testid="trip-list-create-inline"
+              @click="handleCreateClick"
+            >
+              + 새 여행
+            </BaseButton>
           </header>
 
-          <div class="trip-ticket-grid">
-            <button class="trip-add-ticket" type="button" data-testid="trip-list-create" @click="goCreate">
-              <span class="trip-add-ticket__plus" aria-hidden="true">+</span>
-              <strong>새 여행 추가</strong>
-              <small>여행 정보를 먼저 만들고 장소를 채워갑니다.</small>
-            </button>
-
+          <div
+            v-if="section.trips.length || section.key === 'planning'"
+            :ref="section.key === 'planning' ? setPlanningGridRef : undefined"
+            class="trip-ticket-grid"
+            @pointerdown="startTicketDrag"
+            @pointermove="moveTicketDrag"
+            @pointerup="endTicketDrag"
+            @pointercancel="cancelTicketDrag"
+          >
             <button
-              v-for="(trip, index) in planningTrips"
+              v-for="(trip, index) in section.trips"
               :key="trip.id"
               class="trip-ticket-card"
+              :class="{ 'is-mock': trip.mock }"
               type="button"
               :data-testid="`trip-ticket-${trip.id}`"
-              @click="goDetail(trip)"
+              @click="handleTicketClick(trip, $event)"
             >
               <TripTicket
                 :title="trip.title"
                 :region="trip.region"
                 :dates="formatTripDateRange(trip)"
                 :serial="ticketSerial(trip)"
-                :status="tripStatusText(trip.status)"
+                :status="ticketStatus(trip)"
                 :color="ticketColor(trip, index)"
                 :dday="ticketDday(trip)"
                 :tags="tripTags(trip)"
+                :torn="isPastTripStatus(trip.status)"
+                :stamp-title="stampTitle(trip)"
               />
-              <span class="trip-ticket-card__meta">
-                {{ tripDurationDays(trip) }}일 · {{ trip.theme || '테마 미정' }}
-              </span>
+            </button>
+
+            <button
+              v-if="section.key === 'planning'"
+              class="trip-add-ticket"
+              type="button"
+              data-testid="trip-list-create"
+              data-ticket-drag-ignore
+              @click="handleCreateClick"
+            >
+              <span class="trip-add-ticket__plus" aria-hidden="true">+</span>
+              <strong>새 여행 추가</strong>
+              <small>기본 정보를 정하고 장소 담기로 이어갑니다.</small>
             </button>
           </div>
-        </section>
 
-        <section v-if="pastTrips.length" class="trip-list-section" aria-labelledby="past-trips-title">
-          <header class="trip-list-section__head">
-            <div>
-              <h2 id="past-trips-title">지난 여행</h2>
-              <p>사진과 기록으로 이어질 여행입니다.</p>
-            </div>
-            <span>{{ pastTrips.length }}개</span>
-          </header>
-
-          <div class="trip-ticket-grid trip-ticket-grid--past">
-            <button
-              v-for="(trip, index) in pastTrips"
-              :key="trip.id"
-              class="trip-ticket-card trip-ticket-card--past"
-              type="button"
-              :data-testid="`trip-ticket-${trip.id}`"
-              @click="goDetail(trip)"
-            >
+          <div
+            v-else
+            class="trip-list-section__empty"
+            :class="`trip-list-section__empty--${section.key}`"
+          >
+            <template v-if="section.key === 'upcoming'">
               <TripTicket
-                :title="trip.title"
-                :region="trip.region"
-                :dates="formatTripDateRange(trip)"
-                :serial="ticketSerial(trip)"
-                :status="tripStatusText(trip.status)"
-                :color="ticketColor(trip, index)"
-                :tags="tripTags(trip)"
-                :stamp-title="stampTitle(trip)"
-                torn
+                title="계획된 여행이 아직 없어요."
+                region="TripLog"
+                dates="계획을 확정하면 이곳에 모입니다."
+                serial="TL-NEXT"
+                status="NEXT TRIP"
+                color="blue"
+                dday="+"
+                dday-label="READY"
+                unissued
+                :show-barcode="false"
               />
-              <span class="trip-ticket-card__meta">
-                {{ tripDurationDays(trip) }}일 · 기록 보기
-              </span>
-            </button>
+              <p>장소와 일정을 확정한 여행이 여기에 쌓입니다.</p>
+            </template>
+            <template v-else-if="section.key === 'past'">
+              <TripTicket
+                title="다녀온 여행 기록이 아직 없어요."
+                region="TripLog"
+                dates="여행을 마치면 기록으로 정리됩니다."
+                serial="TL-MEMORY"
+                status="MEMORY TICKET"
+                color="khaki"
+                :tags="['기록대기']"
+                torn
+                stamp-title="NEXT"
+                :stamp-stage="2"
+              />
+              <p>다녀온 여행은 나중에 기록 카드와 함께 모입니다.</p>
+            </template>
+            <template v-else>
+              {{ sectionEmptyText(section) }}
+            </template>
           </div>
         </section>
       </template>
     </main>
+
+    <TripCreateDialog v-model="createDialogOpen" @created="handleTripCreated" />
+    <TripPreviewDialog
+      v-model="previewDialogOpen"
+      :trip="selectedTrip"
+      @open-places="goPlaces"
+      @deleted="handleTripDeleted"
+      @updated="handleTripUpdated"
+    />
   </div>
 </template>
 
 <style scoped>
-.trip-list-page {
-  min-height: 100vh;
-}
-
-.trip-list-shell {
-  --ds-surface: var(--paper);
-  margin: 18px auto 44px;
-  max-width: 1200px;
-  padding: 0 24px;
-}
-
 .trip-list-head {
-  align-items: flex-end;
+  align-items: flex-start;
   border-bottom: 1px solid var(--line);
   display: flex;
-  gap: 22px;
+  gap: 18px;
   justify-content: space-between;
-  padding: 20px 0 18px;
+  padding-bottom: 20px;
 }
 
 .trip-list-head h1 {
   font-family: var(--font-hand);
-  font-size: 36px;
+  font-size: 38px;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.05;
-  margin: 2px 0 0;
+  margin: 0;
 }
 
-.trip-list-head p:not(.ds-tag-hand) {
+.trip-list-head p {
   color: var(--ink-sub);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.6;
   margin: 8px 0 0;
-}
-
-.trip-list-head__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  justify-content: flex-end;
-  min-width: 260px;
-}
-
-.trip-list-head__summary span,
-.trip-list-section__head > span {
-  background: var(--paper-card);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  color: var(--ink-sub);
-  font-size: 12px;
-  font-weight: 800;
-  padding: 5px 11px;
 }
 
 .trip-list-alert {
@@ -286,8 +516,8 @@ function stampTitle(trip) {
 .trip-list-loading__spinner {
   animation: trip-list-spin 0.9s linear infinite;
   border: 2px solid var(--line);
-  border-top-color: var(--accent);
   border-radius: 50%;
+  border-top-color: var(--accent);
   height: 22px;
   width: 22px;
 }
@@ -302,35 +532,60 @@ function stampTitle(trip) {
 }
 
 .trip-list-section__head {
-  align-items: flex-end;
+  align-items: center;
   display: flex;
-  gap: 16px;
   justify-content: space-between;
   margin-bottom: 14px;
 }
 
 .trip-list-section__head h2 {
-  font-size: 18px;
+  align-items: center;
+  color: var(--ink-sub);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
   font-weight: 800;
   letter-spacing: 0;
   margin: 0;
 }
 
-.trip-list-section__head p {
-  color: var(--ink-sub);
-  font-size: 12px;
-  margin: 5px 0 0;
+.trip-list-section__head h2 em {
+  background: var(--bg);
+  border-radius: 999px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  padding: 2px 9px;
+}
+
+.trip-list-section__quick-add {
+  flex: none;
 }
 
 .trip-ticket-grid {
-  align-items: start;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  align-items: flex-start;
+  display: flex;
+  cursor: grab;
+  gap: 14px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 4px 8px 0;
+  scroll-padding-inline: 4px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  user-select: none;
 }
 
-.trip-ticket-grid--past {
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+.trip-ticket-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.trip-ticket-grid.is-dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
 }
 
 .trip-add-ticket,
@@ -354,8 +609,9 @@ function stampTitle(trip) {
   flex-direction: column;
   gap: 6px;
   justify-content: center;
-  min-height: 118px;
-  padding: 18px;
+  flex: 0 0 300px;
+  min-height: 110px;
+  padding: 16px;
   transition:
     border-color 0.15s ease,
     transform 0.15s ease;
@@ -388,30 +644,62 @@ function stampTitle(trip) {
 }
 
 .trip-ticket-card {
-  --ticket-w: min(416px, 100%);
+  --ticket-w: 390px;
   display: grid;
+  flex: 0 0 390px;
   gap: 8px;
   justify-items: start;
+  scroll-snap-align: start;
   transition:
     filter 0.15s ease,
     transform 0.15s ease;
 }
 
-.trip-ticket-card:focus-visible,
+.trip-ticket-card :deep(.ds-ticket) {
+  --ticket-w: 390px;
+}
+
+.trip-ticket-card:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
 .trip-add-ticket:focus-visible {
   outline: 3px solid rgba(194, 105, 63, 0.24);
   outline-offset: 4px;
 }
 
-.trip-ticket-card__meta {
-  color: var(--ink-faint);
-  font-size: 11px;
-  font-weight: 700;
-  padding-left: 8px;
+.trip-list-section__empty {
+  align-items: center;
+  background: rgba(255, 253, 248, 0.58);
+  border: 1px dashed rgba(190, 166, 126, 0.64);
+  border-radius: 12px;
+  color: var(--ink-sub);
+  display: grid;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 12px;
+  justify-items: start;
+  min-height: 150px;
+  overflow: hidden;
+  padding: 16px;
+  text-align: left;
 }
 
-.trip-ticket-card--past {
-  --ticket-w: min(390px, 100%);
+.trip-list-section__empty p {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.trip-list-section__empty :deep(.ds-ticket) {
+  --ticket-w: 390px;
+  max-width: 100%;
+}
+
+.trip-list-section__empty--past :deep(.ds-ticket) {
+  --ticket-w: 370px;
 }
 
 .trip-list-shell :deep(.ds-empty-state) {
@@ -424,29 +712,41 @@ function stampTitle(trip) {
   }
 }
 
-@media (max-width: 760px) {
-  .trip-list-shell {
-    padding: 0 14px;
+@media (max-width: 980px) {
+  .trip-ticket-card {
+    --ticket-w: min(390px, calc(100vw - 72px));
+    flex-basis: min(390px, calc(100vw - 72px));
+  }
+
+  .trip-ticket-card :deep(.ds-ticket) {
+    --ticket-w: min(390px, calc(100vw - 72px));
+  }
+
+  .trip-add-ticket {
+    flex-basis: min(300px, calc(100vw - 72px));
+  }
+}
+
+@media (max-width: 720px) {
+  .trip-list-head h1 {
+    font-size: 32px;
   }
 
   .trip-list-head {
-    align-items: flex-start;
     flex-direction: column;
   }
 
-  .trip-list-head__summary {
-    justify-content: flex-start;
-    min-width: 0;
+  .trip-ticket-card {
+    --ticket-w: min(390px, calc(100vw - 44px));
+    flex-basis: min(390px, calc(100vw - 44px));
   }
 
-  .trip-ticket-grid,
-  .trip-ticket-grid--past {
-    grid-template-columns: 1fr;
+  .trip-ticket-card :deep(.ds-ticket) {
+    --ticket-w: min(390px, calc(100vw - 44px));
   }
 
-  .trip-ticket-card,
-  .trip-ticket-card--past {
-    --ticket-w: min(416px, calc(100vw - 44px));
+  .trip-add-ticket {
+    flex-basis: min(300px, calc(100vw - 44px));
   }
 }
 </style>

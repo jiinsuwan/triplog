@@ -27,8 +27,9 @@ export function createDefaultTripForm(today = new Date()) {
     title: '',
     startDate,
     endDate: addDays(startDate, 2),
-    region: REGION_OPTIONS[0].value,
-    theme: THEME_OPTIONS[0].value,
+    region: '',
+    theme: '',
+    tags: [],
     status: DEFAULT_TRIP_STATUS,
   }
 }
@@ -38,8 +39,9 @@ export function createTripFormFromTrip(trip) {
     title: trip?.title ?? '',
     startDate: trip?.startDate ?? '',
     endDate: trip?.endDate ?? '',
-    region: trip?.region ?? REGION_OPTIONS[0].value,
-    theme: trip?.theme ?? THEME_OPTIONS[0].value,
+    region: trip?.region ?? '',
+    theme: trip?.theme ?? '',
+    tags: Array.isArray(trip?.tags) ? [...trip.tags] : loadTripTags(trip?.id),
     status: normalizeTripStatus(trip?.status ?? DEFAULT_TRIP_STATUS),
   }
 }
@@ -65,12 +67,12 @@ export function validateTripForm(form) {
     errors.endDate = '종료일은 시작일 이후로 선택해주세요.'
   }
 
-  if (!form.region) {
-    errors.region = '지역을 선택해주세요.'
+  if (!form.region?.trim()) {
+    errors.region = '지역을 입력해주세요.'
   }
 
-  if (!form.theme) {
-    errors.theme = '테마를 선택해주세요.'
+  if (!form.theme?.trim()) {
+    errors.theme = '테마를 입력해주세요.'
   }
 
   if (!form.status) {
@@ -87,10 +89,78 @@ export function toTripPayload(form) {
     title: form.title.trim(),
     startDate: form.startDate,
     endDate: form.endDate,
-    region: form.region,
-    theme: form.theme,
+    region: form.region.trim(),
+    theme: form.theme.trim(),
     status: form.status?.trim() || DEFAULT_TRIP_STATUS,
   }
+}
+
+const TRIP_TAG_STORAGE_PREFIX = 'triplog.trip.tags.'
+
+export function normalizeTripTag(value) {
+  const trimmed = String(value ?? '')
+    .trim()
+    .replace(/^#+/, '')
+
+  return trimmed ? `#${trimmed}` : ''
+}
+
+export function parseTripTags(value) {
+  const seen = new Set()
+
+  return String(value ?? '')
+    .split(/[\s,]+/)
+    .map(normalizeTripTag)
+    .filter((tag) => {
+      if (!tag || seen.has(tag)) return false
+      seen.add(tag)
+      return true
+    })
+}
+
+export function loadTripTags(tripId) {
+  if (!tripId || typeof window === 'undefined' || !window.localStorage) return []
+
+  try {
+    return parseTripTags(window.localStorage.getItem(`${TRIP_TAG_STORAGE_PREFIX}${tripId}`) || '')
+  } catch {
+    return []
+  }
+}
+
+export function saveTripTags(tripId, tags = []) {
+  if (!tripId || typeof window === 'undefined' || !window.localStorage) return
+
+  const normalizedTags = parseTripTags(tags.join(' '))
+
+  try {
+    if (normalizedTags.length) {
+      window.localStorage.setItem(`${TRIP_TAG_STORAGE_PREFIX}${tripId}`, normalizedTags.join(' '))
+    } else {
+      window.localStorage.removeItem(`${TRIP_TAG_STORAGE_PREFIX}${tripId}`)
+    }
+  } catch {
+    // localStorage 사용이 막힌 환경에서는 태그 저장만 건너뜁니다.
+  }
+}
+
+export function applyTripTags(trip, tags = []) {
+  const normalizedTags = parseTripTags(tags.join(' '))
+  saveTripTags(trip?.id, normalizedTags)
+  if (!trip) return trip
+
+  trip.tags = normalizedTags
+  return trip
+}
+
+export function tripDisplayTags(source) {
+  const explicitTags = Array.isArray(source?.tags)
+    ? source.tags.map(normalizeTripTag).filter(Boolean)
+    : []
+
+  if (explicitTags.length) return explicitTags
+
+  return loadTripTags(source?.id)
 }
 
 export function toDateOnly(value) {
