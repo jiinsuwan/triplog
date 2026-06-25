@@ -6,7 +6,6 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import ProgressSpinner from 'primevue/progressspinner'
 import Select from 'primevue/select'
-import SelectButton from 'primevue/selectbutton'
 import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
 import { useItineraryStore } from '@/stores/itinerary'
 import { loadKakaoMaps } from '@/utils/kakaoMap'
@@ -2006,6 +2005,14 @@ function goBack() {
   router.push({ name: 'trip-detail', params: { tripId: tripId.value } })
 }
 
+function goHome() {
+  router.push({ name: 'home' })
+}
+
+function goProfile() {
+  router.push({ name: 'profile' })
+}
+
 function mapMarkerType(place) {
   if (place.origin === 'db') return 'attraction'
   if (place.categoryGroup.includes('카페') || place.category.includes('카페')) return 'cafe'
@@ -2280,50 +2287,88 @@ function normalizeSearchText(value = '') {
 
 <template>
   <main class="place-page">
-    <header class="place-header">
-      <Button
-        label="여행으로"
-        icon="pi pi-arrow-left"
-        severity="secondary"
-        outlined
-        @click="goBack"
-      />
-      <div>
-        <span class="eyebrow">Place Search</span>
-        <h1>{{ trip?.title || '장소 탐색' }}</h1>
-        <p>{{ tripRegion }} 주변 장소를 한 지도에서 확인하고 담습니다.</p>
+    <section class="workspace-page">
+      <header class="workspace-topbar">
+        <button type="button" class="workspace-logo" @click="goHome">Trip<b>Log</b></button>
+        <button type="button" class="workspace-crumb" @click="goBack">
+          {{ trip?.title || '여행' }}
+          <span>/</span>
+          <strong>{{ itineraryMode ? '일정 배치' : '장소 담기' }}</strong>
+        </button>
+        <div class="workspace-steps" aria-label="여행 계획 단계">
+          <span :class="{ active: !itineraryMode }">① 장소 담기</span>
+          <i aria-hidden="true">›</i>
+          <span :class="{ active: itineraryMode }">② 일정 배치</span>
+        </div>
+        <Button
+          v-if="!itineraryMode"
+          class="workspace-next-button"
+          label="일정 배치하기 →"
+          severity="primary"
+          :disabled="!pocketDisplayPlaces.length"
+          :loading="itineraryStore.loading"
+          @click="openItineraryBuilder"
+        />
+        <Button
+          v-else
+          class="workspace-next-button"
+          label="장소 더 담기"
+          severity="secondary"
+          outlined
+          @click="closeItineraryBuilder"
+        />
+        <button type="button" class="workspace-avatar" aria-label="프로필" @click="goProfile">지</button>
+      </header>
+
+      <div class="workspace-title">
+        <span class="eyebrow">{{ itineraryMode ? 'Route Builder' : 'Place Search' }}</span>
+        <h1>{{ itineraryMode ? '담은 장소를 일정으로 엮어요' : `${tripRegion} 주변 장소를 담아요` }}</h1>
+        <p>
+          {{
+            itineraryMode
+              ? '날짜를 고르고 지도 마커를 눌러 방문 순서와 이동 구간을 만듭니다.'
+              : '관광 데이터와 카카오맵 검색 결과를 한 화면에서 확인하고 보관함에 담습니다.'
+          }}
+        </p>
       </div>
-    </header>
 
-    <Message v-if="tripStore.error && !trip" severity="error" :closable="false" class="state-message">
-      {{ tripStore.error }}
-    </Message>
+      <Message v-if="tripStore.error && !trip" severity="error" :closable="false" class="state-message">
+        {{ tripStore.error }}
+      </Message>
 
-    <section v-if="loading" class="loading-state" aria-live="polite">
-      <ProgressSpinner aria-label="장소 탐색 화면 준비 중" />
-      <span>지도와 장소 데이터를 준비하는 중입니다.</span>
-    </section>
+      <section v-if="loading" class="loading-state" aria-live="polite">
+        <ProgressSpinner aria-label="장소 탐색 화면 준비 중" />
+        <span>지도와 장소 데이터를 준비하는 중입니다.</span>
+      </section>
 
-    <section v-else class="search-shell" :class="{ planning: itineraryMode }">
+      <section v-else class="search-shell" :class="{ planning: itineraryMode }">
       <aside class="place-list-panel" :class="{ planning: itineraryMode }">
         <template v-if="!itineraryMode">
+          <div class="panel-head">
+            <strong>장소 찾기</strong>
+            <small>{{ activeRegion.label || tripRegion }}</small>
+          </div>
           <div class="search-card">
             <div class="field-row">
               <InputText
                 v-model="keyword"
-                placeholder="장소, 골목, 맛집 검색"
+                placeholder="카페, 관광지, 식당..."
                 aria-label="장소 검색어"
                 @keyup.enter="runSearch"
               />
               <Button icon="pi pi-search" aria-label="검색" :loading="searching" @click="runSearch" />
             </div>
-            <SelectButton
-              v-model="activeTab"
-              :options="CATEGORY_OPTIONS"
-              option-label="label"
-              option-value="value"
-              aria-label="장소 유형"
-            />
+            <div class="category-row" aria-label="장소 유형">
+              <button
+                v-for="option in CATEGORY_OPTIONS"
+                :key="option.value"
+                type="button"
+                :class="{ active: option.value === activeTab }"
+                @click="activeTab = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
 
           <Message v-if="placeError" severity="warn" :closable="false">
@@ -2334,6 +2379,7 @@ function normalizeSearchText(value = '') {
           </Message>
 
           <div class="list-head">
+            <span>검색 결과</span>
             <strong>{{ visiblePlaces.length }}곳</strong>
           </div>
 
@@ -2345,20 +2391,24 @@ function normalizeSearchText(value = '') {
               :class="{ active: selectedPlace?.uid === place.uid }"
             >
               <button type="button" class="place-row__main" @click="selectPlace(place)">
+                <span class="place-row__thumb" :class="`is-${mapMarkerType(place)}`" aria-hidden="true" />
                 <span>
                   <strong>{{ place.name }}</strong>
-                  <small>{{ place.address || place.category }}</small>
+                  <small>
+                    <em>{{ place.origin === 'db' ? '한국관광공사' : '카카오맵' }}</em>
+                    {{ place.category || place.categoryGroup || place.address || '장소' }}
+                  </small>
                 </span>
               </button>
-              <Button
+              <button
+                type="button"
                 class="place-row__pocket"
-                :icon="isPocketed(place) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
-                :severity="isPocketed(place) ? 'success' : 'secondary'"
-                text
-                rounded
+                :class="{ done: isPocketed(place) }"
                 :aria-label="`${place.name} ${pocketActionLabel(place)}`"
                 @click.stop="togglePocket(place)"
-              />
+              >
+                {{ isPocketed(place) ? '담음' : '담기' }}
+              </button>
             </article>
           </div>
 
@@ -2396,7 +2446,7 @@ function normalizeSearchText(value = '') {
         <template v-else>
           <div class="route-panel-tools">
             <Button
-              label="장소 더 담기"
+              label="장소 담기로"
               icon="pi pi-bookmark"
               severity="secondary"
               outlined
@@ -2406,7 +2456,7 @@ function normalizeSearchText(value = '') {
           </div>
 
           <Message v-if="itineraryStore.isMock" severity="info" :closable="false" class="compact-message">
-            현재는 mock/local state로 루트 편집 흐름을 검증합니다.
+            현재는 로컬 데이터로 일정 배치 흐름을 확인합니다.
           </Message>
           <Message v-if="itineraryStore.error" severity="error" :closable="false" class="compact-message">
             {{ itineraryStore.error }}
@@ -2427,7 +2477,7 @@ function normalizeSearchText(value = '') {
               :aria-selected="day.value === activeDayNumber"
               @click="activeDayNumber = day.value"
             >
-              <strong>{{ day.label }}</strong>
+              <strong>DAY {{ day.value }}</strong>
               <span>{{ formatDayDate(day.date) }}</span>
               <em>{{ day.count }}</em>
             </button>
@@ -2435,7 +2485,7 @@ function normalizeSearchText(value = '') {
 
           <section class="route-stop-section">
             <div class="route-section-head">
-              <strong>현재 루트</strong>
+              <strong>DAY {{ activeDayNumber }} 일정</strong>
               <small>
                 {{
                   routeSummary ||
@@ -2545,8 +2595,8 @@ function normalizeSearchText(value = '') {
       <section class="map-panel">
         <div class="map-toolbar">
           <div>
-            <span class="eyebrow">Map</span>
-            <h2>{{ itineraryMode ? '담은 장소 일정 만들기' : `${tripRegion} 주변 장소` }}</h2>
+            <span class="eyebrow">{{ itineraryMode ? 'Itinerary Map' : 'Kakao Map' }}</span>
+            <h2>{{ itineraryMode ? `${tripRegion} 일정 지도` : `${tripRegion} 주변 지도` }}</h2>
           </div>
           <div class="map-tools">
             <Button
@@ -2622,14 +2672,14 @@ function normalizeSearchText(value = '') {
         <p v-else class="empty-pocket">지도나 목록에서 장소를 골라 담아보세요.</p>
         <Button
           class="route-start-button"
-          label="일정 루트 만들기"
-          icon="pi pi-sitemap"
+          label="일정 배치하기 →"
           severity="success"
           :disabled="!pocketDisplayPlaces.length"
           :loading="itineraryStore.loading"
           @click="openItineraryBuilder"
         />
       </aside>
+      </section>
     </section>
   </main>
 </template>
@@ -3726,6 +3776,764 @@ function normalizeSearchText(value = '') {
 
   .place-header {
     flex-direction: column;
+  }
+}
+
+.place-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28px 18px 42px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+.workspace-page {
+  width: min(1160px, calc(100vw - 36px));
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--paper-card);
+  box-shadow: var(--shadow-card);
+}
+
+.workspace-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--line2);
+  background: var(--paper-card);
+}
+
+.workspace-logo,
+.workspace-crumb,
+.workspace-avatar {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.workspace-logo {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.workspace-logo b {
+  color: var(--accent);
+}
+
+.workspace-crumb {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.workspace-crumb span {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.workspace-crumb strong {
+  color: var(--ink-sub);
+  font-weight: 500;
+}
+
+.workspace-steps {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.workspace-steps .active {
+  color: var(--accent);
+}
+
+.workspace-steps i {
+  color: var(--line);
+  font-style: normal;
+}
+
+.workspace-next-button {
+  flex: 0 0 auto;
+}
+
+.workspace-next-button :deep(.p-button-label) {
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.workspace-avatar {
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--on-fill);
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent));
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workspace-title {
+  display: grid;
+  gap: 8px;
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid var(--line2);
+}
+
+.workspace-title h1 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.workspace-title p {
+  margin: 0;
+  color: var(--ink-sub);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-family: var(--font-hand);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.state-message {
+  margin: 16px 28px 0;
+}
+
+.loading-state {
+  min-height: 600px;
+  border: 0;
+  border-radius: 0;
+  background: var(--paper-card);
+  box-shadow: none;
+  color: var(--ink-sub);
+}
+
+.search-shell {
+  height: min(680px, calc(100vh - 190px));
+  min-height: 600px;
+  display: grid;
+  grid-template-columns: 328px minmax(0, 1fr) 280px;
+  gap: 0;
+  align-items: stretch;
+}
+
+.search-shell.planning {
+  grid-template-columns: 328px minmax(0, 1fr);
+}
+
+.place-list-panel,
+.map-panel,
+.pocket-panel {
+  min-height: 0;
+  border: 0;
+  border-right: 1px solid var(--line2);
+  border-radius: 0;
+  background: var(--paper-card);
+  box-shadow: none;
+}
+
+.pocket-panel {
+  border-right: 0;
+}
+
+.place-list-panel {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.place-list-panel.planning {
+  display: flex;
+  flex-direction: column;
+  align-content: initial;
+}
+
+.panel-head,
+.list-head,
+.pocket-head,
+.map-toolbar {
+  min-height: 50px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--line2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-head strong,
+.list-head span,
+.pocket-head h2,
+.map-toolbar h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.panel-head small {
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.list-head strong,
+.pocket-head strong {
+  min-width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--ink-sub);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.search-card {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line2);
+  display: grid;
+  gap: 11px;
+}
+
+.field-row {
+  display: flex;
+  gap: 7px;
+}
+
+.field-row :deep(.p-inputtext) {
+  min-width: 0;
+  flex: 1;
+  border-color: var(--line);
+  border-radius: 9px;
+  background: var(--on-fill);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.field-row :deep(.p-button) {
+  border-color: var(--accent);
+  border-radius: 9px;
+  background: var(--accent);
+}
+
+.category-row {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.category-row button {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 5px 12px;
+  background: var(--on-fill);
+  color: var(--ink-sub);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.category-row button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+.place-list,
+.pocket-list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  display: block;
+  padding: 0 14px;
+}
+
+.place-row,
+.pocket-item {
+  border: 0;
+  border-bottom: 1px solid var(--line2);
+  border-radius: 0;
+  background: transparent;
+}
+
+.place-row {
+  min-height: 64px;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.place-row.active {
+  background: rgba(194, 105, 63, 0.06);
+}
+
+.place-row__main {
+  min-height: 64px;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+}
+
+.place-row__thumb {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--t-sage);
+}
+
+.place-row__thumb.is-restaurant {
+  background: var(--t-burgundy);
+}
+
+.place-row__thumb.is-cafe {
+  background: var(--t-plum);
+}
+
+.place-row__thumb.is-place {
+  background: var(--t-blue);
+}
+
+.place-row strong,
+.pocket-item strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.place-row small,
+.pocket-item small {
+  margin-top: 2px;
+  color: var(--ink-sub);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.place-row small em {
+  margin-right: 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  color: var(--ink-faint);
+  font-style: normal;
+  font-size: 10px;
+}
+
+.place-row__pocket {
+  align-self: center;
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 5px 11px;
+  background: var(--on-fill);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.place-row__pocket.done {
+  border-color: var(--line);
+  background: var(--bg);
+  color: var(--ink-sub);
+}
+
+.pagination {
+  padding: 12px 14px;
+  border-top: 1px solid var(--line2);
+}
+
+.pagination :deep(.p-button) {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--on-fill);
+  color: var(--ink-sub);
+}
+
+.pagination :deep(.p-button[aria-pressed='true']),
+.pagination :deep(.p-button.p-button-primary) {
+  background: var(--ink);
+  color: var(--on-fill);
+}
+
+.map-panel {
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+}
+
+.map-toolbar {
+  align-items: center;
+}
+
+.map-toolbar .eyebrow {
+  font-size: 13px;
+}
+
+.map-tools :deep(.p-button) {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: var(--paper-card);
+  color: var(--ink-sub);
+  font-size: 12px;
+}
+
+.map-stage {
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+  background:
+    linear-gradient(rgba(120, 100, 60, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 100, 60, 0.05) 1px, transparent 1px),
+    linear-gradient(135deg, #e9e2cf, #e3dcc4 50%, #ece6d4);
+  background-size: 40px 40px, 40px 40px, auto;
+}
+
+.map-error {
+  border-color: var(--line);
+  background: var(--paper-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.pocket-panel {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pocket-head strong {
+  width: auto;
+  min-width: 34px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink-sub);
+}
+
+.pocket-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 2px;
+}
+
+.pocket-item::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.pocket-item.routed::before {
+  background: var(--t-sage);
+}
+
+.pocket-item :deep(.p-button) {
+  position: static;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-faint);
+}
+
+.pocket-item em {
+  position: static;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-sub);
+}
+
+.empty-pocket {
+  padding: 14px;
+  color: var(--ink-sub);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.route-start-button {
+  width: calc(100% - 28px);
+  margin: auto 14px 14px;
+  border-color: var(--accent);
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-fill);
+  justify-content: center;
+}
+
+.route-panel-tools {
+  min-height: 50px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--line2);
+  justify-content: flex-start;
+}
+
+.route-panel-tools :deep(.p-button) {
+  border-color: var(--line);
+  border-radius: 8px;
+  background: var(--on-fill);
+  color: var(--ink-sub);
+  font-size: 12px;
+}
+
+.compact-message {
+  margin: 10px 14px 0;
+  font-size: 12px;
+}
+
+.day-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 13px 15px 10px;
+  border-bottom: 1px solid var(--line2);
+  overflow-x: auto;
+}
+
+.day-tab {
+  min-width: auto;
+  min-height: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 13px;
+  background: var(--on-fill);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: none;
+}
+
+.day-tab strong,
+.day-tab span,
+.day-tab em {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.day-tab span {
+  color: var(--ink-sub);
+}
+
+.day-tab em {
+  min-width: 20px;
+  min-height: 20px;
+  background: var(--bg);
+  color: var(--ink-sub);
+}
+
+.day-tab.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-fill);
+  box-shadow: none;
+}
+
+.day-tab.active span,
+.day-tab.active em {
+  color: var(--on-fill);
+}
+
+.route-stop-section {
+  min-height: 0;
+  flex: 1;
+  padding: 12px 15px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.route-section-head strong {
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.route-section-head small {
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.route-stop-list {
+  max-height: none;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.route-stop-card {
+  border-color: var(--line);
+  border-radius: 9px;
+  background: var(--on-fill);
+  box-shadow: 0 1px 4px rgba(80, 60, 30, 0.07);
+}
+
+.route-stop-card.active {
+  border-color: var(--accent-soft);
+  background: var(--paper-card);
+}
+
+.route-stop-main span {
+  width: 26px;
+  height: 26px;
+  background: var(--accent);
+}
+
+.route-leg {
+  grid-template-columns: 1fr;
+  border-left-color: var(--line);
+  color: var(--ink-sub);
+}
+
+.route-leg i {
+  color: var(--accent);
+}
+
+.route-leg em {
+  justify-self: start;
+  width: auto;
+  background: var(--bg);
+  color: var(--ink-sub);
+}
+
+:global(.trip-map-pin span) {
+  border: 2px solid var(--on-fill);
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.25);
+  transform: rotate(-45deg);
+}
+
+:global(.trip-map-pin span i),
+:global(.trip-map-pin span b) {
+  transform: rotate(45deg);
+}
+
+:global(.trip-map-pin.is-db span),
+:global(.trip-map-pin.is-attraction span) {
+  background: var(--t-sage);
+}
+
+:global(.trip-map-pin.is-kakao span) {
+  background: var(--t-blue);
+}
+
+:global(.trip-map-pin.is-restaurant span) {
+  background: var(--t-burgundy);
+}
+
+:global(.trip-map-pin.is-cafe span) {
+  background: var(--t-plum);
+}
+
+:global(.trip-place-popup) {
+  border-color: var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-card);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+
+:global(.trip-place-popup::after) {
+  border-color: var(--line);
+  background: var(--paper-card);
+}
+
+:global(.trip-place-popup__button.is-primary) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+@media (max-width: 1180px) {
+  .search-shell {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(280px, 328px) minmax(0, 1fr);
+  }
+
+  .search-shell.planning {
+    grid-template-columns: minmax(280px, 328px) minmax(0, 1fr);
+  }
+
+  .pocket-panel {
+    grid-column: 1 / -1;
+    min-height: 240px;
+    border-top: 1px solid var(--line2);
+  }
+
+  .map-stage {
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 820px) {
+  .workspace-page {
+    width: min(100%, calc(100vw - 28px));
+  }
+
+  .workspace-topbar {
+    flex-wrap: wrap;
+  }
+
+  .workspace-steps {
+    order: 4;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .search-shell,
+  .search-shell.planning {
+    grid-template-columns: 1fr;
+  }
+
+  .place-list-panel,
+  .map-panel,
+  .pocket-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--line2);
+  }
+
+  .map-stage {
+    min-height: 440px;
   }
 }
 </style>

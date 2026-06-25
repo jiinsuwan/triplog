@@ -71,6 +71,24 @@ const places = [
 ]
 
 describe('TripPlaceSearchView itinerary editor', () => {
+  it('장소 담기 화면은 목업 기준 상단 흐름과 담기 UI를 표시한다', async () => {
+    const wrapper = mount(TripPlaceSearchView, {
+      global: {
+        stubs: primeVueStubs(),
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.find('.workspace-topbar').exists()).toBe(true)
+    expect(wrapper.find('.workspace-steps').text()).toContain('① 장소 담기')
+    expect(wrapper.find('.workspace-steps').text()).toContain('② 일정 배치')
+    expect(wrapper.find('.workspace-next-button').exists()).toBe(true)
+    expect(wrapper.find('.workspace-title h1').text()).toContain('주변 장소를 담아요')
+    expect(wrapper.findAll('.category-row button').length).toBeGreaterThan(1)
+    expect(wrapper.findAll('.place-row__pocket')).toHaveLength(places.length)
+  })
+
   beforeEach(() => {
     setActivePinia(createPinia())
     resetMockItineraryData()
