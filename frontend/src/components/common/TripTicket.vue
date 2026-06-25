@@ -50,6 +50,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  unissued: {
+    type: Boolean,
+    default: false,
+  },
+  showBarcode: {
+    type: Boolean,
+    default: true,
+  },
   stampStage: {
     type: Number,
     default: 3,
@@ -75,7 +83,15 @@ const stampTitle = computed(() => props.stampTitle || props.region || 'TRIP')
 </script>
 
 <template>
-  <article class="ds-ticket" :class="{ 'ds-ticket--torn': torn }" :style="ticketStyle">
+  <article
+    class="ds-ticket"
+    :class="{
+      'ds-ticket--torn': torn,
+      'ds-ticket--unissued': unissued,
+      'ds-ticket--no-barcode': !showBarcode,
+    }"
+    :style="ticketStyle"
+  >
     <div class="ds-ticket__stub-left"><span class="ds-ticket__serial">{{ serial }}</span></div>
     <div class="ds-ticket__perf-left"></div>
     <div class="ds-ticket__body">
@@ -93,7 +109,7 @@ const stampTitle = computed(() => props.stampTitle || props.region || 'TRIP')
     </div>
     <div class="ds-ticket__perf-right"></div>
     <div v-if="!torn" class="ds-ticket__stub-right">
-      <div class="ds-ticket__barcode" aria-hidden="true"></div>
+      <div v-if="showBarcode" class="ds-ticket__barcode" aria-hidden="true"></div>
       <div class="ds-ticket__dday">
         <div class="ds-ticket__dday-label">{{ ddayLabel }}</div>
         <div class="ds-ticket__dday-value" :class="{ 'is-muted': isDdayMuted }">

@@ -45,16 +45,6 @@ function mountLoginView() {
         Message: {
           template: '<div><slot /></div>',
         },
-        BaseModal: {
-          props: ['modelValue', 'title'],
-          emits: ['update:modelValue'],
-          template: `<section v-if="modelValue" role="dialog">
-            <h2>{{ title }}</h2>
-            <button type="button" @click="$emit('update:modelValue', false)">닫기</button>
-            <slot />
-            <slot name="footer" />
-          </section>`,
-        },
         RouterLink: {
           props: ['to'],
           template: '<a><slot /></a>',
@@ -110,15 +100,11 @@ describe('LoginView', () => {
     expect(wrapper.text()).toContain('이미 같은 이메일로 가입된 계정이 있습니다.')
   })
 
-  it('소셜 로그인 선택 모달에서 provider를 고르면 백엔드 authorize 흐름을 시작한다', async () => {
+  it('소셜 로그인 아이콘은 provider별 백엔드 authorize 흐름을 바로 시작한다', async () => {
     routerMock.routeQuery = { redirect: '/profile' }
     const wrapper = mountLoginView()
 
-    await wrapper.findAll('button').find((button) => button.text().includes('소셜 계정')).trigger('click')
-
-    expect(wrapper.find('[role="dialog"]').text()).toContain('소셜 로그인 선택')
-
-    await wrapper.findAll('button').find((button) => button.text().includes('구글 계정')).trigger('click')
+    await wrapper.find('button[aria-label="구글로 계속하기"]').trigger('click')
 
     expect(authApi.startOAuthLogin).toHaveBeenCalledWith('google', '/profile')
   })

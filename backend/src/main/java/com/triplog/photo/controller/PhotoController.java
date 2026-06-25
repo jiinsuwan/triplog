@@ -7,7 +7,9 @@ import com.triplog.photo.dto.PhotoResponse;
 import com.triplog.photo.outline.BoxRequest;
 import com.triplog.photo.outline.OutlineCorrectionResponse;
 import com.triplog.photo.outline.OutlineCorrectionService;
+import com.triplog.photo.outline.OutlineRefinePreview;
 import com.triplog.photo.outline.PhotoOutlineResponse;
+import com.triplog.photo.outline.RefineApplyRequest;
 import com.triplog.photo.outline.RefineRequest;
 import com.triplog.photo.outline.TapRequest;
 import com.triplog.photo.service.PhotoService;
@@ -124,13 +126,34 @@ public class PhotoController {
                 outlineCorrectionService.box(userId, photoId, request.box()));
     }
 
-    @Operation(summary = "Refine an outline with +/- points (owner only)")
+    @Operation(summary = "Preview an outline refine — no save (owner only)")
     @PostMapping("/{photoId}/outline/refine")
-    public ApiResponse<OutlineCorrectionResponse> refineOutline(
+    public ApiResponse<OutlineRefinePreview> refineOutline(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long photoId,
             @RequestBody RefineRequest request) {
+        return ApiResponse.success("Outline refine preview.",
+                outlineCorrectionService.previewRefine(userId, photoId, request.itemId(), request.pos(), request.neg()));
+    }
+
+    @Operation(summary = "Apply a previewed outline refine — save (owner only)")
+    @PostMapping("/{photoId}/outline/refine/apply")
+    public ApiResponse<OutlineCorrectionResponse> applyRefineOutline(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @RequestBody RefineApplyRequest request) {
         return ApiResponse.success("Outline refine applied.",
-                outlineCorrectionService.refine(userId, photoId, request.pos(), request.neg()));
+                outlineCorrectionService.commitRefine(userId, photoId, request.itemId(),
+                        request.polygons(), request.absorbItemIds()));
+    }
+
+    @Operation(summary = "Delete an outline item (owner only)")
+    @DeleteMapping("/{photoId}/outline/items/{itemId}")
+    public ApiResponse<Void> deleteOutlineItem(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long photoId,
+            @PathVariable int itemId) {
+        outlineCorrectionService.deleteItem(userId, photoId, itemId);
+        return ApiResponse.success("Outline item deleted.", null);
     }
 }

@@ -6,7 +6,10 @@ import Message from 'primevue/message'
 import Password from 'primevue/password'
 
 import { startOAuthLogin } from '@/api/authApi'
-import { AuthPassport, BaseButton, BaseModal } from '@/components/common'
+import googleIcon from '@/assets/social/google-dark-round.svg'
+import kakaoIcon from '@/assets/social/kakao-login-symbol.png'
+import naverIcon from '@/assets/social/naver-green-icon.png'
+import { AuthPassport, BaseButton } from '@/components/common'
 import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 import { useAuthStore } from '@/stores/auth'
 
@@ -18,16 +21,15 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
-const isSocialDialogOpen = ref(false)
 const justRegistered = route.query.registered === '1'
 const justReset = route.query.reset === '1'
 const justWithdrawn = route.query.withdrawn === '1'
 const oauthError = route.query.oauthError
 
 const socialProviders = [
-  { id: 'kakao', label: '카카오', description: '카카오 계정으로 계속하기', class: 'kakao' },
-  { id: 'google', label: '구글', description: '구글 계정으로 계속하기', class: 'google' },
-  { id: 'naver', label: '네이버', description: '네이버 계정으로 계속하기', class: 'naver' },
+  { id: 'google', label: '구글', iconSrc: googleIcon },
+  { id: 'naver', label: '네이버', iconSrc: naverIcon },
+  { id: 'kakao', label: '카카오', iconSrc: kakaoIcon, modifier: 'kakao' },
 ]
 
 async function onSubmit() {
@@ -49,10 +51,6 @@ function onSocialLogin(provider) {
   const redirect =
     typeof route.query.redirect === 'string' ? route.query.redirect : AUTHENTICATED_ENTRY_PATH
   startOAuthLogin(provider, redirect)
-}
-
-function openSocialDialog() {
-  isSocialDialogOpen.value = true
 }
 
 function oauthErrorMessage(reason) {
@@ -120,30 +118,30 @@ function oauthErrorMessage(reason) {
         <strong>소셜 로그인</strong>
         <span></span>
       </div>
-      <BaseButton type="button" block @click="openSocialDialog">소셜 계정으로 계속하기</BaseButton>
-    </div>
-
-    <BaseModal v-model="isSocialDialogOpen" title="소셜 로그인 선택">
-      <p class="social-dialog__lead">사용할 소셜 계정을 선택해주세요.</p>
-      <div class="social-dialog__list">
+      <div class="social-icon-row">
         <button
           v-for="provider in socialProviders"
           :key="provider.id"
           type="button"
-          :class="['social-button', `social-button--${provider.class}`]"
+          :class="[
+            'social-icon-button',
+            provider.modifier && `social-icon-button--${provider.modifier}`,
+          ]"
+          :aria-label="`${provider.label}로 계속하기`"
+          :title="`${provider.label}로 계속하기`"
           @click="onSocialLogin(provider.id)"
         >
-          <span class="social-button__mark">{{ provider.label.slice(0, 1) }}</span>
-          <span class="social-button__text">
-            <strong>{{ provider.label }}</strong>
-            <small>{{ provider.description }}</small>
+          <span class="social-icon" aria-hidden="true">
+            <img
+              class="social-icon__image"
+              :class="provider.modifier && `social-icon__image--${provider.modifier}`"
+              :src="provider.iconSrc"
+              alt=""
+            />
           </span>
         </button>
       </div>
-      <template #footer>
-        <BaseButton size="small" variant="ghost" @click="isSocialDialogOpen = false">닫기</BaseButton>
-      </template>
-    </BaseModal>
+    </div>
 
     <p class="links">
       아직 계정이 없나요?
@@ -222,7 +220,7 @@ function oauthErrorMessage(reason) {
 
 .social-login {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin-top: 18px;
 }
 
@@ -244,95 +242,65 @@ function oauthErrorMessage(reason) {
   font-weight: 700;
 }
 
-.social-dialog__lead {
-  color: var(--ink-sub);
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 12px;
-}
-
-.social-dialog__list {
-  display: grid;
-  gap: 10px;
-}
-
-.social-button {
+.social-icon-row {
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.social-icon-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 6px 15px -11px rgba(60, 40, 20, 0.7);
   cursor: pointer;
   display: flex;
-  font-size: 13px;
-  font-weight: 700;
-  gap: 12px;
-  justify-content: flex-start;
-  min-height: 58px;
-  padding: 10px 13px;
-  text-align: left;
-  width: 100%;
+  height: 46px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+  width: 46px;
 }
 
-.social-button:focus-visible {
+.social-icon-button:hover {
+  box-shadow: 0 9px 18px -12px rgba(60, 40, 20, 0.72);
+  transform: translateY(-1px);
+}
+
+.social-icon-button:focus-visible {
   box-shadow: 0 0 0 3px rgba(194, 105, 63, 0.2);
   outline: none;
 }
 
-.social-button__mark {
+.social-icon {
   align-items: center;
   border-radius: 50%;
   display: inline-flex;
-  flex: 0 0 34px;
-  font-size: 15px;
-  height: 34px;
+  height: 100%;
   justify-content: center;
-  width: 34px;
+  overflow: hidden;
+  width: 100%;
 }
 
-.social-button__text {
-  display: grid;
-  gap: 2px;
+.social-icon__image {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
-.social-button__text strong {
-  color: inherit;
-  font-size: 14px;
+.social-icon__image--kakao {
+  height: 30px;
+  object-fit: contain;
+  width: 30px;
 }
 
-.social-button__text small {
-  color: currentColor;
-  font-size: 12px;
-  font-weight: 500;
-  opacity: 0.72;
-}
-
-.social-button--kakao {
+.social-icon-button--kakao .social-icon {
   background: #fee500;
-  border-color: #fee500;
-  color: #191919;
-}
-
-.social-button--kakao .social-button__mark {
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.social-button--google {
-  background: #fff;
-  border-color: #dadce0;
-  color: #202124;
-}
-
-.social-button--google .social-button__mark {
-  background: #f1f3f4;
-}
-
-.social-button--naver {
-  background: #03c75a;
-  border-color: #03c75a;
-  color: #fff;
-}
-
-.social-button--naver .social-button__mark {
-  background: rgba(255, 255, 255, 0.18);
 }
 
 .links {

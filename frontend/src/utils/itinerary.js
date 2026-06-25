@@ -6,11 +6,11 @@ export const TRANSPORT_OPTIONS = [
 ]
 
 export const PLACE_TYPE_META = {
-  ATTRACTION: { label: '명소', icon: 'pi pi-map-marker', color: '#2e8f6b' },
-  RESTAURANT: { label: '식당', icon: 'pi pi-shopping-bag', color: '#f04452' },
-  CAFE: { label: '카페', icon: 'pi pi-cup', color: '#8b5cf6' },
-  LODGING: { label: '숙소', icon: 'pi pi-home', color: '#3182f6' },
-  ETC: { label: '장소', icon: 'pi pi-map-marker', color: '#687586' },
+  ATTRACTION: { label: '명소', icon: 'pi pi-map-marker', color: 'var(--t-sage)' },
+  RESTAURANT: { label: '식당', icon: 'pi pi-shopping-bag', color: 'var(--complete)' },
+  CAFE: { label: '카페', icon: 'pi pi-cup', color: 'var(--t-plum)' },
+  LODGING: { label: '숙소', icon: 'pi pi-home', color: 'var(--t-blue)' },
+  ETC: { label: '장소', icon: 'pi pi-map-marker', color: 'var(--ink-sub)' },
 }
 
 export function createDaysFromTrip(trip) {

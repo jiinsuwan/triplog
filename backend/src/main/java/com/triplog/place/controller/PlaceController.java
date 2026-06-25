@@ -30,11 +30,12 @@ public class PlaceController {
     @GetMapping
     public ApiResponse<PlaceListResponse> list(@RequestParam(required = false) String region1,
                                                @RequestParam(required = false) String region2,
+                                               @RequestParam(name = "placeType", required = false) String placeType,
                                                @RequestParam(required = false) String category,
                                                @RequestParam(required = false) String keyword,
                                                @RequestParam(required = false) Integer page,
                                                @RequestParam(required = false) Integer size) {
-        return ApiResponse.success(placeService.list(region1, region2, category, keyword, page, size));
+        return ApiResponse.success(placeService.list(region1, region2, placeType, category, keyword, page, size));
     }
 
     @Operation(summary = "Get place detail")

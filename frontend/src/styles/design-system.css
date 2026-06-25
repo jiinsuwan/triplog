@@ -31,6 +31,12 @@
   --font-body: Pretendard, var(--sans), system-ui, sans-serif;
   --font-hand: 'Nanum Pen Script', cursive;
   --font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  --app-canvas-max: 1200px;
+  --app-canvas-width: min(calc(100% - 48px), var(--app-canvas-max));
+  --app-canvas-margin: 18px auto 24px;
+  --app-canvas-padding: 24px 36px 28px;
+  --app-canvas-min-height: 0;
+  --trip-overview-canvas-height: 720px;
   color-scheme: light;
 }
 
@@ -61,12 +67,19 @@ select {
 }
 
 .ds-topbar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 11px 26px;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
+  padding: 0 24px;
+}
+
+.ds-topbar__inner {
+  align-items: center;
+  box-sizing: border-box;
+  display: flex;
+  gap: 20px;
+  margin: 0 auto;
+  padding: 11px 0;
+  width: min(100%, var(--app-canvas-max));
 }
 
 .ds-topbar__logo {
@@ -123,13 +136,27 @@ select {
   padding: 7px 12px;
 }
 
+.ds-topbar__actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.ds-topbar__search + .ds-topbar__actions {
+  margin-left: 0;
+}
+
 .ds-avatar {
   align-items: center;
   background: linear-gradient(135deg, var(--accent-soft), var(--accent));
+  border: none;
   border-radius: 50%;
   color: var(--on-fill);
+  cursor: pointer;
   display: grid;
   flex: 0 0 auto;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 700;
   height: 31px;
@@ -197,6 +224,26 @@ select {
   font-family: var(--font-hand);
   font-size: 15px;
   letter-spacing: 0.3px;
+}
+
+.page-bg {
+  min-height: 100vh;
+}
+
+.page-canvas {
+  --ds-surface: var(--paper);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-sizing: border-box;
+  box-shadow: 0 12px 34px -18px rgba(60, 40, 20, 0.4);
+  height: var(--trip-overview-canvas-height);
+  margin: var(--app-canvas-margin);
+  max-width: var(--app-canvas-max);
+  min-height: var(--app-canvas-min-height);
+  overflow: hidden;
+  padding: var(--app-canvas-padding);
+  width: var(--app-canvas-width);
 }
 
 .ds-badge {
@@ -308,8 +355,9 @@ select {
   font-size: 1.26em;
   font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.28;
   overflow: hidden;
+  padding-bottom: 0.08em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -386,6 +434,41 @@ select {
   color: var(--ink-faint);
   font-size: 0.9em;
   font-weight: 600;
+}
+
+.ds-ticket--unissued {
+  background: #fffaf0;
+  border-color: #e7dcc6;
+  box-shadow: 0 10px 24px -20px rgba(75, 50, 24, 0.5);
+}
+
+.ds-ticket--unissued .ds-ticket__stub-left {
+  background: color-mix(in srgb, var(--tc) 66%, #f4ead7);
+}
+
+.ds-ticket--unissued .ds-ticket__label,
+.ds-ticket--unissued .ds-ticket__dday-value {
+  color: color-mix(in srgb, var(--tc) 82%, #8b7a60);
+}
+
+.ds-ticket--unissued .ds-ticket__title {
+  color: color-mix(in srgb, var(--ink) 82%, #9b8d77);
+}
+
+.ds-ticket--unissued .ds-ticket__meta {
+  color: #8c7d66;
+}
+
+.ds-ticket--no-barcode .ds-ticket__stub-right {
+  gap: 0.24em;
+}
+
+.ds-ticket--no-barcode .ds-ticket__dday-label {
+  font-size: 0.72em;
+}
+
+.ds-ticket--no-barcode .ds-ticket__dday-value {
+  font-size: 1.72em;
 }
 
 .ds-ticket--torn {
@@ -681,6 +764,14 @@ select {
   }
 }
 
+@media (max-width: 980px) {
+  .page-canvas {
+    margin: 14px 16px 36px;
+    padding: 24px;
+    width: auto;
+  }
+}
+
 .ds-empty-state {
   color: var(--ink-sub);
   padding: 46px 24px;
@@ -707,11 +798,25 @@ select {
 }
 
 @media (max-width: 720px) {
+  .page-canvas {
+    border-radius: 0;
+    border-width: 1px 0;
+    height: auto;
+    margin: 0 0 32px;
+    min-height: auto;
+    overflow: visible;
+    padding: 22px 16px 28px;
+  }
+
   .ds-topbar {
+    padding: 0 16px;
+  }
+
+  .ds-topbar__inner {
     align-items: stretch;
     flex-wrap: wrap;
     gap: 10px;
-    padding: 10px 16px;
+    padding: 10px 0;
   }
 
   .ds-topbar__search {

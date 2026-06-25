@@ -9,7 +9,7 @@
 - **색**: 종이 베이지 `#ece4d6` / 표면 `#fbf7ee` / 잉크 `#2c2926` / 도장 남색 `#2f4a5c` / 주 액션 테라코타 `#c2693f` / COMPLETE 적색 `#c0392b` / 티켓 빈티지 팔레트(테라·머스타드·세이지·블루·버건디·카키·플럼)
 - **타이포**: 본문 Pretendard / 감성·해시태그 Nanum Pen Script
 - **시스템 정본**: `design-system.css`(토큰 + 컴포넌트) · `design-system.html`(컴포넌트 카탈로그) ← 모든 화면이 이걸 재사용
-- **화면 목업**: `auth-mockup.html` · `profile-mockup.html` · `home-mockup.html` · `trips-mockup.html` · `memory-list-mockup.html` · `memory-viewer-mockup.html` (티켓·도장·폴라로이드 컴포넌트 정본·카탈로그 = `design-system.html`)
+- **화면 목업**: `auth-mockup.html` · `profile-mockup.html` · `home-mockup.html` · `trips-mockup.html` · `memory-list-mockup.html`(추억 목록 + 상세 팝업) · `logs-mockup.html`(다녀옴 미리보기·카드 에디터) (컴포넌트 정본·카탈로그 = `design-system.html`)
 
 ## 화면 (14) — 상태
 
@@ -28,9 +28,9 @@
 | 9 | TRIPS | 관광지 탐색 | `/trips/:id/places` (담기 모드) | ✅ `trips-mockup.html` |
 | 10 | TRIPS | 일정 편집 | `/trips/:id/places` (일정 모드) | ✅ `trips-mockup.html` |
 | 11 | LOGS | 추억 목록 | `/logs` (신설) | ✅ `memory-list-mockup.html` |
-| 12 | LOGS | 추억 상세 | 팝업 (신설) | ✅ `memory-viewer-mockup.html` |
-| 13 | LOGS | 사진 업로드 | `/trips/:id/photos` | ⬜ |
-| 14 | LOGS | 카드 에디터(추억 만들기) | `/cards/new` | ⬜ |
+| 12 | LOGS | 추억 상세 | 폴라로이드 클릭 팝업 | ✅ `memory-list-mockup.html` ② |
+| 13 | LOGS | 사진 업로드 | 다녀옴 미리보기 팝업에 통합 | ✅ `logs-mockup.html` ① |
+| 14 | LOGS | 카드 에디터(추억 만들기) | `/cards/new` (작업 화면) | ✅ `logs-mockup.html` ② |
 
 ## 공통 컴포넌트 — 상태
 

@@ -1,5 +1,6 @@
 import { onScopeDispose } from 'vue'
 import { fetchPhotoContent as defaultFetch } from '@/api/photoApi'
+import { createImagePreviewUrl } from '@/utils/imagePreview'
 
 // 인증 사진 표시 공용 모듈 (S2-LOG-06 #55).
 //
@@ -24,7 +25,7 @@ export function usePhotoContent({ api } = {}) {
   let disposed = false
 
   // photoId 의 objectURL 을 반환한다. 캐시 히트면 fetch 없이 즉시, 진행 중이면 그 Promise 를 공유.
-  function load(photoId) {
+  function load(photoId, filename = '') {
     // 해제된 스코프에서의 호출은 새 fetch 없이 즉시 거부 — 곧 revoke 될 쓸 수 없는 URL 을 만들지 않는다.
     if (disposed) return Promise.reject(disposedError())
     if (cache.has(photoId)) return Promise.resolve(cache.get(photoId))
@@ -36,7 +37,7 @@ export function usePhotoContent({ api } = {}) {
     const promise = (async () => {
       try {
         const blob = await fetchContent(photoId, { signal: controller.signal })
-        const url = URL.createObjectURL(blob)
+        const url = await createImagePreviewUrl(blob, filename)
         // 함정: fetch 가 도는 사이 스코프가 해제됐다면(언마운트), 방금 만든 objectURL 을
         // revoke 할 주체가 없다 — dispose 의 캐시 순회는 이미 끝났기 때문이다. 누수를 막으려
         // 즉시 해제한다. 그리고 호출자에게 '이미 해제된' URL 을 넘기지 않도록 캐시에 넣지 않고

@@ -2,6 +2,7 @@ package com.triplog.user.service;
 
 import com.triplog.common.BusinessException;
 import com.triplog.common.ErrorCode;
+import com.triplog.card.service.CardFileCleanup;
 import com.triplog.photo.service.PhotoTripCleanup;
 import com.triplog.user.domain.User;
 import com.triplog.user.dto.UpdateUserProfileRequest;
@@ -18,13 +19,16 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final PhotoTripCleanup photoTripCleanup;
+    private final CardFileCleanup cardFileCleanup;
 
     public UserService(UserMapper userMapper,
                        PasswordEncoder passwordEncoder,
-                       PhotoTripCleanup photoTripCleanup) {
+                       PhotoTripCleanup photoTripCleanup,
+                       CardFileCleanup cardFileCleanup) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.photoTripCleanup = photoTripCleanup;
+        this.cardFileCleanup = cardFileCleanup;
     }
 
     @Transactional(readOnly = true)
@@ -57,6 +61,7 @@ public class UserService {
         }
 
         photoTripCleanup.scheduleFileCleanupForUser(userId);
+        cardFileCleanup.scheduleFileCleanupForUser(userId);
         int deleted = userMapper.deleteById(userId);
         if (deleted == 0) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);

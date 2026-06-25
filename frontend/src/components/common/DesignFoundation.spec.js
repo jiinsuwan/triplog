@@ -2,12 +2,50 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 
+import AppTopBar from './AppTopBar.vue'
 import BaseModal from './BaseModal.vue'
 import TripPolaroid from './TripPolaroid.vue'
 import TripStamp from './TripStamp.vue'
 import TripTicket from './TripTicket.vue'
 
 describe('design foundation components', () => {
+  it('can hide topbar search and default create action while opening profile via avatar', async () => {
+    const wrapper = mount(AppTopBar, {
+      props: {
+        active: 'home',
+        showSearch: false,
+        showDefaultAction: false,
+        userInitial: '지',
+      },
+      global: {
+        stubs: {
+          RouterLink: {
+            props: ['to'],
+            template: '<a :href="typeof to === \'string\' ? to : to.path"><slot /></a>',
+          },
+          // 계정 팝업은 store/router 에 의존하므로 단위 테스트에선 stub 으로 대체하고
+          // 아바타 클릭 → modelValue 토글만 검증한다.
+          AccountDialog: {
+            props: ['modelValue'],
+            template: '<div class="account-dialog-stub">{{ modelValue }}</div>',
+          },
+        },
+      },
+    })
+
+    expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
+    expect(wrapper.find('.ds-topbar__actions').text()).toBe('')
+    expect(wrapper.text()).not.toContain('새 여행')
+
+    const avatar = wrapper.find('.ds-avatar')
+    expect(avatar.element.tagName).toBe('BUTTON')
+    expect(avatar.text()).toBe('지')
+    expect(wrapper.find('.account-dialog-stub').text()).toBe('false')
+
+    await avatar.trigger('click')
+    expect(wrapper.find('.account-dialog-stub').text()).toBe('true')
+  })
+
   it('renders trip ticket d-day and tag fallbacks', () => {
     const wrapper = mount(TripTicket, {
       props: {
@@ -22,6 +60,26 @@ describe('design foundation components', () => {
     expect(wrapper.find('.ds-ticket__tags').text()).toBe('#바다 #오름')
     expect(wrapper.find('.ds-ticket__dday-value').text()).toBe('미정')
     expect(wrapper.find('.ds-ticket__dday-value').classes()).toContain('is-muted')
+  })
+
+  it('renders unissued trip tickets without barcode', () => {
+    const wrapper = mount(TripTicket, {
+      props: {
+        title: '새 여행을 계획해보세요.',
+        region: 'TripLog',
+        dates: 'TripLog로 여행을 계획해보세요.',
+        dday: '+',
+        ddayLabel: 'ADD',
+        unissued: true,
+        showBarcode: false,
+      },
+    })
+
+    expect(wrapper.classes()).toContain('ds-ticket--unissued')
+    expect(wrapper.classes()).toContain('ds-ticket--no-barcode')
+    expect(wrapper.find('.ds-ticket__barcode').exists()).toBe(false)
+    expect(wrapper.find('.ds-ticket__dday-label').text()).toBe('ADD')
+    expect(wrapper.find('.ds-ticket__dday-value').text()).toBe('+')
   })
 
   it('renders stamp stages with design glyphs', () => {

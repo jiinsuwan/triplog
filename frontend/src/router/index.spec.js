@@ -33,17 +33,17 @@ describe('router authGuard — 보호 라우트 가드', () => {
     expect(authGuard(route('/'))).toBe(true)
   })
 
-  it('이미 로그인한 사용자가 / 접근 시 여행 목록으로 보낸다', () => {
+  it('이미 로그인한 사용자가 / 접근 시 홈 대시보드를 그대로 볼 수 있다', () => {
     useAuthStore().setTokens('a1', 'r1')
-    expect(authGuard(route('/'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
+    expect(authGuard(route('/'))).toBe(true)
   })
 
-  it('이미 로그인한 사용자가 /login 접근 시 여행 목록으로 보낸다', () => {
+  it('이미 로그인한 사용자가 /login 접근 시 기본 진입점으로 보낸다', () => {
     useAuthStore().setTokens('a1', 'r1')
     expect(authGuard(route('/login'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
 
-  it('이미 로그인한 사용자가 /signup 접근 시 여행 목록으로 보낸다', () => {
+  it('이미 로그인한 사용자가 /signup 접근 시 기본 진입점으로 보낸다', () => {
     useAuthStore().setTokens('a1', 'r1')
     expect(authGuard(route('/signup'))).toEqual({ path: AUTHENTICATED_ENTRY_PATH })
   })
@@ -90,6 +90,7 @@ describe('router authGuard — 보호 라우트 가드', () => {
     expect(planRoute?.redirect).toBeTypeOf('function')
     expect(recordRoute?.path).toBe('/trips/:tripId/log')
     expect(recordRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'record' })
+    expect(recordRoute?.redirect).toBeUndefined()
   })
 
   it('plan workspace redirect keeps itinerary mode query', () => {
@@ -107,24 +108,14 @@ describe('router authGuard — 보호 라우트 가드', () => {
     })
   })
 
-  it('record workspace redirect 는 카드 만들기(card-create)로 보낸다', () => {
-    const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record-workspace')
-
-    expect(recordRoute.redirect).toBeTypeOf('function')
-    expect(recordRoute.redirect({ params: { tripId: '12' } })).toEqual({
-      name: 'card-create',
-      query: { tripId: '12' },
-    })
-  })
-
-  it('옛 record 경로(/trips/:id/record)도 카드 만들기로 리다이렉트한다', () => {
+  it('옛 record 경로(/trips/:id/record)는 기록 워크스페이스로 리다이렉트한다', () => {
     const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record')
 
     expect(recordRoute?.path).toBe('/trips/:tripId/record')
     expect(recordRoute.redirect).toBeTypeOf('function')
     expect(recordRoute.redirect({ params: { tripId: '7' } })).toEqual({
-      name: 'card-create',
-      query: { tripId: '7' },
+      name: 'trip-record-workspace',
+      params: { tripId: '7' },
     })
   })
 

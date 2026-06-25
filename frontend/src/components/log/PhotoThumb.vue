@@ -25,7 +25,7 @@ async function loadPhoto(photoId) {
   state.value = 'loading'
   objectUrl.value = null
   try {
-    const url = await load(photoId)
+    const url = await load(photoId, props.alt)
     if (seq !== requestSeq) return // 그새 photoId 가 또 바뀜 → 폐기
     objectUrl.value = url
     // state 는 여기서 'loaded' 로 두지 않는다 — <img> 가 실제로 디코딩에 성공해야(@load) 표시.
@@ -35,7 +35,7 @@ async function loadPhoto(photoId) {
   }
 }
 
-watch(() => props.photoId, loadPhoto, { immediate: true })
+watch(() => [props.photoId, props.alt], ([photoId]) => loadPhoto(photoId), { immediate: true })
 </script>
 
 <template>
@@ -64,10 +64,10 @@ watch(() => props.photoId, loadPhoto, { immediate: true })
   aspect-ratio: 1;
   border-radius: 10px;
   overflow: hidden;
-  background: #f2f4f6;
+  background: var(--paper-dim);
   display: grid;
   place-items: center;
-  color: #b0b8c1;
+  color: var(--ink-faint);
 }
 
 .image {
@@ -79,7 +79,7 @@ watch(() => props.photoId, loadPhoto, { immediate: true })
 .skeleton {
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, #f2f4f6 30%, #e9edf1 50%, #f2f4f6 70%);
+  background: linear-gradient(100deg, var(--paper-dim) 30%, var(--line2) 50%, var(--paper-dim) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.2s ease-in-out infinite;
 }

@@ -1,5 +1,6 @@
 import { reactive, computed, onScopeDispose } from 'vue'
 import { uploadPhoto as defaultUpload, linkPhotoToTrip as defaultLink } from '@/api/photoApi'
+import { createImagePreviewUrl } from '@/utils/imagePreview'
 
 // 사진 업로드 큐 (S2-LOG-05 #54). 화면 전용 일시 상태라 전역 store 가 아닌 컴포저블로 둔다.
 //
@@ -13,8 +14,8 @@ import { uploadPhoto as defaultUpload, linkPhotoToTrip as defaultLink } from '@/
 // 클라 사전 검증은 UX 보조 필터다 — 최종 권위는 서버(PhotoService/ multipart 한도).
 // 형식 화이트리스트는 백엔드 PhotoService.ALLOWED_TYPES 와 일치시킨다.
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-// 브라우저가 <img> 로 못 그리는 HEIC/HEIF 는 로컬 미리보기를 만들지 않는다(아이콘 폴백).
-const PREVIEWABLE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const ACCEPTED_EXTENSIONS_LIST = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif']
+const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|heic|heif)$/i
 // 백엔드 max-file-size(application.yml: 20MB)와 동일. Spring DataSize 기준 1MB=1024*1024.
 export const MAX_FILE_BYTES = 20 * 1024 * 1024
 // 동시 업로드 상한 — 업링크 대역 분할/타임아웃 폭주 방지.
@@ -30,7 +31,7 @@ export const QueueStatus = {
 }
 
 // 파일 선택 다이얼로그 필터용 accept 속성값.
-export const ACCEPT_ATTR = ACCEPTED_TYPES.join(',')
+export const ACCEPT_ATTR = [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS_LIST].join(',')
 
 export function useUploadQueue(tripId, { concurrency = DEFAULT_CONCURRENCY, api } = {}) {
   // api 주입은 테스트 편의. 기본은 실제 photoApi.
@@ -46,20 +47,20 @@ export function useUploadQueue(tripId, { concurrency = DEFAULT_CONCURRENCY, api 
 
   function addFiles(fileList) {
     for (const file of Array.from(fileList ?? [])) {
-      items.push(createItem(file))
+      const item = createItem(file)
+      items.push(item)
+      attachPreview(item)
     }
     pump()
   }
 
   function createItem(file) {
     const rejection = validate(file)
-    const previewUrl =
-      !rejection && PREVIEWABLE_TYPES.includes(file.type) ? URL.createObjectURL(file) : null
     return {
       id: ++seq,
       file,
       name: file.name,
-      previewUrl,
+      previewUrl: null,
       status: rejection ? QueueStatus.REJECTED : QueueStatus.PENDING,
       progress: 0,
       photoId: null, // 업로드 성공 시 채워짐 → 재시도가 "연결만" 재개하는 기준.
@@ -67,11 +68,26 @@ export function useUploadQueue(tripId, { concurrency = DEFAULT_CONCURRENCY, api 
       hasGps: false,
       error: rejection ?? null,
       _abort: null,
+      _removed: false,
+    }
+  }
+
+  async function attachPreview(item) {
+    if (item.error) return
+    try {
+      const url = await createImagePreviewUrl(item.file, item.name)
+      if (item._removed) {
+        URL.revokeObjectURL(url)
+        return
+      }
+      item.previewUrl = url
+    } catch {
+      item.previewUrl = null
     }
   }
 
   function validate(file) {
-    if (!ACCEPTED_TYPES.includes(file.type)) {
+    if (!ACCEPTED_TYPES.includes(file.type) && !ACCEPTED_EXTENSIONS.test(file.name)) {
       return { message: '지원하지 않는 형식입니다 (JPEG·PNG·WebP·HEIC).', retryable: false }
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -142,6 +158,7 @@ export function useUploadQueue(tripId, { concurrency = DEFAULT_CONCURRENCY, api 
   }
 
   function cleanup(item) {
+    item._removed = true
     item._abort?.abort() // 진행 중 업로드면 중단(언마운트·행 제거 시).
     if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
   }

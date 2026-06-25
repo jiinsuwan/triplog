@@ -7,6 +7,12 @@
   src: url('/fonts/ownglyph-ooa.ttf') format('truetype');
   font-display: swap;
 }
+@font-face { font-family: 'Ownglyph baekayeon2'; src: url('/fonts/ownglyph-baekayeon2.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'Ownglyph seulgi29'; src: url('/fonts/ownglyph-seulgi29.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'Ownglyph wonsyung'; src: url('/fonts/ownglyph-wonsyung.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'Ownglyph yunwoo'; src: url('/fonts/ownglyph-yunwoo.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'Ownglyph konkon'; src: url('/fonts/ownglyph-konkon.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'Ownglyph hani'; src: url('/fonts/ownglyph-hani.ttf') format('truetype'); font-display: swap; }
 
 :root {
   --sans: system-ui, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif;

@@ -26,21 +26,21 @@ const over = computed(() => drag.active && drag.overTray)
         <RecordPhotoChip :photo-id="p.id" :alt="p.originalFilename || '사진'" />
       </li>
     </ul>
-    <p v-else class="empty">미분류 사진이 없습니다. (여기로 끌어다 놓으면 배치가 해제됩니다.)</p>
+    <p v-else class="empty">미분류 사진이 없습니다.</p>
   </section>
 </template>
 
 <style scoped>
 .tray {
-  border: 1px dashed #c9d2db;
+  border: 1px dashed var(--line-strong);
   border-radius: 12px;
   padding: 12px 14px;
-  background: #fafbfc;
+  background: var(--paper-card);
   transition: border-color 0.12s, background 0.12s;
 }
 .tray.over {
-  border-color: #3182f6;
-  background: #f0f6ff;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--paper-card));
 }
 .head {
   display: flex;
@@ -52,7 +52,7 @@ const over = computed(() => drag.active && drag.overTray)
   flex: 1;
 }
 .count {
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-size: 0.8rem;
 }
 .photos {
@@ -65,7 +65,7 @@ const over = computed(() => drag.active && drag.overTray)
 }
 .empty {
   margin: 0;
-  color: #b0b8c1;
+  color: var(--ink-faint);
   font-size: 0.85rem;
 }
 </style>

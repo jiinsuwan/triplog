@@ -14,7 +14,7 @@ import { AUTHENTICATED_ENTRY_PATH } from '@/router/entryPaths'
 // 보호 라우트 컨벤션 (트랙 공통 — agent·팀원은 이 규칙을 따른다):
 //   - 가드는 "명시적 보호" 방식이다. 로그인이 필요한 라우트는 meta: { requiresAuth: true } 를 붙인다.
 //   - meta 표시가 없는 라우트는 공개로 취급한다(누락 시 보호되지 않으니 주의).
-//   - 단, 인증 사용자가 / 또는 guest-only 인증 화면에 접근하면 기본 진입점으로 보낸다.
+//   - 단, 인증 사용자가 guest-only 인증 화면에 접근하면 기본 진입점으로 보낸다.
 //   - 각 트랙(trip/log)은 자기 보호 라우트에 requiresAuth 를 직접 명시한다.
 const routes = [
   { path: '/', name: 'home', component: HomeView },
@@ -34,12 +34,6 @@ const routes = [
     path: '/oauth/callback',
     name: 'oauth-callback',
     component: () => import('@/views/auth/OAuthCallbackView.vue'),
-  },
-  {
-    path: '/profile',
-    name: 'profile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { requiresAuth: true },
   },
   {
     path: '/trips',
@@ -70,11 +64,10 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'planning' },
   },
   {
-    // 기록 워크스페이스 진입 = 카드 만들기(배치) 화면 직행. 사진 업로드는 그 화면에서 모달로 한다
-    //   (업로드 전용 화면을 먼저 거치지 않아 "기존 사진 모르고 또 올려 중복" 되던 문제 해소).
+    // 다녀온 여행 기록뷰. 여기서 사진을 일정에 배치한 뒤 카드 에디터로 진행한다.
     path: '/trips/:tripId/log',
     name: 'trip-record-workspace',
-    redirect: (to) => ({ name: 'card-create', query: { tripId: to.params.tripId } }),
+    component: () => import('@/views/log/TripRecordView.vue'),
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {
@@ -91,11 +84,10 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {
-    // 사진을 일정에 배치하는 화면은 카드 만들기 1단계로 통합됨(log 트랙).
-    // 옛 경로(/trips/:id/record)는 카드 만들기 흐름으로 리다이렉트한다.
+    // 옛 기록 경로는 기록 워크스페이스로 보낸다.
     path: '/trips/:tripId/record',
     name: 'trip-record',
-    redirect: (to) => ({ name: 'card-create', query: { tripId: to.params.tripId } }),
+    redirect: (to) => ({ name: 'trip-record-workspace', params: to.params }),
     meta: { requiresAuth: true },
   },
   {
@@ -108,6 +100,12 @@ const routes = [
     name: 'card-create',
     component: () => import('@/views/log/CardCreateView.vue'),
     meta: { requiresAuth: true, workspace: 'record' },
+  },
+  {
+    path: '/logs',
+    name: 'logs',
+    component: () => import('@/views/log/LogsView.vue'),
+    meta: { requiresAuth: true },
   },
 ]
 
@@ -135,8 +133,8 @@ export function authGuard(to) {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
-  // 이미 로그인한 사용자의 기본 진입점은 여행 목록이다.
-  if (auth.isAuthenticated && (to.path === '/' || GUEST_ONLY_PATHS.includes(to.path))) {
+  // 이미 로그인한 사용자가 다시 볼 필요 없는 인증 화면은 홈 진입점으로 보낸다.
+  if (auth.isAuthenticated && GUEST_ONLY_PATHS.includes(to.path)) {
     return { path: AUTHENTICATED_ENTRY_PATH }
   }
 

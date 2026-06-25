@@ -5,6 +5,7 @@ export async function fetchPlaces(params = {}) {
     params: compactParams({
       region1: params.region1,
       region2: params.region2,
+      placeType: params.placeType,
       category: params.category,
       keyword: params.keyword,
       page: params.page ?? 0,
