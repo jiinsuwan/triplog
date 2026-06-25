@@ -27,6 +27,11 @@ const authStoreMock = vi.hoisted(() => ({
   user: null,
 }))
 
+const cardStoreMock = vi.hoisted(() => ({
+  startForTrip: vi.fn(),
+  setPhotoIds: vi.fn(),
+}))
+
 const fetchItineraryMock = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', () => ({
@@ -41,6 +46,10 @@ vi.mock('@/stores/trip', () => ({
   useTripStore: () => tripStoreMock,
 }))
 
+vi.mock('@/stores/card', () => ({
+  useCardStore: () => cardStoreMock,
+}))
+
 vi.mock('@/api/itineraryApi', () => ({
   fetchItinerary: fetchItineraryMock,
 }))
@@ -53,6 +62,7 @@ function mountTripListView() {
           props: ['to'],
           template: '<a :href="typeof to === \'string\' ? to : to.path"><slot /></a>',
         },
+        RecordPlacementBody: true,
         Teleport: true,
       },
     },
