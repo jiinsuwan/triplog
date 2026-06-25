@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { fetchItinerary } from '@/api/itineraryApi'
@@ -8,8 +8,15 @@ import RecordPlacementBody from '@/components/log/record/RecordPlacementBody.vue
 import TripInfoEditDialog from '@/components/trip/TripInfoEditDialog.vue'
 import { useCardStore } from '@/stores/card'
 import { useTripStore } from '@/stores/trip'
-import { formatTripDateRange, tripDisplayTags, tripDurationDays } from '@/utils/tripForm'
-import { isPastTripStatus } from '@/utils/tripStatus'
+import { loadKakaoMaps } from '@/utils/kakaoMap'
+import {
+  createTripFormFromTrip,
+  formatTripDateRange,
+  toTripPayload,
+  tripDisplayTags,
+  tripDurationDays,
+} from '@/utils/tripForm'
+import { TRIP_STATUS, normalizeTripStatus } from '@/utils/tripStatus'
 
 const props = defineProps({
   modelValue: {
@@ -33,13 +40,22 @@ const itinerary = ref(null)
 const loading = ref(false)
 const error = ref('')
 const deleteError = ref('')
+const statusError = ref('')
 const activeDayNumber = ref(null)
 const editDialogOpen = ref(false)
+const previewMapRef = ref(null)
+const mapUnavailable = ref(false)
 let requestSeq = 0
+let previewMap = null
+let previewMarkers = []
+let previewPolyline = null
 
 const isMockTrip = computed(() => !!props.trip?.mock)
-const isPastTrip = computed(() => isPastTripStatus(props.trip?.status))
+const tripStatus = computed(() => normalizeTripStatus(props.trip?.status))
+const isPastTrip = computed(() => tripStatus.value === TRIP_STATUS.PAST)
+const isUpcomingTrip = computed(() => tripStatus.value === TRIP_STATUS.UPCOMING)
 const canEditTrip = computed(() => !!props.trip?.id)
+const canMarkPastTrip = computed(() => canEditTrip.value && isUpcomingTrip.value && !isMockTrip.value)
 const days = computed(() => itinerary.value?.days ?? [])
 const plannedDays = computed(() => days.value.filter((day) => (day.stops ?? []).length > 0))
 const activeDay = computed(() => {
@@ -51,8 +67,16 @@ const activeDay = computed(() => {
 const activeStops = computed(() => activeDay.value?.stops ?? [])
 const stops = computed(() => days.value.flatMap((day) => day.stops ?? []))
 const stopCount = computed(() => stops.value.length)
-const previewStatus = computed(() => (isPastTrip.value ? '다녀옴' : '계획 중'))
-const previewStatusClass = computed(() => (isPastTrip.value ? 'past' : 'plan'))
+const previewStatus = computed(() => {
+  if (isPastTrip.value) return '다녀옴'
+  if (isUpcomingTrip.value) return '예정'
+  return '계획 중'
+})
+const previewStatusClass = computed(() => {
+  if (isPastTrip.value) return 'past'
+  if (isUpcomingTrip.value) return 'upcoming'
+  return 'plan'
+})
 const dateMeta = computed(() => {
   if (!props.trip?.startDate || !props.trip?.endDate) return '날짜 미정'
   return `${formatTripDateRange(props.trip)} · ${tripDurationDays(props.trip)}일`
@@ -76,6 +100,15 @@ const activeDayLabel = computed(() => {
   const date = activeDay.value.date ? activeDay.value.date.replaceAll('-', '.') : `DAY ${activeDay.value.dayNumber}`
   return `${date} · ${activeStops.value.length}곳`
 })
+const mapStops = computed(() =>
+  activeStops.value
+    .map((stop, index) => ({
+      index,
+      lat: Number(stop?.place?.latitude ?? stop?.latitude),
+      lng: Number(stop?.place?.longitude ?? stop?.longitude),
+    }))
+    .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng)),
+)
 
 watch(
   () => [props.modelValue, props.trip?.id],
@@ -100,6 +133,22 @@ watch(
   { immediate: true },
 )
 
+watch(
+  [
+    () => props.modelValue,
+    activeDayNumber,
+    () => mapStops.value.map((stop) => `${stop.lat},${stop.lng}`).join('|'),
+  ],
+  () => {
+    renderPreviewMap()
+  },
+  { flush: 'post' },
+)
+
+onBeforeUnmount(() => {
+  clearPreviewMap()
+})
+
 async function loadItinerary() {
   if (!props.modelValue || !props.trip?.id) return
 
@@ -107,26 +156,101 @@ async function loadItinerary() {
   loading.value = true
   error.value = ''
   deleteError.value = ''
+  statusError.value = ''
   itinerary.value = null
-
-  if (isMockTrip.value) {
-    itinerary.value = props.trip.itinerary ?? { dayCount: tripDurationDays(props.trip), days: [] }
-    loading.value = false
-    return
-  }
 
   try {
     const result = await fetchItinerary(props.trip.id, { trip: props.trip })
-    if (seq === requestSeq) itinerary.value = result
+    if (seq === requestSeq) itinerary.value = itineraryWithEmbedded(result)
   } catch {
-    if (seq === requestSeq) error.value = '일정 요약을 불러오지 못했습니다.'
+    if (seq === requestSeq) {
+      const embedded = embeddedItinerary()
+      itinerary.value = embedded
+      if (!hasItineraryStops(embedded)) error.value = '일정 요약을 불러오지 못했습니다.'
+    }
   } finally {
     if (seq === requestSeq) loading.value = false
   }
 }
 
+function embeddedItinerary() {
+  const value = props.trip?.itinerary
+  return hasItineraryStops(value) ? value : { dayCount: tripDurationDays(props.trip), days: [] }
+}
+
+function hasItineraryStops(value) {
+  return (value?.days ?? []).some((day) => (day.stops ?? []).length > 0)
+}
+
+function itineraryWithEmbedded(value) {
+  return hasItineraryStops(value) ? value : embeddedItinerary()
+}
+
 function close() {
   emit('update:modelValue', false)
+}
+
+function clearPreviewMap() {
+  previewMarkers.forEach((marker) => marker.setMap?.(null))
+  previewMarkers = []
+  previewPolyline?.setMap?.(null)
+  previewPolyline = null
+  previewMap = null
+}
+
+async function renderPreviewMap() {
+  clearPreviewMap()
+  mapUnavailable.value = false
+
+  if (!props.modelValue || showPlacement.value || stopCount.value === 0 || !previewMapRef.value) return
+  if (!mapStops.value.length) {
+    mapUnavailable.value = true
+    return
+  }
+
+  try {
+    await nextTick()
+    const kakao = await loadKakaoMaps()
+    const positions = mapStops.value.map(
+      (stop) => new kakao.maps.LatLng(stop.lat, stop.lng),
+    )
+
+    previewMap = new kakao.maps.Map(previewMapRef.value, {
+      center: positions[0],
+      level: positions.length > 1 ? 6 : 5,
+    })
+
+    if (positions.length > 1) {
+      const bounds = new kakao.maps.LatLngBounds()
+      positions.forEach((position) => bounds.extend(position))
+      previewMap.setBounds(bounds)
+      previewPolyline = new kakao.maps.Polyline({
+        path: positions,
+        strokeWeight: 4,
+        strokeColor: '#c2693f',
+        strokeOpacity: 0.86,
+        strokeStyle: 'solid',
+      })
+      previewPolyline.setMap(previewMap)
+    }
+
+    previewMarkers = positions.map((position, index) => {
+      const markerNode = document.createElement('span')
+      markerNode.className = 'trip-preview-dialog__kakao-pin'
+      const label = document.createElement('b')
+      label.textContent = String(index + 1)
+      markerNode.appendChild(label)
+      const marker = new kakao.maps.CustomOverlay({
+        content: markerNode,
+        position,
+        yAnchor: 1.2,
+      })
+      marker.setMap(previewMap)
+      return marker
+    })
+  } catch {
+    mapUnavailable.value = true
+  }
 }
 
 // 다녀옴 팝업에서 배치한 사진을 들고 카드 에디터로 진입한다.
@@ -153,6 +277,27 @@ function openDetail() {
 
 function handleTripUpdated(updatedTrip) {
   emit('updated', updatedTrip)
+}
+
+async function markPastTrip() {
+  if (!canMarkPastTrip.value || tripStore.updating) return
+
+  statusError.value = ''
+  tripStore.clearError()
+
+  try {
+    const updated = await tripStore.updateTrip(
+      props.trip.id,
+      toTripPayload({
+        ...createTripFormFromTrip(props.trip),
+        status: TRIP_STATUS.PAST,
+      }),
+    )
+    emit('updated', updated)
+    close()
+  } catch {
+    statusError.value = tripStore.error || '다녀온 여행으로 변경하지 못했습니다.'
+  }
 }
 
 async function deleteTrip() {
@@ -224,6 +369,7 @@ function mapPinStyle(index) {
       </div>
 
       <p v-if="deleteError" class="trip-preview-dialog__error" role="alert">{{ deleteError }}</p>
+      <p v-if="statusError" class="trip-preview-dialog__error" role="alert">{{ statusError }}</p>
       <p v-if="error" class="trip-preview-dialog__error" role="alert">{{ error }}</p>
 
       <div v-if="loading" class="trip-preview-dialog__loading" aria-live="polite">
@@ -258,15 +404,17 @@ function mapPinStyle(index) {
 
       <div v-else class="trip-preview-dialog__body">
         <div class="trip-preview-dialog__map" aria-label="여행 경로 미리보기">
-          <div class="trip-preview-dialog__map-grid"></div>
-          <span
-            v-for="(stop, index) in activeStops.slice(0, 4)"
-            :key="stop.id ?? `${activeDay?.dayNumber}-${index}`"
-            class="trip-preview-dialog__pin"
-            :style="mapPinStyle(index)"
-          >
-            <b>{{ index + 1 }}</b>
-          </span>
+          <div ref="previewMapRef" class="trip-preview-dialog__map-canvas"></div>
+          <div v-if="mapUnavailable" class="trip-preview-dialog__map-fallback">
+            <span
+              v-for="(stop, index) in activeStops.slice(0, 4)"
+              :key="stop.id ?? `${activeDay?.dayNumber}-${index}`"
+              class="trip-preview-dialog__pin"
+              :style="mapPinStyle(index)"
+            >
+              <b>{{ index + 1 }}</b>
+            </span>
+          </div>
           <span class="trip-preview-dialog__legend">
             {{ trip.region || '여행지' }} · DAY {{ activeDay?.dayNumber || 1 }} 경로
           </span>
@@ -319,6 +467,18 @@ function mapPinStyle(index) {
           @click="openDetail"
         >
           정보 수정
+        </BaseButton>
+        <BaseButton
+          v-if="canMarkPastTrip"
+          variant="ghost"
+          size="small"
+          type="button"
+          class="trip-preview-dialog__past-action"
+          data-testid="trip-preview-mark-past"
+          :disabled="tripStore.updating"
+          @click="markPastTrip"
+        >
+          {{ tripStore.updating ? '변경 중' : '다녀온 여행으로' }}
         </BaseButton>
         <BaseButton
           v-if="!isMockTrip && !showPlacement"
@@ -396,6 +556,10 @@ function mapPinStyle(index) {
 
 .trip-preview-dialog__badge.is-plan {
   background: var(--accent);
+}
+
+.trip-preview-dialog__badge.is-upcoming {
+  background: #6f8fa5;
 }
 
 .trip-preview-dialog__badge.is-past {
@@ -545,7 +709,7 @@ function mapPinStyle(index) {
 }
 
 .trip-preview-dialog__map {
-  background: linear-gradient(135deg, #e9e2cf, #e3dcc4 50%, #ece6d4);
+  background: #ebe4d1;
   border: 1px solid var(--line);
   border-radius: 14px;
   min-height: 270px;
@@ -553,13 +717,17 @@ function mapPinStyle(index) {
   position: relative;
 }
 
-.trip-preview-dialog__map-grid {
-  background-image:
-    linear-gradient(rgba(120, 100, 60, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(120, 100, 60, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
+.trip-preview-dialog__map-canvas,
+.trip-preview-dialog__map-fallback {
   inset: 0;
   position: absolute;
+}
+
+.trip-preview-dialog__map-fallback {
+  background:
+    radial-gradient(circle at 32% 52%, rgba(194, 105, 63, 0.12), transparent 12%),
+    radial-gradient(circle at 58% 40%, rgba(194, 105, 63, 0.12), transparent 12%),
+    linear-gradient(135deg, #e9e2cf, #e3dcc4 50%, #ece6d4);
 }
 
 .trip-preview-dialog__pin {
@@ -595,6 +763,32 @@ function mapPinStyle(index) {
   left: 12px;
   padding: 5px 10px;
   position: absolute;
+  z-index: 2;
+}
+
+:global(.trip-preview-dialog__kakao-pin) {
+  align-items: center;
+  background: var(--accent);
+  border: 2px solid #fffdf8;
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.25);
+  color: #fffdf8;
+  display: flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 24px;
+  justify-content: center;
+  transform: rotate(-45deg);
+  width: 24px;
+}
+
+:global(.trip-preview-dialog__kakao-pin)::before {
+  content: none;
+}
+
+:global(.trip-preview-dialog__kakao-pin b) {
+  display: block;
+  transform: rotate(45deg);
 }
 
 .trip-preview-dialog__plan {
@@ -734,6 +928,12 @@ function mapPinStyle(index) {
 .trip-preview-dialog__delete {
   border-color: #e3b3a0;
   color: var(--complete);
+}
+
+.trip-preview-dialog__past-action {
+  border-color: var(--line-strong);
+  color: var(--stamp);
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {
