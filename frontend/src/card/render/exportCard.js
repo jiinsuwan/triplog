@@ -59,7 +59,7 @@ function canvasToPngBlob(canvas) {
 
 // 콘텐츠 카드를 (W×H) 캔버스에 그린다 — 출력 해상도로 재빌드 후 렌더(오버레이 네이티브 선명).
 //   renderCore 가 레이어마다 getImageData 로 밝기를 샘플하므로 willReadFrequently 로 리드백을 최적화한다.
-function renderContent(buildInputs, { W, H, syncVisibilityFrom, noteFont, closingFont }) {
+function renderContent(buildInputs, { W, H, syncVisibilityFrom, noteFont, closingFont, scale }) {
   const { items, captions, photo, style } = buildInputs;
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -67,7 +67,7 @@ function renderContent(buildInputs, { W, H, syncVisibilityFrom, noteFont, closin
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const scene = buildScene({ items, captions, canvas: { W, H }, photo, style });
   if (syncVisibilityFrom) applyVisibility(scene, syncVisibilityFrom);
-  renderCard(ctx, scene, buildInputs.assets, { noteFont, closingFont });
+  renderCard(ctx, scene, buildInputs.assets, { noteFont, closingFont, scale });
   return canvas;
 }
 
@@ -148,11 +148,12 @@ export async function exportCardPng(buildInputs, assets = {}, opts = {}) {
 
   const noteFont = opts.noteFont || CARD_FONT;
   const closingFont = opts.closingFont || CARD_FONT;
+  const scale = opts.scale || 1; // 전역 글씨 크기 — 미리보기와 동일하게 export 에도 반영
   await ensureFonts(noteFont, closingFont);
 
   // renderContent 가 assets 를 쓰도록 buildInputs 에 실어 보낸다(파라미터 수 절제).
   const inputs = { ...buildInputs, assets };
-  const common = { syncVisibilityFrom: opts.syncVisibilityFrom, noteFont, closingFont };
+  const common = { syncVisibilityFrom: opts.syncVisibilityFrom, noteFont, closingFont, scale };
 
   // 기본 = 원본 사진 비율 그대로(여백·크롭 없음).
   if (opts.format !== 'fixed') {

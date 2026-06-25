@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia'
 
+// 문구는 백엔드에 저장되지 않아(생성만) 새로고침 시 GMS 재호출이 일어난다.
+// 사진별 문구 결과를 localStorage 에 고정해 재진입·새로고침에도 재생성을 막는다(크레딧 절약).
+const CAP_KEY = (photoId) => `triplog:card:caption:${photoId}`
+
 // 카드 생성 위저드 상태·도메인 모델 (S3-LOG-06 / #74).
 // 사용자에게 보이는 단계는 2개: 고르기 → 에디터.
 // AI 외곽선/문구 처리는 "단계"가 아니라 고르기→에디터 전이 중 로딩 상태다.
@@ -63,12 +67,38 @@ export const useCardStore = defineStore('card', {
     // 문구 생성 결과를 보관한다. 세션 캐시 역할 — 같은 사진 재호출(크레딧 차감)을 막는다.
     setCaption(photoId, data) {
       this.captions = { ...this.captions, [photoId]: data }
+      this.persistCaption(photoId)
     },
     // 문구 캐시를 비운다(전체 재생성 허용 — useCardCaptions 캐시 가드 우회). 사용자 확인 후에만 호출.
     clearCaption(photoId) {
       const next = { ...this.captions }
       delete next[photoId]
       this.captions = next
+      this.persistCaption(photoId)
+    },
+    // 사진별 문구를 localStorage 에 고정/삭제(없으면 삭제). 환경상 불가하면 조용히 무시.
+    persistCaption(photoId) {
+      try {
+        const cap = this.captions[photoId]
+        if (cap) localStorage.setItem(CAP_KEY(photoId), JSON.stringify(cap))
+        else localStorage.removeItem(CAP_KEY(photoId))
+      } catch {
+        /* localStorage 불가 환경 무시 */
+      }
+    },
+    // 메모리에 없는 문구를 localStorage 에서 복원한다(새로고침·재진입 시 재생성 방지).
+    hydrateCaptions(photoIds) {
+      const add = {}
+      for (const id of photoIds || []) {
+        if (this.captions[id]) continue
+        try {
+          const raw = localStorage.getItem(CAP_KEY(id))
+          if (raw) add[id] = JSON.parse(raw)
+        } catch {
+          /* 무시 */
+        }
+      }
+      if (Object.keys(add).length) this.captions = { ...this.captions, ...add }
     },
     // 한 객체의 문구만 지운다(외곽선은 유지). scene·export 가 captions 를 읽으므로 양쪽 즉시 반영.
     removeCaptionObject(photoId, itemId) {
@@ -81,6 +111,7 @@ export const useCardStore = defineStore('card', {
           response: { ...cap.response, objects: cap.response.objects.filter((o) => o.itemId !== itemId) },
         },
       }
+      this.persistCaption(photoId)
     },
     // 보정 추가(탭/박스): 결과 item 을 외곽선에 더한다. 상태가 READY 가 아니었어도(FAILED 등) READY 로 올린다.
     appendOutlineItem(photoId, item) {
@@ -116,6 +147,7 @@ export const useCardStore = defineStore('card', {
           response: { ...cap.response, objects: cap.response.objects.filter((o) => keep.has(o.itemId)) },
         },
       }
+      this.persistCaption(photoId)
     },
   },
 })

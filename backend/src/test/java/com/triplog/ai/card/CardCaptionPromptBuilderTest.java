@@ -56,12 +56,23 @@ class CardCaptionPromptBuilderTest {
                 .contains("3~6개")        // §2-1.1 코멘트 대상 개수
                 .contains("anchors[0]")    // §2-1.2 기본 앵커
                 .contains("2줄")           // §2-1.4 줄 수
-                .contains("좌상단")        // §2-1.3 고정 요소
-                .contains("하단")
+                .contains("하단")          // 마무리 자리 회피
                 .contains("grid")         // label 없는 항목 처리 지시 (§5)
                 .contains("한국어")        // 출력 언어 강제
-                .contains("코멘트 대상에서 제외")  // anchors 빈 항목 skip 지시
+                .contains("제외")          // anchors 빈 항목 skip 지시
+                .contains("다른 객체를 고릅니다")  // anchor 인덱스 부재 시 객체 교체(검증기 거부 회피)
                 .contains("좌표");         // 0004 D4 좌표 금지
+    }
+
+    @Test
+    void carries_style_and_tone_rules() {
+        String prompt = builder.build(referenceItems());
+
+        assertThat(prompt)
+                .contains("손글씨")            // 메모 톤
+                .contains("느껴보세요")         // 안내형 문장 금지(부정 예시 포함)
+                .contains("베끼지")             // few-shot 복사 금지
+                .contains("출력하지 않습니다");  // 역할명은 내부 기준(미출력)
     }
 
     @Test
