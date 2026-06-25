@@ -12,10 +12,8 @@ import { AppTopBar } from '@/components/common'
 import { useItineraryStore } from '@/stores/itinerary'
 import { loadKakaoMaps } from '@/utils/kakaoMap'
 import {
-  TRANSPORT_OPTIONS,
   formatDayDate,
   hasStopForPlace,
-  nextDefaultTime,
   placeKey,
   stopPlaceKey,
 } from '@/utils/itinerary'
@@ -45,12 +43,13 @@ const TIMELINE_END_HOUR = 21
 const TIMELINE_HOUR_HEIGHT_PX = 88
 const TIMELINE_MINUTES_PER_STEP = 15
 const MIN_STAY_MINUTES = 30
-const TIMELINE_CARD_GAP_PX = 10
+const DEFAULT_STAY_MINUTES = 60
+const TIMELINE_CARD_GAP_PX = 0
 const TRANSPORT_VIEW_OPTIONS = [
-  { label: '도보', value: 'walk' },
-  { label: '차', value: 'car' },
-  { label: '버스', value: 'public_transit' },
-  { label: '기타', value: 'other' },
+  { label: '🚶 도보', value: 'walk' },
+  { label: '🚗 자동차', value: 'car' },
+  { label: '🚌 대중교통', value: 'public_transit' },
+  { label: '… 기타', value: 'other' },
 ]
 const ANCHOR_SEARCH_RADIUS_METERS = 380
 const ANCHOR_SEARCH_LEVEL = 3
@@ -176,6 +175,21 @@ const activeDay = computed(() =>
 const activeStops = computed(() => activeDay.value?.stops ?? [])
 const activeDisplayStops = computed(() => orderTimelineStops(activeStops.value))
 const activeTimelineLayout = computed(() => buildTimelineLayout(activeDisplayStops.value))
+const timelineHours = computed(() =>
+  Array.from(
+    { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
+    (_, index) => TIMELINE_START_HOUR + index,
+  ),
+)
+const timelineCanvasStyle = computed(() => {
+  const timelineBottom = activeDisplayStops.value.reduce((bottom, stop) => {
+    const layout = activeTimelineLayout.value.get(stop.id)
+    return Math.max(bottom, (layout?.top ?? 0) + (layout?.height ?? stopTimelineHeight(stop)) + 96)
+  }, 0)
+  return {
+    minHeight: `${Math.max(timelineBaseHeight(), timelineBottom)}px`,
+  }
+})
 const dayTabs = computed(() =>
   days.value.map((day) => ({
     label: `DAY ${day.dayNumber}`,
@@ -981,7 +995,7 @@ function routeSegments(day) {
     const actualPath = routePathForLeg(from, to)
     const fallbackPath = [from.place, to.place].map((place) => new kakao.maps.LatLng(place.latitude, place.longitude))
     segments.push({
-      mode: to.travelFromPrevious?.mode || from.transport || 'other',
+      mode: routeLegMode(from),
       actual: actualPath.length >= 2,
       path: actualPath.length >= 2 ? actualPath : fallbackPath,
     })
@@ -1430,11 +1444,15 @@ function createPlacePopupContent(place) {
   const pocketButton = document.createElement('button')
   pocketButton.type = 'button'
   pocketButton.className = 'trip-place-popup__button is-primary'
-  pocketButton.innerHTML = popupPocketLabel(place)
-  pocketButton.addEventListener('click', (event) => {
+  pocketButton.innerHTML = popupPrimaryLabel(place)
+  pocketButton.addEventListener('click', async (event) => {
     event.stopPropagation()
-    togglePocket(place)
-    pocketButton.innerHTML = popupPocketLabel(place)
+    if (itineraryMode.value) {
+      await addPocketPlaceToRoute(place)
+    } else {
+      togglePocket(place)
+    }
+    pocketButton.innerHTML = popupPrimaryLabel(place)
   })
   actions.append(pocketButton)
 
@@ -1484,6 +1502,13 @@ function preventPopupMapEvent(event) {
 function popupPocketLabel(place) {
   const mark = isPocketed(place) ? '✓' : '＋'
   const label = pocketActionLabel(place)
+  return `<span aria-hidden="true">${mark}</span><span>${label}</span>`
+}
+
+function popupPrimaryLabel(place) {
+  if (!itineraryMode.value) return popupPocketLabel(place)
+  const mark = hasActiveDayStopForPlace(place) ? '✓' : '＋'
+  const label = hasActiveDayStopForPlace(place) ? '일정 빼기' : '일정 추가'
   return `<span aria-hidden="true">${mark}</span><span>${label}</span>`
 }
 
@@ -1592,11 +1617,15 @@ async function addPocketPlaceToRoute(place) {
 
   try {
     const stop = await itineraryStore.addPlaceToDay(tripId.value, activeDayNumber.value, itineraryPlace, {
-      selectedTime: nextDefaultTime(activeStops.value),
+      selectedTime: nextRouteStartTime(activeStops.value),
+      memo: stayMemoFromMinutes(DEFAULT_STAY_MINUTES),
       transport: 'walk',
     })
     selectedStopId.value = stop.id
+    await itineraryStore.fetchTripItinerary(tripId.value, trip.value)
     itineraryNotice.value = `${place.name}을(를) ${activeDayNumber.value}일차 루트에 추가했습니다.`
+    await nextTick()
+    renderMapPlacesAfterLayout({ preserveViewport: true })
   } catch {
     // store error를 오른쪽 일정 패널에서 표시한다.
   }
@@ -1632,6 +1661,7 @@ async function updateLegTransport(stop, transport) {
     transport,
   }
   setStopDraft(stop, { transport })
+  renderMapPlaces()
   try {
     await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
       selectedTime: draft.selectedTime,
@@ -1685,7 +1715,17 @@ function startStopDrag(stop, event) {
   const body = card.closest('.route-stop-list')
   if (!body) return
   const rect = card.getBoundingClientRect()
-  timelineDragState.value = { type: 'move', stop, body, grabOffsetY: event.clientY - rect.top }
+  const startMinutes =
+    selectedTimeToMinutes(stopDraft(stop).selectedTime || stop.selectedTime) ??
+    fallbackStopMinutes(stop)
+  timelineDragState.value = {
+    type: 'move',
+    stop,
+    body,
+    grabOffsetY: event.clientY - rect.top,
+    lastMinutes: startMinutes,
+    moveDirection: 1,
+  }
   selectedStopId.value = stop.id
   beginTimelinePointerTracking()
 }
@@ -1720,7 +1760,14 @@ function handleTimelinePointerMove(event) {
   if (state.type === 'move') {
     const rect = state.body.getBoundingClientRect()
     const top = event.clientY - rect.top + state.body.scrollTop - state.grabOffsetY
-    setStopDraft(state.stop, { selectedTime: topToSelectedTime(top) })
+    const selectedTime = topToSelectedTime(top)
+    const nextMinutes = selectedTimeToMinutes(selectedTime) ?? state.lastMinutes
+    timelineDragState.value = {
+      ...state,
+      lastMinutes: nextMinutes,
+      moveDirection: nextMinutes >= state.lastMinutes ? 1 : -1,
+    }
+    setStopDraft(state.stop, { selectedTime })
   } else {
     const deltaMinutes = roundToTimelineStep(((event.clientY - state.startY) / TIMELINE_HOUR_HEIGHT_PX) * 60)
     if (state.type === 'resize-bottom') {
@@ -1852,6 +1899,11 @@ function isRoutedPlace(place) {
   return allRouteDayUsagesForPlace(place).length > 0
 }
 
+function hasActiveDayStopForPlace(place) {
+  const key = routePlaceKey(place)
+  return Boolean(activeDay.value?.stops?.some((stop) => stopPlaceKey(stop) === key))
+}
+
 function syncStopDrafts() {
   const nextDrafts = {}
   activeStops.value.forEach((stop) => {
@@ -1893,6 +1945,8 @@ function orderTimelineStops(stops = []) {
   return [...stops].sort((left, right) => {
     const leftTime = selectedTimeToMinutes(stopDraft(left).selectedTime || left.selectedTime)
     const rightTime = selectedTimeToMinutes(stopDraft(right).selectedTime || right.selectedTime)
+    const dragOrder = overlappingDragOrder(left, right, leftTime, rightTime)
+    if (dragOrder) return dragOrder
     return (
       (leftTime ?? fallbackStopMinutes(left)) -
         (rightTime ?? fallbackStopMinutes(right)) ||
@@ -1900,6 +1954,40 @@ function orderTimelineStops(stops = []) {
       Number(left.id ?? 0) - Number(right.id ?? 0)
     )
   })
+}
+
+function overlappingDragOrder(left, right, leftTime, rightTime) {
+  const state = timelineDragState.value
+  if (state?.type !== 'move' || !state.stop) return 0
+
+  const leftIsDragged = String(left.id) === String(state.stop.id)
+  const rightIsDragged = String(right.id) === String(state.stop.id)
+  if (leftIsDragged === rightIsDragged) return 0
+
+  const dragged = leftIsDragged ? left : right
+  const other = leftIsDragged ? right : left
+  const draggedStart = (leftIsDragged ? leftTime : rightTime) ?? fallbackStopMinutes(dragged)
+  const otherStart = (leftIsDragged ? rightTime : leftTime) ?? fallbackStopMinutes(other)
+  const draggedEnd = draggedStart + stopStayMinutes(dragged)
+  const otherEnd = otherStart + stopStayMinutes(other)
+  const overlaps = draggedStart < otherEnd && draggedEnd > otherStart
+  if (!overlaps) return 0
+
+  const draggedAfterOther = state.moveDirection >= 0
+  if (leftIsDragged) return draggedAfterOther ? 1 : -1
+  return draggedAfterOther ? -1 : 1
+}
+
+function nextRouteStartTime(stops = []) {
+  const orderedStops = orderTimelineStops(stops)
+  if (!orderedStops.length) return minutesToSelectedTime(TIMELINE_START_HOUR * 60)
+
+  const lastStop = orderedStops[orderedStops.length - 1]
+  const lastMinutes =
+    selectedTimeToMinutes(stopDraft(lastStop).selectedTime || lastStop.selectedTime) ??
+    fallbackStopMinutes(lastStop)
+  const maxStart = TIMELINE_END_HOUR * 60 - MIN_STAY_MINUTES
+  return minutesToSelectedTime(Math.min(maxStart, lastMinutes + 120))
 }
 
 function buildTimelineLayout(stops = []) {
@@ -1913,6 +2001,20 @@ function buildTimelineLayout(stops = []) {
     cursor = top + height + TIMELINE_CARD_GAP_PX
   })
   return layout
+}
+
+function timelineBaseHeight() {
+  return (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * TIMELINE_HOUR_HEIGHT_PX + 90
+}
+
+function timelineHourLabel(hour) {
+  return `${String(hour).padStart(2, '0')}:00`
+}
+
+function timelineHourStyle(hour) {
+  return {
+    top: `${Math.max(0, hour - TIMELINE_START_HOUR) * TIMELINE_HOUR_HEIGHT_PX}px`,
+  }
 }
 
 function fallbackStopMinutes(stop) {
@@ -1959,7 +2061,7 @@ function stopStayMinutes(stop) {
 
 function stopTimelineHeight(stop) {
   return Math.max(
-    92,
+    72,
     Math.round((stopStayMinutes(stop) / 60) * TIMELINE_HOUR_HEIGHT_PX),
   )
 }
@@ -1969,14 +2071,28 @@ function stopTimelineStyle(stop) {
   return {
     top: `${layout?.top ?? selectedTimeToTop(stopDraft(stop).selectedTime || stop.selectedTime)}px`,
     height: `${layout?.height ?? stopTimelineHeight(stop)}px`,
+    '--route-stop-color': mapMarkerColor(stop.place),
   }
 }
 
-function routeLegTimelineStyle(stop) {
+function routeLegTimelineStyle(stop, nextStop) {
   const layout = activeTimelineLayout.value.get(stop.id)
+  const nextLayout = nextStop ? activeTimelineLayout.value.get(nextStop.id) : null
+  const stopBottom = (layout?.top ?? 0) + (layout?.height ?? stopTimelineHeight(stop))
+  const nextTop = nextLayout?.top ?? stopBottom + 52
+  const gap = Math.max(0, nextTop - stopBottom)
+  const legHeight = 34
   return {
-    top: `${(layout?.top ?? 0) + (layout?.height ?? stopTimelineHeight(stop)) + 8}px`,
+    top: `${stopBottom + Math.max(4, (gap - legHeight) / 2)}px`,
   }
+}
+
+function routePlaceTypeLabel(place = {}) {
+  const markerType = mapMarkerType(toMapPlace(place))
+  if (markerType === 'attraction') return '관광지'
+  if (markerType === 'restaurant') return '식당'
+  if (markerType === 'cafe') return '카페'
+  return place.category || '장소'
 }
 
 function stayMinutesFromMemo(memo) {
@@ -2014,6 +2130,68 @@ function travelProviderLabel() {
 
 function travelEstimateTitle(stop) {
   return travelEstimateLabel(stop) || '이동 시간'
+}
+
+function routeLegSummary(fromStop, toStop) {
+  const option = transportOption(routeLegMode(fromStop))
+  const estimate = routeLegEstimate(fromStop, toStop)
+  const duration = formatTravelDuration(estimate?.durationSeconds)
+  const distance = formatTravelDistance(estimate?.distanceMeters)
+  return [option.label, duration || '계산 중', distance].filter(Boolean).join(' · ')
+}
+
+function routeLegTitle(fromStop, toStop) {
+  const estimate = routeLegEstimate(fromStop, toStop)
+  if (estimate?.status === 'estimated') return '계산된 경로 기준 이동 시간입니다.'
+  if (estimate?.status === 'manual') return '직접 입력한 이동 시간입니다.'
+  return '좌표 거리로 임시 계산한 이동 시간입니다. 교통수단을 바꾸면 지도 경로와 시간이 함께 갱신됩니다.'
+}
+
+function routeLegMode(stop) {
+  return stopDraft(stop).transport || stop.transport || 'other'
+}
+
+function transportOption(value) {
+  return TRANSPORT_VIEW_OPTIONS.find((option) => option.value === value) || TRANSPORT_VIEW_OPTIONS[3]
+}
+
+function routeLegEstimate(fromStop, toStop) {
+  const estimate = toStop?.travelFromPrevious
+  if (
+    estimate?.fromStopId === fromStop?.id &&
+    Number.isFinite(estimate.durationSeconds)
+  ) {
+    return estimate
+  }
+
+  const fromPlace = toMapPlace(fromStop?.place)
+  const toPlace = toMapPlace(toStop?.place)
+  if (!hasCoordinates(fromPlace) || !hasCoordinates(toPlace)) return null
+
+  const distance = distanceMeters(
+    fromPlace.latitude,
+    fromPlace.longitude,
+    toPlace.latitude,
+    toPlace.longitude,
+  )
+
+  return {
+    status: 'local',
+    mode: routeLegMode(fromStop),
+    durationSeconds: fallbackTravelDurationSeconds(routeLegMode(fromStop), distance),
+    distanceMeters: distance,
+  }
+}
+
+function fallbackTravelDurationSeconds(mode, meters) {
+  const metersPerMinuteByMode = {
+    walk: 75,
+    car: 520,
+    public_transit: 330,
+    other: 220,
+  }
+  const metersPerMinute = metersPerMinuteByMode[mode] || metersPerMinuteByMode.other
+  return Math.max(60, Math.round((meters / metersPerMinute) * 60))
 }
 
 function formatTravelDuration(seconds) {
@@ -2221,6 +2399,14 @@ function markerSymbol(place) {
   if (markerType === 'cafe') return '◆'
   if (markerType === 'restaurant') return '●'
   return '•'
+}
+
+function mapMarkerColor(place) {
+  const markerType = mapMarkerType(toMapPlace(place))
+  if (markerType === 'attraction') return '#6f8d61'
+  if (markerType === 'restaurant') return '#9a4f4b'
+  if (markerType === 'cafe') return '#8b668e'
+  return '#4f6f8f'
 }
 
 function mapMarkerLabel(place) {
@@ -2542,27 +2728,39 @@ function normalizeSearchText(value = '') {
             <div class="route-builder-head"><Button label="장소 담기로" severity="secondary" outlined @click="closeItineraryBuilder" /></div>
             <SelectButton v-model="activeDayNumber" :options="dayTabs" option-label="label" option-value="value" class="day-tabs" />
             <section class="route-stop-section">
-              <header><h2>DAY {{ activeDay?.dayNumber || 1 }} · {{ formatDayDate(activeDay?.date) }}</h2></header>
-              <div v-if="activeDisplayStops.length" class="route-stop-list">
-                <template v-for="(stop, index) in activeDisplayStops" :key="stop.id">
-                  <article class="route-stop-card" :class="{ active: selectedStopId === stop.id }" :style="stopTimelineStyle(stop)" @pointerdown="startStopDrag(stop, $event)">
-                    <span class="route-stop-resize route-stop-resize--top" @pointerdown.stop.prevent="startStayResize(stop, 'top', $event)"></span>
-                    <div class="route-stop-main">
-                      <span>{{ stopDraft(stop).selectedTime || '--:--' }}</span>
-                      <div><strong>{{ stop.place.name }}</strong><small>{{ stop.place.category || '장소' }}</small><em>머무는 시간 {{ formatStayMinutes(stopStayMinutes(stop)) }}</em></div>
-                    </div>
-                    <Button class="route-stop-delete" label="×" severity="danger" text rounded :aria-label="stop.place.name + ' 삭제'" @pointerdown.stop @click="deleteStop(stop)" />
-                    <span class="route-stop-resize route-stop-resize--bottom" @pointerdown.stop.prevent="startStayResize(stop, 'bottom', $event)"></span>
-                  </article>
-                  <div v-if="index < activeDisplayStops.length - 1" class="route-leg" :style="routeLegTimelineStyle(stop)">
-                    <div class="route-leg__details">
-                      <Select :model-value="stopDraft(stop).transport" :options="TRANSPORT_VIEW_OPTIONS" option-label="label" option-value="value" :disabled="itineraryStore.mutating" @pointerdown.stop @update:model-value="updateLegTransport(stop, $event)" />
-                      <em :title="travelEstimateTitle(activeDisplayStops[index + 1])">{{ travelEstimateLabel(activeDisplayStops[index + 1]) }}</em>
-                    </div>
+              <header class="route-section-head">
+                <strong>DAY {{ activeDay?.dayNumber || 1 }} · {{ formatDayDate(activeDay?.date) }}</strong>
+                <small>09:00부터 21:00까지, 카드 높이로 머무는 시간을 조정합니다.</small>
+              </header>
+              <div class="route-stop-list">
+                <div class="route-time-canvas" :style="timelineCanvasStyle">
+                  <div v-for="hour in timelineHours" :key="hour" class="route-hour-row" :style="timelineHourStyle(hour)">
+                    <span>{{ timelineHourLabel(hour) }}</span>
+                    <i aria-hidden="true"></i>
                   </div>
-                </template>
+                  <p v-if="!activeDisplayStops.length" class="empty-pocket route-empty-timeline">지도 마커나 Pocket의 ＋ 버튼으로 장소를 일정에 추가하세요.</p>
+                  <template v-for="(stop, index) in activeDisplayStops" :key="stop.id">
+                    <article class="route-stop-card" :class="{ active: selectedStopId === stop.id }" :style="stopTimelineStyle(stop)" @pointerdown="startStopDrag(stop, $event)">
+                      <span class="route-stop-resize route-stop-resize--top" @pointerdown.stop.prevent="startStayResize(stop, 'top', $event)"></span>
+                      <div class="route-stop-main">
+                        <div>
+                          <strong>{{ stop.place.name }}</strong>
+                          <small><b>{{ routePlaceTypeLabel(stop.place) }}</b>{{ stop.place.category ? ' · ' + stop.place.category : '' }}</small>
+                          <em>머무는 시간 {{ formatStayMinutes(stopStayMinutes(stop)) }}</em>
+                        </div>
+                      </div>
+                      <Button class="route-stop-delete" label="×" severity="danger" text rounded :aria-label="stop.place.name + ' 삭제'" @pointerdown.stop @click="deleteStop(stop)" />
+                      <span class="route-stop-resize route-stop-resize--bottom" @pointerdown.stop.prevent="startStayResize(stop, 'bottom', $event)"></span>
+                    </article>
+                    <div v-if="index < activeDisplayStops.length - 1" class="route-leg" :style="routeLegTimelineStyle(stop, activeDisplayStops[index + 1])">
+                      <div class="route-leg__details">
+                        <Select :model-value="routeLegMode(stop)" :options="TRANSPORT_VIEW_OPTIONS" option-label="label" option-value="value" :disabled="itineraryStore.mutating" @pointerdown.stop @update:model-value="updateLegTransport(stop, $event)" />
+                        <em :title="routeLegTitle(stop, activeDisplayStops[index + 1])">{{ routeLegSummary(stop, activeDisplayStops[index + 1]) }}</em>
+                      </div>
+                    </div>
+                  </template>
+                </div>
               </div>
-              <p v-else class="empty-pocket">담은 장소를 일정에 배치해보세요.</p>
             </section>
           </template>
         </aside>
@@ -3778,32 +3976,81 @@ function normalizeSearchText(value = '') {
 .route-stop-list {
   position: relative;
   display: block;
-  height: min(640px, 64vh);
+  height: min(680px, 66vh);
   min-height: 540px;
   overflow: auto;
-  padding: 0 12px 32px 74px;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 87px,
-      rgba(207, 187, 151, 0.55) 87px,
-      rgba(207, 187, 151, 0.55) 88px
-    );
+  padding: 8px 8px 32px 0;
+  border: 1px solid rgba(213, 195, 164, 0.72);
+  border-radius: 12px;
+  background: #fffaf3;
+}
+
+.route-time-canvas {
+  position: relative;
+  min-width: 0;
+  margin-left: 58px;
+  border-left: 3px solid #e2d5c0;
+}
+
+.route-hour-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+}
+
+.route-hour-row span {
+  position: absolute;
+  top: -10px;
+  left: -58px;
+  width: 48px;
+  color: #b19f87;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.route-hour-row i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid #ecdfcb;
+}
+
+.route-empty-timeline {
+  position: absolute;
+  top: 36px;
+  left: 18px;
+  right: 18px;
+  border: 1px dashed #dfcfb8;
+  border-radius: 10px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
 }
 
 .route-stop-card {
   position: absolute;
-  left: 74px;
-  right: 12px;
-  min-height: 92px;
+  left: -2px;
+  right: 8px;
+  min-height: 72px;
   margin: 0;
-  padding: 18px 46px 16px 18px;
-  display: block;
+  padding: 13px 44px 14px 18px;
+  border-left: 6px solid var(--route-stop-color, #6f8d61);
+  border-color: #e6d8c2;
+  border-radius: 0 12px 12px 0;
+  display: flex;
+  align-items: center;
   cursor: grab;
   user-select: none;
-  overflow: visible;
+  overflow: hidden;
   z-index: 10;
+  box-shadow: 0 8px 18px rgba(82, 68, 45, 0.09);
+  transition:
+    top 0.16s ease,
+    height 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .route-stop-card:active {
@@ -3811,22 +4058,11 @@ function normalizeSearchText(value = '') {
 }
 
 .route-stop-main {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
+  display: block;
   width: 100%;
   min-width: 0;
   padding: 0;
   cursor: inherit;
-}
-
-.route-stop-main span {
-  color: var(--accent);
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 1.25;
-  white-space: nowrap;
 }
 
 .route-stop-main strong {
@@ -3842,21 +4078,34 @@ function normalizeSearchText(value = '') {
 .route-stop-main small {
   display: block;
   min-width: 0;
-  margin-top: 6px;
+  margin-top: 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ink-sub);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
+}
+
+.route-stop-main small b {
+  margin-right: 5px;
+  border: 1px solid #e5d5bd;
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: #b9693f;
+  font-size: 11px;
 }
 
 .route-stop-main em {
   display: block;
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--ink-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-style: normal;
-  font-weight: 850;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .route-stop-delete {
@@ -3869,10 +4118,10 @@ function normalizeSearchText(value = '') {
   position: absolute;
   left: 50%;
   z-index: 20;
-  width: 76px;
-  height: 8px;
+  width: 54px;
+  height: 6px;
   border-radius: 999px;
-  background: #d7c8af;
+  background: #cdbfa7;
   transform: translateX(-50%);
   cursor: ns-resize;
 }
@@ -3887,19 +4136,19 @@ function normalizeSearchText(value = '') {
 
 .route-leg {
   position: absolute;
-  left: 96px;
+  left: 20px;
   z-index: 14;
-  width: 210px;
-  max-width: calc(100% - 122px);
-  height: 34px;
+  width: min(300px, calc(100% - 48px));
+  min-height: 34px;
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 999px;
   display: flex;
   align-items: center;
-  background: #efe5d4;
-  box-shadow: none;
+  background: #f5eddf;
+  box-shadow: 0 3px 8px rgba(82, 68, 45, 0.08);
+  transition: top 0.16s ease;
 }
 
 .route-leg > span {
@@ -3917,9 +4166,10 @@ function normalizeSearchText(value = '') {
 }
 
 .route-leg__details :deep(.p-select) {
-  width: 92px;
-  min-width: 92px;
+  width: 128px;
+  min-width: 128px;
   height: 28px;
+  border-color: #dfcfb8;
   border-radius: 999px;
   background: #fff;
 }
@@ -3934,8 +4184,8 @@ function normalizeSearchText(value = '') {
 }
 
 .route-leg em {
-  min-width: 38px;
-  max-width: 76px;
+  min-width: 0;
+  max-width: none;
   padding: 0;
   overflow: hidden;
   text-overflow: ellipsis;
