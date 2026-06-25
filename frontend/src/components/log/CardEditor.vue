@@ -1355,17 +1355,21 @@ watch(
 }
 /* 전역(사진 공통) 글씨 — 개별 설정과 디자인으로 구분되게 옅은 박스로 묶는다. */
 .global-type {
-  padding: 8px 10px 10px;
-  margin-bottom: 12px;
+  padding: 7px 9px;
+  margin-bottom: 8px;
   background: var(--paper-dim);
   border: 1px solid var(--line2);
   border-radius: 10px;
 }
 .global-type .ctl-lbl {
-  margin-top: 6px;
+  margin-top: 4px;
+  margin-bottom: 3px;
 }
 .global-type .ctl-lbl:first-child {
   margin-top: 0;
+}
+.global-type .row {
+  margin-bottom: 0;
 }
 /* 전역 글씨 ↔ 선택 내용 구분선 */
 .sep {
@@ -1463,7 +1467,7 @@ watch(
   gap: 8px;
   font-size: 0.82rem;
   color: var(--ink-sub);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .full {
   width: 100%;
