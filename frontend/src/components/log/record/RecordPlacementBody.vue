@@ -3,13 +3,14 @@
 // logs-mockup ① 디자인. 일정 경로 타임라인(DAY 탭 + stop) 위에 사진을 배치해 시간순으로 본다.
 // 일정(days)은 부모(TripPreviewDialog)가 이미 받은 걸 props 로 주입받아 재사용한다(중복 fetch 방지).
 // 사진만 usePhotoPlacement 가 로드하고, 배치/해제는 포인터 드래그(useRecordDrag)로 한다.
-import { computed, ref, watch, onScopeDispose } from 'vue'
+import { computed, nextTick, ref, watch, onScopeDispose } from 'vue'
 import RecordPhotoChip from './RecordPhotoChip.vue'
 import RecordPhotoTray from './RecordPhotoTray.vue'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import PhotoManageDialog from '@/components/log/PhotoManageDialog.vue'
 import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
 import { useRecordDrag, cancelPhotoDrag } from '@/composables/useRecordDrag'
+import { loadKakaoMaps } from '@/utils/kakaoMap'
 
 const props = defineProps({
   days: { type: Array, default: () => [] }, // 부모가 받은 일정(plannedDays)
@@ -34,6 +35,13 @@ const {
 // 드래그(포인터) 배치/해제 등록 + 언마운트 시 진행 중 드래그 정리.
 const { drag } = useRecordDrag({ place: placePhoto, unplace: unplacePhoto })
 onScopeDispose(cancelPhotoDrag)
+
+const recordMapRef = ref(null)
+const recordMapUnavailable = ref(false)
+let recordMap = null
+let recordPolyline = null
+let recordMarkers = []
+let recordMapSeq = 0
 
 // 표시용 정렬 — 응답 정렬에 의존하지 않고 dayNumber / sortOrder(동률 시 selectedTime) 기준.
 function timeKey(value) {
@@ -94,6 +102,116 @@ const mapNodes = computed(() => {
 })
 const polyline = computed(() => mapNodes.value.map((n) => `${n.x},${n.y}`).join(' '))
 
+const recordMapStops = computed(() =>
+  activeStops.value
+    .map((stop, index) => ({
+      id: stop.id ?? index,
+      no: stop.sortOrder ?? index + 1,
+      lat: num(stop.place?.latitude),
+      lng: num(stop.place?.longitude),
+    }))
+    .filter((stop) => stop.lat != null && stop.lng != null),
+)
+
+watch(
+  () => recordMapStops.value.map((stop) => `${stop.lat},${stop.lng}`).join('|'),
+  () => {
+    renderRecordMap()
+  },
+  { flush: 'post', immediate: true },
+)
+
+onScopeDispose(clearRecordMap)
+
+function clearRecordMap() {
+  recordMarkers.forEach((marker) => marker.setMap?.(null))
+  recordMarkers = []
+  recordPolyline?.setMap?.(null)
+  recordPolyline = null
+  recordMap = null
+}
+
+function fitRecordMap(kakao, positions) {
+  if (!recordMap || !positions.length) return
+  if (positions.length === 1) {
+    recordMap.setCenter(positions[0])
+    recordMap.setLevel(5)
+    return
+  }
+
+  const bounds = new kakao.maps.LatLngBounds()
+  positions.forEach((position) => bounds.extend(position))
+  recordMap.setBounds(bounds)
+}
+
+async function renderRecordMap() {
+  const seq = ++recordMapSeq
+  clearRecordMap()
+  recordMapUnavailable.value = false
+
+  await nextTick()
+  const container = recordMapRef.value
+  if (!container) return
+  if (!recordMapStops.value.length) {
+    recordMapUnavailable.value = true
+    return
+  }
+
+  try {
+    const kakao = await loadKakaoMaps()
+    if (seq !== recordMapSeq) return
+
+    const positions = recordMapStops.value.map(
+      (stop) => new kakao.maps.LatLng(stop.lat, stop.lng),
+    )
+    recordMap = new kakao.maps.Map(container, {
+      center: positions[0],
+      level: positions.length > 1 ? 6 : 5,
+    })
+
+    if (positions.length > 1) {
+      recordPolyline = new kakao.maps.Polyline({
+        path: positions,
+        strokeWeight: 4,
+        strokeColor: '#c2693f',
+        strokeOpacity: 0.86,
+        strokeStyle: 'shortdash',
+      })
+      recordPolyline.setMap(recordMap)
+    }
+
+    recordMarkers = positions.map((position, index) => {
+      const markerNode = document.createElement('span')
+      markerNode.className = 'rec-kakao-pin'
+      const label = document.createElement('b')
+      label.textContent = String(index + 1)
+      markerNode.appendChild(label)
+
+      const marker = new kakao.maps.CustomOverlay({
+        content: markerNode,
+        position,
+        yAnchor: 1.2,
+      })
+      marker.setMap(recordMap)
+      return marker
+    })
+
+    fitRecordMap(kakao, positions)
+    requestAnimationFrame(() => {
+      if (!recordMap) return
+      kakao.maps.event.trigger(recordMap, 'resize')
+      fitRecordMap(kakao, positions)
+    })
+    setTimeout(() => {
+      if (!recordMap) return
+      kakao.maps.event.trigger(recordMap, 'resize')
+      fitRecordMap(kakao, positions)
+    }, 120)
+  } catch {
+    recordMapUnavailable.value = true
+  }
+}
+
 const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
 function stopType(stop) {
   return stop.place?.category || stop.place?.categoryGroup || ''
@@ -135,9 +253,10 @@ watch(
       <div class="rec-cols">
         <!-- 좌: 경로 지도(스키매틱) -->
         <div class="rec-map">
-          <div class="rec-map-grid"></div>
+          <div ref="recordMapRef" class="rec-map-canvas"></div>
+          <div v-if="recordMapUnavailable" class="rec-map-grid"></div>
           <svg
-            v-if="mapNodes.length"
+            v-if="recordMapUnavailable && mapNodes.length"
             class="rec-map-svg"
             viewBox="0 0 100 100"
             preserveAspectRatio="xMidYMid meet"
@@ -272,9 +391,17 @@ watch(
   overflow: hidden;
   background: linear-gradient(135deg, #e9e2cf, #e3dcc4 50%, #ece6d4);
 }
+.rec-map-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+}
 .rec-map-grid {
   position: absolute;
   inset: 0;
+  z-index: 1;
   background-image:
     linear-gradient(rgba(120, 100, 60, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(120, 100, 60, 0.05) 1px, transparent 1px);
@@ -285,6 +412,7 @@ watch(
   inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 2;
 }
 .rec-route {
   fill: none;
@@ -316,6 +444,28 @@ watch(
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 5px 10px;
+  z-index: 3;
+}
+
+:global(.rec-kakao-pin) {
+  align-items: center;
+  background: var(--accent);
+  border: 2px solid var(--on-fill);
+  border-radius: 50% 50% 50% 0;
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.25);
+  color: #fffdf8;
+  display: flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 24px;
+  justify-content: center;
+  transform: rotate(-45deg);
+  width: 24px;
+}
+
+:global(.rec-kakao-pin b) {
+  display: block;
+  transform: rotate(45deg);
 }
 
 /* DAY 탭 + 타임라인 */
