@@ -112,6 +112,11 @@ function close() {
   emit('update:modelValue', false)
 }
 
+function handleModalUpdate(value) {
+  if (value === false && tripStore.creating) return
+  emit('update:modelValue', value)
+}
+
 function resetForm() {
   Object.assign(form, createDefaultTripForm())
   calendarMonth.value = new Date(`${form.startDate}T00:00:00`)
@@ -220,7 +225,7 @@ async function submit(destination) {
   <BaseModal
     :model-value="modelValue"
     title="여행의 뼈대를 잡아요"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="handleModalUpdate"
   >
     <form class="trip-create-dialog" data-testid="trip-create-dialog" @submit.prevent="submit('places')">
       <p class="trip-create-dialog__eyebrow">새 여행</p>

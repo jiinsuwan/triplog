@@ -26,70 +26,6 @@ let suppressClickUntil = 0
 
 const DRAG_CLICK_THRESHOLD = 12
 
-const previewMockTrips = {
-  upcoming: [
-    {
-      id: -101,
-      title: '강릉 주말 바다',
-      startDate: '2026-07-04',
-      endDate: '2026-07-06',
-      region: '강릉',
-      theme: '바다 산책',
-      status: TRIP_STATUS.UPCOMING,
-      tags: ['#바다', '#카페'],
-      serial: 'TL-NEXT-001',
-      mock: true,
-      itinerary: {
-        dayCount: 3,
-        days: [
-          {
-            dayNumber: 1,
-            date: '2026-07-04',
-            stops: [
-              { id: 'mock-next-1', place: { name: '안목해변', category: '바다' }, startTime: '10:00' },
-              { id: 'mock-next-2', place: { name: '강릉 커피거리', category: '카페' }, startTime: '13:00' },
-            ],
-          },
-          {
-            dayNumber: 2,
-            date: '2026-07-05',
-            stops: [
-              { id: 'mock-next-3', place: { name: '경포호 산책길', category: '산책' }, startTime: '11:00' },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-  past: [
-    {
-      id: -201,
-      title: '전주 한옥 골목',
-      startDate: '2026-03-14',
-      endDate: '2026-03-16',
-      region: '전주',
-      theme: '골목 미식',
-      status: 'past',
-      tags: ['#한옥', '#골목'],
-      serial: 'TL-MEM-001',
-      mock: true,
-      itinerary: {
-        dayCount: 3,
-        days: [
-          {
-            dayNumber: 1,
-            date: '2026-03-14',
-            stops: [
-              { id: 'mock-memory-1', place: { name: '전주 한옥마을', category: '문화' }, startTime: '10:30' },
-              { id: 'mock-memory-2', place: { name: '경기전', category: '역사' }, startTime: '14:00' },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-}
-
 const displayName = computed(() => {
   const user = auth.user
   return user?.nickname || user?.name || user?.email?.split('@')[0] || 'T'
@@ -112,12 +48,12 @@ const sections = computed(() => [
   {
     key: 'upcoming',
     title: '곧 떠날 여행',
-    trips: upcomingTrips.value.length ? upcomingTrips.value : previewMockTrips.upcoming,
+    trips: upcomingTrips.value,
   },
   {
     key: 'past',
     title: '다녀온 여행',
-    trips: pastTrips.value.length ? pastTrips.value : previewMockTrips.past,
+    trips: pastTrips.value,
   },
 ])
 const visibleSections = computed(() => sections.value)

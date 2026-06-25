@@ -267,23 +267,23 @@ describe('HomeView', () => {
     expect(wrapper.text()).toContain('새 여행 계획하기')
     expect(wrapper.text()).toContain('TripLog로 여행을 계획해보세요.')
     expect(wrapper.find('.home-resume .ds-ticket__meta').text()).toBe('TripLog·여행을 계획해보세요.')
-    expect(wrapper.findAll('.ds-ticket').length).toBeGreaterThanOrEqual(2)
+    expect(wrapper.findAll('.ds-ticket')).toHaveLength(1)
     expect(wrapper.find('.ds-ticket--unissued').exists()).toBe(true)
     expect(wrapper.find('.home-resume .ds-ticket__barcode').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-empty-create"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-upcoming-empty"]').exists()).toBe(false)
-    expect(wrapper.find('.home-upcoming .ds-ticket').exists()).toBe(true)
-    expect(wrapper.find('.home-stamp-placeholder').exists()).toBe(false)
-    expect(wrapper.find('.home-stamps .ds-stamp').exists()).toBe(true)
-    expect(wrapper.text()).toContain('강릉 주말 바다')
-    expect(wrapper.text()).toContain('전주 한옥 골목')
+    expect(wrapper.find('[data-testid="home-upcoming-empty"]').exists()).toBe(true)
+    expect(wrapper.find('.home-upcoming .home-ticket-button').exists()).toBe(false)
+    expect(wrapper.find('.home-stamp-placeholder').exists()).toBe(true)
+    expect(wrapper.find('.home-memories .home-polaroid-button').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('강릉 주말 바다')
+    expect(wrapper.text()).not.toContain('전주 한옥 골목')
 
     await wrapper.get('[data-testid="home-empty-create"]').trigger('click')
 
     expect(routerMock.push).toHaveBeenCalledWith('/trips/new')
   })
 
-  it('opens home preview mock tickets with the same itinerary-style dialog', async () => {
+  it('does not expose mock preview tickets for authenticated empty users', async () => {
     const auth = useAuthStore()
     const tripStore = useTripStore()
     auth.setTokens('access', 'refresh')
@@ -294,21 +294,11 @@ describe('HomeView', () => {
 
     const wrapper = mountHomeView()
 
-    await wrapper.get('.home-upcoming .home-ticket-button').trigger('click')
-    await flushPromises()
-
+    expect(wrapper.find('.home-upcoming .home-ticket-button').exists()).toBe(false)
+    expect(wrapper.find('.home-memories .home-polaroid-button').exists()).toBe(false)
     expect(fetchItineraryMock).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('안목해변')
-    expect(wrapper.text()).toContain('강릉 커피거리')
-
-    await wrapper.get('.trip-preview-dialog__close').trigger('click')
-    await wrapper.get('.home-memories .home-polaroid-button').trigger('click')
-    await flushPromises()
-
-    expect(fetchItineraryMock).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('전주 한옥마을')
-    expect(wrapper.text()).toContain('경기전')
+    expect(wrapper.find('[data-testid="trip-preview-dialog"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('안목해변')
+    expect(wrapper.text()).not.toContain('전주 한옥마을')
   })
 })

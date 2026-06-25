@@ -128,37 +128,18 @@ describe('TripListView', () => {
     expect(wrapper.text()).not.toContain('My trip tickets')
     expect(wrapper.text()).not.toContain('아직 만든 여행이 없습니다.')
     expect(wrapper.text()).toContain('계획 중 0')
-    expect(wrapper.text()).toContain('곧 떠날 여행 1')
-    expect(wrapper.text()).toContain('다녀온 여행 1')
+    expect(wrapper.text()).toContain('곧 떠날 여행 0')
+    expect(wrapper.text()).toContain('다녀온 여행 0')
     expect(wrapper.text()).toContain('새 여행 추가')
-    expect(wrapper.text()).toContain('강릉 주말 바다')
-    expect(wrapper.text()).toContain('전주 한옥 골목')
-    expect(wrapper.find('.trip-list-section__empty').exists()).toBe(false)
-    expect(wrapper.findAll('[data-testid^="trip-ticket-"]')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('강릉 주말 바다')
+    expect(wrapper.text()).not.toContain('전주 한옥 골목')
+    expect(wrapper.findAll('.trip-list-section__empty')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid^="trip-ticket-"]')).toHaveLength(0)
     expect(wrapper.findAll('.trip-list-section')).toHaveLength(3)
     expect(wrapper.get('main').classes()).toContain('page-canvas')
     expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
     expect(wrapper.find('[data-testid="trip-list-create-top"]').exists()).toBe(false)
     expect(tripStoreMock.fetchTripList).toHaveBeenCalledTimes(1)
-
-    await wrapper.get('[data-testid="trip-ticket--101"]').trigger('click')
-    await flushPromises()
-
-    expect(fetchItineraryMock).not.toHaveBeenCalled()
-    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('안목해변')
-    expect(wrapper.text()).toContain('강릉 커피거리')
-    expect(wrapper.find('[data-testid="trip-preview-detail"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="trip-preview-delete"]').exists()).toBe(false)
-
-    await wrapper.get('[data-testid="trip-preview-detail"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="trip-info-edit-dialog"]').exists()).toBe(true)
-
-    await wrapper.get('.trip-info-edit__head button').trigger('click')
-
-    await wrapper.get('.trip-preview-dialog__close').trigger('click')
 
     await wrapper.get('[data-testid="trip-list-create"]').trigger('click')
 
@@ -189,6 +170,38 @@ describe('TripListView', () => {
         status: 'planning',
       }),
     )
+    expect(routerMock.push).toHaveBeenCalledWith({
+      name: 'trip-place-search',
+      params: { tripId: 9 },
+    })
+  })
+
+  it('keeps the create dialog open while create request is pending', async () => {
+    const wrapper = mountTripListView()
+    let resolveCreate
+    tripStoreMock.createTrip.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          tripStoreMock.creating = true
+          resolveCreate = (trip) => {
+            tripStoreMock.creating = false
+            resolve(trip)
+          }
+        }),
+    )
+
+    await wrapper.get('[data-testid="trip-list-create"]').trigger('click')
+    await wrapper.get('[data-testid="trip-create-title"]').setValue('제주 가을 여행')
+    await wrapper.get('[data-testid="trip-create-region"]').setValue('제주 서귀포')
+    await wrapper.get('[data-testid="trip-create-theme"]').setValue('바다 산책')
+    await wrapper.get('[data-testid="trip-create-dialog"]').trigger('submit')
+    await wrapper.get('.ds-scrim').trigger('click')
+
+    expect(wrapper.find('[data-testid="trip-create-dialog"]').exists()).toBe(true)
+
+    resolveCreate({ ...planningTrip, id: 9 })
+    await flushPromises()
+
     expect(routerMock.push).toHaveBeenCalledWith({
       name: 'trip-place-search',
       params: { tripId: 9 },
