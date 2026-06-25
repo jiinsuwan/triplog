@@ -253,6 +253,7 @@ function sectionEmptyText(section) {
     <AppTopBar
       active="trips"
       :show-search="false"
+      show-logs
       :user-initial="userInitial"
       :show-default-action="false"
     />

@@ -57,13 +57,13 @@ function onPointerDown(event) {
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: rgba(20, 20, 20, 0.62);
-  color: #fff;
+  background: color-mix(in srgb, var(--ink) 68%, transparent);
+  color: var(--on-fill);
   font-size: 0.6rem;
   line-height: 1;
   cursor: pointer;
 }
 .remove:hover {
-  background: #f04452;
+  background: var(--complete);
 }
 </style>

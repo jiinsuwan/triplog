@@ -1,5 +1,6 @@
 // CardEditor 캔버스 보조 드로잉.
 // Vue 상태와 분리된 순수 Canvas 함수만 둔다. 에디터 SFC는 상태 조율과 이벤트 처리에 집중한다.
+import { tokenAlpha, tokenColor } from '@/utils/designTokens'
 
 export const TEXT_LH = 1.4
 
@@ -18,8 +19,8 @@ export function paintEditorText(ctx, t, { W, H, fontFamily, fontScale }) {
   ctx.textBaseline = 'middle'
   ctx.font = `${size}px "${fontFamily}", sans-serif`
   ctx.lineWidth = Math.max(2, W * 0.004)
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)'
-  ctx.fillStyle = t.color ?? '#ffffff'
+  ctx.strokeStyle = tokenAlpha('--ink', 0.45)
+  ctx.fillStyle = t.color ?? tokenColor('--on-fill')
   const y0 = -((lines.length - 1) * lh) / 2
   lines.forEach((ln, i) => {
     const y = y0 + i * lh
@@ -45,7 +46,7 @@ export function drawEditorTextBox(ctx, t, { W, H, fontFamily, fontScale }) {
   ctx.save()
   ctx.translate(t.x * W, t.y * H)
   ctx.rotate(((t.rotation ?? 0) * Math.PI) / 180)
-  ctx.strokeStyle = '#3182f6'
+  ctx.strokeStyle = tokenColor('--accent')
   ctx.lineWidth = Math.max(1.5, W * 0.002)
   ctx.setLineDash([W * 0.006, W * 0.004])
   ctx.strokeRect(-m.hw, -m.hh, m.hw * 2, m.hh * 2)
@@ -55,7 +56,7 @@ export function drawEditorTextBox(ctx, t, { W, H, fontFamily, fontScale }) {
   ctx.moveTo(0, -m.hh)
   ctx.lineTo(0, rotY)
   ctx.stroke()
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = tokenColor('--paper-card')
   for (const [hx, hy] of [[-m.hw, -m.hh], [m.hw, -m.hh], [m.hw, m.hh], [-m.hw, m.hh]]) {
     ctx.beginPath()
     ctx.arc(hx, hy, r, 0, Math.PI * 2)
@@ -64,9 +65,9 @@ export function drawEditorTextBox(ctx, t, { W, H, fontFamily, fontScale }) {
   }
   ctx.beginPath()
   ctx.arc(0, rotY, r, 0, Math.PI * 2)
-  ctx.fillStyle = '#3182f6'
+  ctx.fillStyle = tokenColor('--accent')
   ctx.fill()
-  ctx.strokeStyle = '#fff'
+  ctx.strokeStyle = tokenColor('--paper-card')
   ctx.stroke()
   ctx.restore()
 }
@@ -81,7 +82,7 @@ export function drawSelectionBox(ctx, box, rotDeg, { W, H, handleScale = 0.5 }) 
   ctx.save()
   ctx.translate(cx, cy)
   ctx.rotate((rotDeg * Math.PI) / 180)
-  ctx.strokeStyle = '#3182f6'
+  ctx.strokeStyle = tokenColor('--accent')
   ctx.lineWidth = Math.max(1.5, W * 0.002)
   ctx.setLineDash([W * 0.006, W * 0.004])
   ctx.strokeRect(-hw, -hh, hw * 2, hh * 2)
@@ -91,7 +92,7 @@ export function drawSelectionBox(ctx, box, rotDeg, { W, H, handleScale = 0.5 }) 
   ctx.moveTo(0, -hh)
   ctx.lineTo(0, rotY)
   ctx.stroke()
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = tokenColor('--paper-card')
   for (const [hx, hy] of [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]) {
     ctx.beginPath()
     ctx.arc(hx, hy, r, 0, Math.PI * 2)
@@ -100,9 +101,9 @@ export function drawSelectionBox(ctx, box, rotDeg, { W, H, handleScale = 0.5 }) 
   }
   ctx.beginPath()
   ctx.arc(0, rotY, r, 0, Math.PI * 2)
-  ctx.fillStyle = '#3182f6'
+  ctx.fillStyle = tokenColor('--accent')
   ctx.fill()
-  ctx.strokeStyle = '#fff'
+  ctx.strokeStyle = tokenColor('--paper-card')
   ctx.stroke()
   ctx.restore()
 }
@@ -139,7 +140,7 @@ export function paintEditorSticker(ctx, s, img, { W, H }) {
   ctx.save()
   ctx.translate(s.x * W, s.y * H)
   ctx.rotate(((s.rotation ?? 0) * Math.PI) / 180)
-  ctx.shadowColor = 'rgba(0,0,0,0.45)' // 밝은 사진 위에서도 흰 선이 읽히게 옅은 그림자
+  ctx.shadowColor = tokenAlpha('--ink', 0.45) // 밝은 사진 위에서도 흰 선이 읽히게 옅은 그림자
   ctx.shadowBlur = Math.max(2, px * 0.05)
   ctx.drawImage(img, -px / 2, -px / 2, px, px)
   ctx.restore()
@@ -176,8 +177,8 @@ export function paintEditorLine(ctx, l, { W, H }) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   const halo = lw + Math.max(2, lw * 0.8)
-  drawStroke('rgba(0,0,0,0.55)', halo, halo * 2.6)
-  drawStroke(l.color ?? '#ffffff', lw, lw * 3.4)
+  drawStroke(tokenAlpha('--ink', 0.55), halo, halo * 2.6)
+  drawStroke(l.color ?? tokenColor('--on-fill'), lw, lw * 3.4)
   ctx.restore()
 }
 

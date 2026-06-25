@@ -1,5 +1,5 @@
 # 추론 서버 로컬 산출물 — 추적 안 함
-.venv/
+.venv
 __pycache__/
 *.pyc
 weights

@@ -62,6 +62,12 @@ public enum ErrorCode {
     PHOTO_STORAGE_FAILED("PHOTO_500", HttpStatus.INTERNAL_SERVER_ERROR, "사진 저장에 실패했습니다."),
     INFERENCE_UNAVAILABLE("PHOTO_503", HttpStatus.SERVICE_UNAVAILABLE, "외곽선 추론 서버를 사용할 수 없습니다."),
 
+    // --- CARD ---
+    CARD_NOT_FOUND("CARD_001", HttpStatus.NOT_FOUND, "카드를 찾을 수 없습니다."),
+    CARD_ACCESS_DENIED("CARD_002", HttpStatus.FORBIDDEN, "카드 접근 권한이 없습니다."),
+    CARD_INVALID_INPUT("CARD_003", HttpStatus.BAD_REQUEST, "카드 입력값이 올바르지 않습니다."),
+    CARD_STORAGE_FAILED("CARD_500", HttpStatus.INTERNAL_SERVER_ERROR, "카드 저장에 실패했습니다."),
+
     // --- AI ---
     AI_CALL_FAILED("AI_001", HttpStatus.BAD_GATEWAY, "AI 호출에 실패했습니다."),
     AI_INVALID_RESPONSE("AI_002", HttpStatus.BAD_GATEWAY, "AI 응답 형식이 올바르지 않습니다.");

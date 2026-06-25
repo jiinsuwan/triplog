@@ -15,7 +15,7 @@ const tripId = Number(route.params.tripId)
 
 // 카드 생성 위저드로 이동(이 여행 컨텍스트 고정). S3-LOG-06.
 function goToCardCreate() {
-  router.push({ name: 'card-create', query: { tripId: String(tripId) } })
+  router.push({ name: 'trip-record-workspace', params: { tripId: String(tripId) } })
 }
 
 const { items, addFiles, retry, remove, failedCount, linkedCount } = useUploadQueue(tripId)
@@ -224,7 +224,7 @@ const connectLabel = computed(() =>
   max-width: 920px;
   margin: 0 auto;
   padding: 32px clamp(16px, 4vw, 40px) 64px;
-  color: #191f28;
+  color: var(--ink);
 }
 
 .photo-head {
@@ -236,7 +236,7 @@ const connectLabel = computed(() =>
 }
 
 .eyebrow {
-  color: #3182f6;
+  color: var(--accent);
   font-size: 13px;
   font-weight: 800;
 }
@@ -248,7 +248,7 @@ const connectLabel = computed(() =>
 
 .photo-head p {
   margin: 0;
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-weight: 600;
   font-size: 14px;
 }
@@ -258,10 +258,10 @@ const connectLabel = computed(() =>
   justify-items: center;
   gap: 6px;
   padding: 36px 20px;
-  border: 1.5px dashed #c9d2dc;
+  border: 1.5px dashed var(--line-strong);
   border-radius: 16px;
-  background: #fff;
-  color: #3182f6;
+  background: var(--paper-card);
+  color: var(--accent);
   text-align: center;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
@@ -269,19 +269,19 @@ const connectLabel = computed(() =>
 
 .dropzone:hover,
 .dropzone:focus-visible {
-  border-color: #3182f6;
+  border-color: var(--accent);
   outline: none;
 }
 
 .dropzone.drag-over {
-  background: #eaf2ff;
-  border-color: #3182f6;
+  background: color-mix(in srgb, var(--accent) 10%, var(--paper-card));
+  border-color: var(--accent);
 }
 
 .dropzone.disabled {
   opacity: 0.55;
   cursor: not-allowed;
-  border-color: #c9d2dc;
+  border-color: var(--line-strong);
 }
 
 .dropzone .pi-cloud-upload {
@@ -293,7 +293,7 @@ const connectLabel = computed(() =>
 }
 
 .dropzone small {
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-weight: 600;
 }
 
@@ -314,19 +314,19 @@ const connectLabel = computed(() =>
 
 .queue-head h2 {
   font-size: 16px;
-  color: #4e5968;
+  color: var(--ink);
 }
 
 .queue-summary {
   font-size: 13px;
   font-weight: 700;
-  color: #8b95a1;
+  color: var(--ink-sub);
 }
 
 .empty {
   padding: 28px 0;
   text-align: center;
-  color: #b0b8c1;
+  color: var(--ink-faint);
   font-weight: 600;
 }
 
@@ -344,9 +344,9 @@ const connectLabel = computed(() =>
   gap: 14px;
   align-items: center;
   padding: 12px;
-  border: 1px solid #e5e8eb;
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--paper-card);
 }
 
 .thumb {
@@ -354,10 +354,10 @@ const connectLabel = computed(() =>
   height: 56px;
   border-radius: 10px;
   overflow: hidden;
-  background: #f2f4f6;
+  background: var(--paper-dim);
   display: grid;
   place-items: center;
-  color: #b0b8c1;
+  color: var(--ink-faint);
 }
 
 .thumb img {

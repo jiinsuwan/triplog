@@ -47,7 +47,7 @@ const polyline = computed(() => nodes.value.map((n) => `${n.x},${n.y}`).join(' '
 <style scoped>
 .map {
   position: relative;
-  background: linear-gradient(180deg, #eaf2ff 0%, #eef6ef 100%);
+  background: linear-gradient(180deg, var(--paper-card) 0%, var(--paper-dim) 100%);
   border-radius: 14px;
   min-height: 320px;
   display: flex;
@@ -61,17 +61,17 @@ const polyline = computed(() => nodes.value.map((n) => `${n.x},${n.y}`).join(' '
 }
 .route {
   fill: none;
-  stroke: #8b5cf6;
+  stroke: var(--t-plum);
   stroke-width: 0.8;
   stroke-dasharray: 2 1.6;
 }
 .node {
-  fill: #3182f6;
-  stroke: #fff;
+  fill: var(--accent);
+  stroke: var(--on-fill);
   stroke-width: 0.8;
 }
 .node-no {
-  fill: #fff;
+  fill: var(--on-fill);
   font-size: 3px;
   font-weight: 800;
   text-anchor: middle;
@@ -82,8 +82,8 @@ const polyline = computed(() => nodes.value.map((n) => `${n.x},${n.y}`).join(' '
   bottom: 10px;
   margin: 0;
   font-size: 0.75rem;
-  color: #6b7684;
-  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink-sub);
+  background: color-mix(in srgb, var(--paper-card) 70%, transparent);
   padding: 2px 8px;
   border-radius: 99px;
 }

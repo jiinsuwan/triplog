@@ -13,6 +13,7 @@ describe('photoSettings — 사진별 편집 설정 해석', () => {
       toneDown: 0.1,
       format: 'fixed',
       outlineWidth: 3,
+      outlineGap: 14,
       outlineStyle: 'dashed',
       dashLen: 20,
       dashGap: 4,

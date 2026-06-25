@@ -1,12 +1,13 @@
 <script setup>
 // 사진 관리 모달 (카드 만들기 배치 화면에서 띄움). 이미 올라간 사진을 보고 "이 여행에서 빼기" +
 // 새 사진 업로드. 사진 목록·빼기는 부모(usePhotoPlacement)가 관리하므로 props/emit 로 받는다.
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
+import { computed } from 'vue'
+
+import { BaseModal } from '@/components/common'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import PhotoUploadPanel from '@/components/log/PhotoUploadPanel.vue'
 
-defineProps({
+const props = defineProps({
   visible: { type: Boolean, default: false },
   tripId: { type: Number, default: null },
   photos: { type: Array, default: () => [] },
@@ -14,16 +15,15 @@ defineProps({
   error: { type: String, default: '' }, // 빼기 실패 안내
 })
 const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
+
+const open = computed({
+  get: () => props.visible,
+  set: (value) => emit('update:visible', value),
+})
 </script>
 
 <template>
-  <Dialog
-    :visible="visible"
-    modal
-    header="사진 관리"
-    :style="{ width: '640px', maxWidth: '94vw' }"
-    @update:visible="emit('update:visible', $event)"
-  >
+  <BaseModal v-model="open" title="사진 관리" close-button-variant="primary" width="min(640px, 94vw)">
     <section class="sect">
       <h3>새 사진 올리기</h3>
       <PhotoUploadPanel v-if="tripId" :trip-id="tripId" @linked="emit('uploaded')" />
@@ -46,13 +46,8 @@ const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
         </li>
       </ul>
       <p v-if="error" class="err small">{{ error }}</p>
-      <p class="muted small note">✕ = 이 여행에서 빼기(사진 자체는 남습니다). 중복·불필요한 사진을 정리하세요.</p>
     </section>
-
-    <template #footer>
-      <Button label="닫기" @click="emit('update:visible', false)" />
-    </template>
-  </Dialog>
+  </BaseModal>
 </template>
 
 <style scoped>
@@ -61,21 +56,21 @@ const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
 }
 .sect h3 {
   margin: 0 0 10px;
-  font-size: 0.95rem;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 .muted {
-  color: #8b95a1;
-  font-weight: 400;
+  color: var(--ink-faint);
+  font-weight: 600;
 }
 .small {
-  font-size: 0.82rem;
-}
-.note {
-  margin-top: 8px;
+  font-size: 12.5px;
 }
 .err {
   margin: 8px 0 0;
-  color: #f04452;
+  color: var(--complete);
   font-weight: 600;
 }
 .grid {
@@ -83,8 +78,8 @@ const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 10px;
   max-height: 320px;
   overflow-y: auto;
 }
@@ -94,22 +89,23 @@ const emit = defineEmits(['update:visible', 'remove', 'uploaded'])
 }
 .rm {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 20px;
-  height: 20px;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--paper-card) 72%, transparent);
   border-radius: 50%;
-  background: rgba(20, 20, 20, 0.62);
-  color: #fff;
-  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--ink) 62%, transparent);
+  color: var(--on-fill);
+  font-family: inherit;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
 .rm:hover {
-  background: #f04452;
+  background: var(--complete);
 }
 .rm:disabled {
   opacity: 0.4;

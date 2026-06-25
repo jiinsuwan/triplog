@@ -10,6 +10,7 @@ import { useCardStore } from '@/stores/card'
 
 const props = defineProps({
   photoIds: { type: Array, default: () => [] },
+  tripId: { type: [Number, String], default: null },
 })
 const emit = defineEmits(['back'])
 
@@ -47,33 +48,65 @@ function statusLabel(id) {
 
 <template>
   <!-- 외곽선 처리 중: 사진별 상태(좁은 칼럼) -->
-  <div v-if="!done" class="proc">
-    <header class="proc-head">
-      <h2>AI가 사진을 처리하는 중…</h2>
-      <p class="muted">
-        사진에서 피사체 외곽선을 찾고 있습니다 · {{ summary.ready + summary.failed }}/{{ summary.total }} 완료
-        <span v-if="summary.failed"> · 실패 {{ summary.failed }}</span>
-      </p>
-    </header>
-    <ul class="grid">
-      <li v-for="id in photoIds" :key="id" class="cell">
-        <PhotoThumb :photo-id="id" />
-        <span class="badge" :class="statusOf(id).toLowerCase()">{{ statusLabel(id) }}</span>
-      </li>
-    </ul>
+  <div v-if="!done" class="proc-wrap">
+    <section class="proc-card" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true" />
+      <header class="proc-head">
+        <h2>AI가 사진을 처리하는 중입니다</h2>
+        <p class="muted">
+          외곽선 찾기 · {{ summary.ready + summary.failed }}/{{ summary.total }} 완료
+          <span v-if="summary.failed"> · 실패 {{ summary.failed }}</span>
+        </p>
+      </header>
+      <ul class="grid">
+        <li v-for="id in photoIds" :key="id" class="cell">
+          <PhotoThumb :photo-id="id" />
+          <span class="badge" :class="statusOf(id).toLowerCase()">{{ statusLabel(id) }}</span>
+        </li>
+      </ul>
+    </section>
   </div>
 
   <!-- 외곽선 완료 → 풀스크린 에디터 -->
-  <CardEditor v-else :photo-ids="photoIds" @back="emit('back')" />
+  <CardEditor v-else :photo-ids="photoIds" :trip-id="tripId" @back="emit('back')" />
 </template>
 
 <style scoped>
+.proc-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.proc-card {
+  width: min(440px, 100%);
+  max-height: min(640px, calc(100vh - 48px));
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-card);
+  box-shadow: var(--shadow-pop);
+}
+.spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 14px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+.proc-head {
+  text-align: center;
+}
 .proc-head h2 {
   margin: 0 0 4px;
   font-size: 1.15rem;
 }
 .muted {
-  color: #8b95a1;
+  color: var(--ink-sub);
   margin: 0 0 16px;
 }
 .grid {
@@ -81,8 +114,10 @@ function statusLabel(id) {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
   gap: 10px;
+  max-height: 246px;
+  overflow-y: auto;
 }
 .cell {
   position: relative;
@@ -97,20 +132,28 @@ function statusLabel(id) {
   border-radius: 99px;
   font-size: 0.72rem;
   font-weight: 700;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  background: color-mix(in srgb, var(--ink) 68%, transparent);
+  color: var(--on-fill);
 }
 .badge.ready {
-  background: #16c47e;
+  background: var(--t-sage);
 }
 .badge.failed {
-  background: #f04452;
+  background: var(--complete);
 }
 .badge.pending {
-  background: rgba(25, 31, 40, 0.55);
+  background: color-mix(in srgb, var(--ink-sub) 74%, transparent);
 }
-.note {
-  margin: 0 0 10px;
-  color: #4b5563;
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }
 </style>

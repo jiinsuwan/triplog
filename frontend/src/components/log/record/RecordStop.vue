@@ -37,22 +37,21 @@ const over = computed(() => drag.active && drag.overStopId === props.stop.id)
         />
       </li>
     </ul>
-    <p v-else class="drop-hint">여기로 사진을 끌어다 놓으세요</p>
   </div>
 </template>
 
 <style scoped>
 .stop {
-  border: 1px solid #e5e8eb;
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 10px 12px;
   margin-bottom: 10px;
-  background: #fff;
+  background: var(--paper-card);
   transition: border-color 0.12s, background 0.12s;
 }
 .stop.over {
-  border-color: #3182f6;
-  background: #f0f6ff;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--paper-card));
 }
 .head {
   display: flex;
@@ -65,8 +64,8 @@ const over = computed(() => drag.active && drag.overStopId === props.stop.id)
   display: grid;
   place-items: center;
   border-radius: 99px;
-  background: #3182f6;
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-fill);
   font-size: 0.7rem;
   font-weight: 800;
 }
@@ -74,12 +73,12 @@ const over = computed(() => drag.active && drag.overStopId === props.stop.id)
   font-size: 0.9rem;
 }
 .time {
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-size: 0.8rem;
 }
 .count {
   margin-left: auto;
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-size: 0.78rem;
 }
 .photos {
@@ -89,10 +88,5 @@ const over = computed(() => drag.active && drag.overStopId === props.stop.id)
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.drop-hint {
-  margin: 8px 0 2px;
-  color: #b0b8c1;
-  font-size: 0.8rem;
 }
 </style>

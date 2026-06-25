@@ -22,7 +22,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'open-places', 'deleted', 'updated'])
+const emit = defineEmits(['update:modelValue', 'open-places', 'open-editor', 'deleted', 'updated'])
 const tripStore = useTripStore()
 const router = useRouter()
 const card = useCardStore()
@@ -79,7 +79,9 @@ const activeDayLabel = computed(() => {
 
 watch(
   () => [props.modelValue, props.trip?.id],
-  ([isOpen]) => {
+  ([isOpen], previous = []) => {
+    const [, prevTripId] = previous
+    if (!isOpen || props.trip?.id !== prevTripId) placedPhotoIds.value = []
     if (isOpen) loadItinerary()
   },
   { immediate: true },
@@ -136,6 +138,7 @@ function goEditor(placedIds) {
   if (!props.trip?.id) return
   card.startForTrip(props.trip.id)
   card.setPhotoIds(placedIds)
+  emit('open-editor', props.trip)
   close()
   router.push({ name: 'card-create', query: { tripId: props.trip.id, step: 'editor' } })
 }

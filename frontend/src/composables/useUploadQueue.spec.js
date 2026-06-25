@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { effectScope } from 'vue'
 import { useUploadQueue, QueueStatus, MAX_FILE_BYTES } from '@/composables/useUploadQueue'
 
+vi.mock('@/utils/imagePreview', () => ({
+  createImagePreviewUrl: vi.fn(async (blob) => URL.createObjectURL(blob)),
+}))
+
 const TRIP_ID = 7
 
 // jsdom 은 objectURL API 를 구현하지 않으므로 스텁한다(호출 여부만 검증).
@@ -150,26 +154,26 @@ describe('useUploadQueue', () => {
     expect(api.uploadPhoto).toHaveBeenCalledTimes(2)
   })
 
-  it('objectURL: 미리보기 가능한 형식만 생성하고 remove 시 해제한다(HEIC 는 미리보기 없음)', () => {
+  it('objectURL: HEIC 포함 지원 이미지 미리보기를 만들고 remove 시 해제한다', async () => {
     const api = { uploadPhoto: vi.fn(() => new Promise(() => {})), linkPhotoToTrip: vi.fn() }
     const q = run(() => useUploadQueue(TRIP_ID, { api }))
 
     const heic = new File(['x'], 'p.heic', { type: 'image/heic' })
     q.addFiles([jpeg(), heic])
 
+    await vi.waitFor(() => expect(q.items[1].previewUrl).toBe('blob:fake'))
     expect(q.items[0].previewUrl).toBe('blob:fake')
-    expect(q.items[1].previewUrl).toBeNull() // HEIC → 폴백(아이콘)
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2)
 
     q.remove(q.items[0].id)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake')
   })
 
-  it('스코프 해제(언마운트) 시 모든 objectURL 을 해제한다', () => {
+  it('스코프 해제(언마운트) 시 모든 objectURL 을 해제한다', async () => {
     const api = { uploadPhoto: vi.fn(() => new Promise(() => {})), linkPhotoToTrip: vi.fn() }
     const q = run(() => useUploadQueue(TRIP_ID, { api }))
     q.addFiles([jpeg()])
-    expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(q.items[0].previewUrl).toBe('blob:fake'))
 
     q.dispose() // effectScope.stop() → onScopeDispose 발화
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake')

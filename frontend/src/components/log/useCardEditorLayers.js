@@ -1,4 +1,5 @@
 import { computed, reactive, ref } from 'vue'
+import { tokenColor } from '@/utils/designTokens'
 
 export const LAYER_CHIP = { text: '텍스트', line: '선', outline: '외곽선', caption: '텍스트', closing: '마무리', sticker: '스티커' }
 export const LAYER_CHIP_CLASS = { text: 'text', line: 'line', outline: '', caption: 'text', closing: 'closing', sticker: 'line' }
@@ -113,7 +114,7 @@ export function useCardEditorLayers({
 
   function addText(x = 0.5, y = 0.5) {
     const list = textsByPhoto[currentId.value] || (textsByPhoto[currentId.value] = [])
-    const t = { id: `t${++textSeq}`, text: '텍스트', x, y, rotation: 0, color: '#ffffff', hidden: false }
+    const t = { id: `t${++textSeq}`, text: '텍스트', x, y, rotation: 0, color: tokenColor('--on-fill'), hidden: false }
     list.push(t)
     selectItem(null)
     selectedTextId.value = t.id
@@ -143,7 +144,7 @@ export function useCardEditorLayers({
 
   function addLine(x1, y1, x2, y2) {
     const list = linesByPhoto[currentId.value] || (linesByPhoto[currentId.value] = [])
-    const l = { id: `l${++lineSeq}`, x1, y1, x2, y2, color: '#ffffff', width: 1, style: 'solid', arrow: 'none', hidden: false }
+    const l = { id: `l${++lineSeq}`, x1, y1, x2, y2, color: tokenColor('--on-fill'), width: 1, style: 'solid', arrow: 'none', hidden: false }
     list.push(l)
     return l
   }
