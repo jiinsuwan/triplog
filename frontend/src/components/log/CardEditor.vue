@@ -11,7 +11,7 @@ import { useCardCaptions } from '@/composables/useCardCaptions'
 import { buildScene } from '@/card/render/buildScene'
 import { computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
-import { saveTripCard } from '@/api/cardApi'
+import { fetchTripCards, saveTripCard } from '@/api/cardApi'
 import { fetchPhotoOutline } from '@/api/outlineApi'
 import { useCardStore } from '@/stores/card'
 import CorrectionDialog from '@/components/log/CorrectionDialog.vue'
@@ -32,6 +32,7 @@ import { useCardEditorExport } from './useCardEditorExport'
 import { LAYER_CHIP, LAYER_CHIP_CLASS, useCardEditorLayers } from './useCardEditorLayers'
 import { useCardEditorRenderer } from './useCardEditorRenderer'
 import { resolvePhotoSettings } from './photoSettings'
+import { tokenColor } from '@/utils/designTokens'
 
 const props = defineProps({
   photoIds: { type: Array, default: () => [] },
@@ -71,12 +72,13 @@ const fontReady = ref(false)
 const toneDown = ref(0.35)
 const format = ref('native')
 const outlineWidth = ref(1)
+const outlineGap = ref(3) // 카드 폭의 0.1% 단위. 3 = 1080px 기준 약 3px.
 const outlineStyle = ref('solid') // 'solid' | 'dashed'
 const dashLen = ref(12) // 점선 길이·간격(× W*0.001)
 const dashGap = ref(9)
 // 9:16 고정 포맷의 여백 채움(사진을 자르지 않고 contain 후 남는 공간을 채운다).
 const padFill = ref('blur') // 'blur' | 'solid'
-const padColor = ref('#fdf8ee')
+const padColor = ref(tokenColor('--paper-card'))
 const drag = ref(null) // 렌더러와 드래그 상태기계가 공유하는 현재 포인터 작업.
 
 // 캔버스(프레임) 크기 = 출력 크기. native=사진비율, fixed=1080×1920.
@@ -182,20 +184,21 @@ function applyCaptionOverrides(o, cr, cd) {
 const outlineOverride = reactive({})
 const applyOutlineAll = ref(false) // 켜면 한 외곽선 수정이 이 사진 모든 외곽선에 함께 적용된다.
 function outlineStyleOf(id) {
-  return (
-    outlineOverride[keyOf(id)] ?? {
-      width: outlineWidth.value,
-      style: outlineStyle.value,
-      dashLen: dashLen.value,
-      dashGap: dashGap.value,
-    }
-  )
+  return {
+    width: outlineWidth.value,
+    gap: outlineGap.value,
+    style: outlineStyle.value,
+    dashLen: dashLen.value,
+    dashGap: dashGap.value,
+    ...(outlineOverride[keyOf(id)] ?? {}),
+  }
 }
 function setOutlineStyle(id, patch) {
   const next = { ...outlineStyleOf(id), ...patch }
   if (applyOutlineAll.value) {
     // 전체 적용: 기본값까지 갱신해 새로 보정된 객체도 같은 모양을 따르게 한다.
     outlineWidth.value = next.width
+    outlineGap.value = next.gap
     outlineStyle.value = next.style
     dashLen.value = next.dashLen
     dashGap.value = next.dashGap
@@ -306,6 +309,7 @@ onScopeDispose(() => {
 // 진입 시 처리 미완(PENDING)으로 넘어온 사진을 1회만 재조회한다(배치 화면 폴링이
 // deadline 으로 끊겼을 수 있다 — 그새 워커가 끝냈으면 반영). 무한 폴링 아님 = 진입 1회.
 onMounted(async () => {
+  await hydrateSavedDone()
   card.hydrateCaptions(props.photoIds) // 새로고침 시 문구를 localStorage 에서 복원 → GMS 재생성 방지
   for (const id of props.photoIds) {
     if (disposed) break // 진입 직후 이탈 시 남은 재조회 중단(불필요 호출 방지)
@@ -389,7 +393,7 @@ const FONTS = [
 ]
 const fontFamily = ref('Ownglyph ooa')
 const fontScale = ref(1) // 사진별 전역 글씨 크기 배율(그 사진 모든 글씨에 적용)
-const PHOTO_SETTING_REFS = { toneDown, format, outlineWidth, outlineStyle, dashLen, dashGap, padFill, padColor, fontFamily, fontScale }
+const PHOTO_SETTING_REFS = { toneDown, format, outlineWidth, outlineGap, outlineStyle, dashLen, dashGap, padFill, padColor, fontFamily, fontScale }
 const settingsByPhoto = reactive({})
 function captureSettings() {
   const o = {}
@@ -463,7 +467,7 @@ watch(
   { immediate: true },
 )
 watch(
-  [scene, photoImg, fontReady, hiddenObject, outlineOverride, outlineWidth, outlineStyle, dashLen, dashGap, selectedItemId, selectedKind, format, padFill, padColor, fontScale, zoom, stageSize],
+  [scene, photoImg, fontReady, hiddenObject, outlineOverride, outlineWidth, outlineGap, outlineStyle, dashLen, dashGap, selectedItemId, selectedKind, format, padFill, padColor, fontScale, zoom, stageSize],
   scheduleRedraw,
   { flush: 'post' },
 )
@@ -587,8 +591,8 @@ function drawLines(ctx, dims) {
   if (sl && !sl.hidden) {
     for (const [hx, hy] of [[sl.x1, sl.y1], [sl.x2, sl.y2]]) {
       ctx.save()
-      ctx.fillStyle = '#fff'
-      ctx.strokeStyle = '#3182f6'
+      ctx.fillStyle = tokenColor('--paper-card')
+      ctx.strokeStyle = tokenColor('--accent')
       ctx.lineWidth = Math.max(2, W * 0.003)
       ctx.beginPath()
       ctx.arc(hx * W, hy * H, Math.max(7, W * 0.012) * 0.5, 0, Math.PI * 2)
@@ -600,7 +604,7 @@ function drawLines(ctx, dims) {
     const [rhx, rhy] = lineRotHandle(sl, { W, H })
     const mx = ((sl.x1 + sl.x2) / 2) * W, my = ((sl.y1 + sl.y2) / 2) * H
     ctx.save()
-    ctx.strokeStyle = '#3182f6'
+    ctx.strokeStyle = tokenColor('--accent')
     ctx.lineWidth = Math.max(1.5, W * 0.002)
     ctx.beginPath()
     ctx.moveTo(mx, my)
@@ -608,9 +612,9 @@ function drawLines(ctx, dims) {
     ctx.stroke()
     ctx.beginPath()
     ctx.arc(rhx, rhy, Math.max(6, W * 0.011) * 0.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#3182f6'
+    ctx.fillStyle = tokenColor('--accent')
     ctx.fill()
-    ctx.strokeStyle = '#fff'
+    ctx.strokeStyle = tokenColor('--paper-card')
     ctx.stroke()
     ctx.restore()
   }
@@ -708,13 +712,31 @@ watch(activeTool, () => {
 // 완성 = 사용자가 카드별로 직접 표시(자동 판단 아님). 필름스트립에서 사진마다 토글.
 const doneSet = ref(new Set())
 const savingCard = ref(false)
-const isDone = (id) => doneSet.value.has(id)
+const photoKey = (id) => Number(id)
+const isDone = (id) => doneSet.value.has(photoKey(id))
+async function hydrateSavedDone() {
+  if (!props.tripId) return
+  try {
+    const savedCards = await fetchTripCards(props.tripId)
+    if (disposed) return
+    const photoIdSet = new Set(props.photoIds.map(photoKey))
+    const savedPhotoIds = savedCards
+      .map((card) => photoKey(card.photoId))
+      .filter((photoId) => photoIdSet.has(photoId))
+    if (savedPhotoIds.length) {
+      doneSet.value = new Set([...doneSet.value, ...savedPhotoIds])
+    }
+  } catch {
+    /* 저장된 카드 상태 복원 실패 — 편집 자체는 계속 가능 */
+  }
+}
 async function toggleDone(id) {
   if (!id) return
 
+  const doneId = photoKey(id)
   const s = new Set(doneSet.value)
-  if (s.has(id)) {
-    s.delete(id)
+  if (s.has(doneId)) {
+    s.delete(doneId)
     doneSet.value = s
     exportNote.value = ''
     return
@@ -728,15 +750,15 @@ async function toggleDone(id) {
 
   savingCard.value = true
   try {
-    const result = await composeCurrentBlob()
+    const result = await composeCurrentBlob({ forUpload: true })
     if (!result) return
-    if (result.photoId !== id || currentId.value !== id) {
+    if (photoKey(result.photoId) !== doneId || photoKey(currentId.value) !== doneId) {
       exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
       return
     }
 
     await saveTripCard(props.tripId, id, result.blob)
-    doneSet.value = new Set([...doneSet.value, id])
+    doneSet.value = new Set([...doneSet.value, doneId])
     exportNote.value = '추억에 저장 완료'
   } catch (e) {
     const message = e?.response?.data?.message || e?.message || '다시 시도해 주세요.'
@@ -1033,6 +1055,13 @@ watch(
                 <button class="step" title="굵게" @click="setOutlineStyle(selectedItemId, { width: Math.min(8, Math.round((outlineStyleOf(selectedItemId).width + 0.1) * 10) / 10) })">＋</button>
                 <input class="num" type="number" min="0.3" max="8" step="0.1" :value="outlineStyleOf(selectedItemId).width" @input="setOutlineStyle(selectedItemId, { width: Number($event.target.value) })" />
               </div>
+              <label class="ctl-lbl">객체와 간격</label>
+              <div class="stepper">
+                <button class="step" title="가깝게" @click="setOutlineStyle(selectedItemId, { gap: Math.max(0, Math.round(outlineStyleOf(selectedItemId).gap - 1)) })">−</button>
+                <input type="range" min="0" max="28" step="1" :value="outlineStyleOf(selectedItemId).gap" @input="setOutlineStyle(selectedItemId, { gap: Number($event.target.value) })" />
+                <button class="step" title="멀게" @click="setOutlineStyle(selectedItemId, { gap: Math.min(28, Math.round(outlineStyleOf(selectedItemId).gap + 1)) })">＋</button>
+                <input class="num" type="number" min="0" max="28" step="1" :value="outlineStyleOf(selectedItemId).gap" @input="setOutlineStyle(selectedItemId, { gap: Number($event.target.value) })" />
+              </div>
               <div class="row">
                 <span>선 스타일</span>
                 <label class="rd"><input type="radio" :checked="outlineStyleOf(selectedItemId).style === 'solid'" @change="setOutlineStyle(selectedItemId, { style: 'solid' })" /> 실선</label>
@@ -1255,8 +1284,8 @@ watch(
   margin: 0;
   padding: 6px 14px;
   border-radius: 99px;
-  background: rgba(25, 31, 40, 0.72);
-  color: var(--paper-card);
+  background: color-mix(in srgb, var(--ink) 72%, transparent);
+  color: var(--on-fill);
   font-size: 0.8rem;
   white-space: nowrap;
   pointer-events: none;
@@ -1265,7 +1294,7 @@ watch(
   display: block; /* 표시 크기는 redraw 가 el.style 로 stage 에 맞춰 px 제어 */
   margin: auto; /* flex 컨테이너 가운데 + 확대 시 좌상단까지 스크롤 접근 가능 */
   border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-card);
   background: var(--paper-card);
 }
 /* 사진 위 플로팅 모드 토글(선택/생성) */
@@ -1278,10 +1307,10 @@ watch(
   display: flex;
   gap: 2px;
   padding: 3px;
-  background: rgba(255, 255, 255, 0.96);
+  background: color-mix(in srgb, var(--paper-card) 96%, transparent);
   border: 1px solid var(--line);
   border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-card);
 }
 .stage-modes button {
   border: 0;
@@ -1309,7 +1338,7 @@ watch(
   background: var(--paper-card);
   border: 1px solid var(--line);
   border-radius: 9px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-card);
 }
 .zoom-bar button {
   border: 0;
@@ -1363,18 +1392,18 @@ watch(
   justify-content: center;
   gap: 5px;
   padding: 9px 6px;
-  border: 1px solid var(--line, #e2d8c4);
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: var(--paper-card, #fffdf8);
-  color: var(--ink, #2c2926);
+  background: var(--paper-card);
+  color: var(--ink);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
 }
 .act-btn:hover:not(:disabled) {
-  border-color: var(--accent, #c2693f);
-  color: var(--accent, #c2693f);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .act-btn:disabled {
   opacity: 0.45;
@@ -1493,7 +1522,7 @@ watch(
 }
 .del-btn:hover {
   background: var(--complete);
-  color: #fff;
+  color: var(--on-fill);
 }
 .ed-right h3 {
   margin: 0 0 10px;
@@ -1702,7 +1731,7 @@ watch(
 }
 /* 선택된 행 = 줄 전체 하이라이트 + 왼쪽 accent 바(선택 명확). */
 .layer-list li.row-active {
-  background: rgba(194, 105, 63, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 8px;
   box-shadow: inset 3px 0 0 var(--accent);
 }
@@ -1833,7 +1862,7 @@ watch(
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #e6b422;
+  background: var(--t-mustard);
   box-shadow: 0 0 0 2px var(--paper-card);
   pointer-events: none;
 }
@@ -1872,7 +1901,7 @@ watch(
 .finish-btn {
   border: 1px solid var(--complete);
   background: var(--complete);
-  color: #fff;
+  color: var(--on-fill);
   border-radius: 9px;
   padding: 9px 16px;
   font: inherit;

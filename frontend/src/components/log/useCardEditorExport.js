@@ -3,6 +3,9 @@ import { exportCardPng } from '@/card/render/exportCard'
 import { paintEditorLine, paintEditorText, paintEditorSticker } from './cardEditorCanvas'
 import { ensureStickerImages, getStickerImage } from './stickerImage'
 
+const CARD_UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+const CARD_UPLOAD_NATIVE_WIDTHS = [1440, 1080, 720]
+
 function triggerDownload(blob, name) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -73,7 +76,12 @@ export function useCardEditorExport({
     }
   }
 
-  async function composeCurrentBlob() {
+  function nativeUploadWidths(photoW) {
+    const widths = CARD_UPLOAD_NATIVE_WIDTHS.filter((width) => width < photoW)
+    return widths.length ? widths : [undefined]
+  }
+
+  async function composeCurrentBlob({ forUpload = false } = {}) {
     if (exporting.value || !photoImg.value) return
     exporting.value = true
     exportNote.value = ''
@@ -90,29 +98,50 @@ export function useCardEditorExport({
         photo: { w: photoImg.value.naturalWidth, h: photoImg.value.naturalHeight },
         style: { toneDown: toneDown.value, outline: false },
       }
-      const blob = await exportCardPng(
-        inputs,
-        { photo: photoImg.value },
-        {
+      const baseOptions = {
           format: format.value,
           pad: padFill.value,
           bg: padColor.value,
           noteFont: fontFamily.value,
           closingFont: fontFamily.value,
           scale: fontScale.value,
-        },
-      )
+      }
+      const widthCandidates = forUpload && format.value !== 'fixed'
+        ? nativeUploadWidths(photoImg.value.naturalWidth)
+        : [undefined]
+      let lastComposed = null
+
+      for (const width of widthCandidates) {
+        const blob = await exportCardPng(
+          inputs,
+          { photo: photoImg.value },
+          width ? { ...baseOptions, width } : baseOptions,
+        )
+        // export 도중 사진이 바뀌면 overlay(live refs)가 다른 사진 것이 되므로, 합성 전에 먼저 가드(리뷰 P2).
+        if (currentId.value !== exportId) {
+          exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
+          return
+        }
+        const composed = await composeOverlays(blob)
+        lastComposed = composed
+        if (currentId.value !== exportId) {
+          exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
+          return
+        }
+        if (!forUpload || composed.size <= CARD_UPLOAD_MAX_BYTES) {
+          return { blob: composed, photoId: exportId }
+        }
+      }
+
       // export 도중 사진이 바뀌면 overlay(live refs)가 다른 사진 것이 되므로, 합성 전에 먼저 가드(리뷰 P2).
       if (currentId.value !== exportId) {
         exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
         return
       }
-      const composed = await composeOverlays(blob)
-      if (currentId.value !== exportId) {
-        exportNote.value = '사진이 바뀌어 저장을 취소했습니다. 다시 저장해 주세요.'
-        return
+      if (lastComposed && lastComposed.size <= CARD_UPLOAD_MAX_BYTES) {
+        return { blob: lastComposed, photoId: exportId }
       }
-      return { blob: composed, photoId: exportId }
+      throw new Error('카드 PNG가 20MB를 초과했습니다. PNG 저장으로 보관하거나 사진을 줄여 다시 시도해 주세요.')
     } catch (e) {
       exportNote.value = `저장 실패: ${e.message}`
     } finally {

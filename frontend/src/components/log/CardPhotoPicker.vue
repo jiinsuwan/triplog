@@ -142,7 +142,7 @@ function proceed() {
 
     <div v-else-if="isEmpty" class="empty">
       <p>이 여행에 사진이 없습니다. 먼저 사진을 올려 주세요.</p>
-      <Button label="＋ 사진 추가" icon="pi pi-upload" @click="showManage = true" />
+      <Button label="사진 관리" @click="showManage = true" />
     </div>
 
     <div v-else-if="!stopsFlat.length" class="empty">
@@ -204,7 +204,7 @@ function proceed() {
       <p class="tray-note">📷 미배치 사진은 <b>카드로 만들어지지 않습니다.</b> 장소에 끌어다 놓으세요.</p>
       <RecordPhotoTray :photos="unplaced">
         <template #action>
-          <Button label="사진 추가·관리" icon="pi pi-images" size="small" severity="secondary" @click="showManage = true" />
+          <Button label="사진 관리" size="small" severity="secondary" @click="showManage = true" />
         </template>
       </RecordPhotoTray>
     </template>
@@ -235,7 +235,7 @@ function proceed() {
 
 <style scoped>
 .msg {
-  color: #8b95a1;
+  color: var(--ink-sub);
   padding: 24px 0;
 }
 .empty {
@@ -244,7 +244,7 @@ function proceed() {
   align-items: center;
   gap: 12px;
   padding: 48px 0;
-  color: #8b95a1;
+  color: var(--ink-sub);
 }
 .bar {
   position: sticky;
@@ -254,8 +254,8 @@ function proceed() {
   align-items: center;
   gap: 10px;
   padding: 10px 0;
-  background: #fff;
-  border-bottom: 1px solid #e5e8eb;
+  background: var(--paper-card);
+  border-bottom: 1px solid var(--line);
 }
 .bar .grow {
   flex: 1;
@@ -263,17 +263,17 @@ function proceed() {
 .prep {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #6d40d6;
-  background: #f1ecfb;
+  color: var(--t-plum);
+  background: color-mix(in srgb, var(--t-plum) 14%, var(--paper-card));
   border-radius: 99px;
   padding: 4px 12px;
 }
 .prep.done {
-  color: #16a866;
-  background: #e7f7ee;
+  color: var(--t-sage);
+  background: color-mix(in srgb, var(--t-sage) 16%, var(--paper-card));
 }
 .nudge {
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-size: 0.82rem;
 }
 /* 좌(지도) / 우(배치 목록) 2열. 지도를 ✕로 접으면 목록이 전폭. */
@@ -317,17 +317,17 @@ function proceed() {
   margin: 14px 0 8px;
 }
 .day-head .date {
-  color: #8b95a1;
+  color: var(--ink-sub);
   font-size: 0.8rem;
   font-weight: 400;
 }
 .tray-note {
   margin: 18px 0 8px;
-  color: #6b7684;
+  color: var(--ink-sub);
   font-size: 0.85rem;
 }
 .tray-note b {
-  color: #f04452;
+  color: var(--complete);
 }
 .drag-ghost {
   position: fixed;
@@ -337,7 +337,7 @@ function proceed() {
   transform: translate(-50%, -50%) rotate(-3deg);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-pop);
   opacity: 0.92;
   pointer-events: none;
 }

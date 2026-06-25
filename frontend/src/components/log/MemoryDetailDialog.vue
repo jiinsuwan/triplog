@@ -22,6 +22,7 @@ const loading = ref(false)
 const error = ref('')
 const currentIndex = ref(0)
 let controller = null
+let loadSeq = 0
 
 const currentCard = computed(() => cards.value[currentIndex.value] ?? null)
 const currentImageUrl = computed(() => {
@@ -47,33 +48,46 @@ onBeforeUnmount(reset)
 
 async function loadCards() {
   reset()
+  const seq = ++loadSeq
   loading.value = true
   controller = new AbortController()
   try {
     const result = await fetchTripCards(props.memory.tripId, { signal: controller.signal })
+    if (seq !== loadSeq) return
     cards.value = result
     currentIndex.value = 0
-    await loadImages(result, controller.signal)
+    await loadImages(result, controller.signal, seq)
   } catch (e) {
     if (e?.name !== 'CanceledError' && e?.name !== 'AbortError') {
       error.value = e?.response?.data?.message || e?.message || '추억을 불러오지 못했습니다.'
     }
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
-async function loadImages(nextCards, signal) {
-  const entries = await Promise.all(
-    nextCards.map(async (card) => {
-      const blob = await fetchCardImage(card.id, { signal })
-      return [card.id, URL.createObjectURL(blob)]
-    }),
-  )
-  imageUrls.value = Object.fromEntries(entries)
+async function loadImages(nextCards, signal, seq) {
+  const nextUrls = {}
+  try {
+    await Promise.all(
+      nextCards.map(async (card) => {
+        const blob = await fetchCardImage(card.id, { signal })
+        nextUrls[card.id] = URL.createObjectURL(blob)
+      }),
+    )
+    if (seq !== loadSeq || signal.aborted) {
+      for (const url of Object.values(nextUrls)) URL.revokeObjectURL(url)
+      return
+    }
+    imageUrls.value = nextUrls
+  } catch (e) {
+    for (const url of Object.values(nextUrls)) URL.revokeObjectURL(url)
+    throw e
+  }
 }
 
 function reset() {
+  loadSeq += 1
   controller?.abort()
   controller = null
   for (const url of Object.values(imageUrls.value)) URL.revokeObjectURL(url)
@@ -227,14 +241,19 @@ function downloadCurrent() {
 
 .memory-detail__viewer {
   background: var(--paper);
-  min-height: 260px;
-  padding: 18px 22px;
+  min-height: 442px;
+  padding: 18px 22px 18px;
 }
 
 .memory-detail__state {
+  align-items: center;
   color: var(--ink-sub);
+  display: flex;
   font-weight: 700;
+  justify-content: center;
   margin: 0;
+  min-height: 400px;
+  text-align: center;
 }
 
 .memory-detail__state--error {
@@ -245,18 +264,22 @@ function downloadCurrent() {
   align-items: center;
   display: grid;
   gap: 14px;
-  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  grid-template-columns: 36px minmax(0, 300px) 36px;
+  height: 330px;
+  justify-content: center;
+  min-width: 0;
 }
 
 .memory-detail__stage img {
   background: var(--paper-card);
   border-radius: 14px;
-  box-shadow: 0 12px 32px -10px rgba(40, 25, 10, 0.5);
+  box-shadow: var(--shadow-pop);
   display: block;
-  max-height: 380px;
-  max-width: 100%;
+  height: 330px;
+  max-width: 300px;
   object-fit: contain;
   place-self: center;
+  width: 300px;
 }
 
 .memory-detail__nav {
@@ -316,7 +339,23 @@ function downloadCurrent() {
   }
 
   .memory-detail__viewer {
-    min-height: 360px;
+    min-height: 392px;
+  }
+
+  .memory-detail__state {
+    min-height: 350px;
+  }
+
+  .memory-detail__stage {
+    gap: 10px;
+    grid-template-columns: 32px minmax(0, 248px) 32px;
+    height: 286px;
+  }
+
+  .memory-detail__stage img {
+    height: 286px;
+    max-width: 248px;
+    width: 248px;
   }
 }
 </style>

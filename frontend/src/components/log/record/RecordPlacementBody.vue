@@ -198,7 +198,7 @@ watch(
                     class="rec-add"
                     @click="showManage = true"
                   >
-                    ＋ 사진
+                    사진 관리
                   </button>
                 </div>
               </div>
@@ -211,7 +211,7 @@ watch(
       <div class="rec-tray-wrap">
         <RecordPhotoTray :photos="unplaced">
           <template #action>
-            <button type="button" class="rec-tray-add" @click="showManage = true">＋ 사진 올리기</button>
+            <button type="button" class="rec-tray-add" @click="showManage = true">사진 관리</button>
           </template>
         </RecordPhotoTray>
       </div>
@@ -270,14 +270,14 @@ watch(
   border: 1px solid var(--line);
   border-radius: 14px;
   overflow: hidden;
-  background: linear-gradient(135deg, #e9e2cf, #e3dcc4 50%, #ece6d4);
+  background: linear-gradient(135deg, var(--paper), var(--paper-dim) 50%, var(--bg));
 }
 .rec-map-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(120, 100, 60, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(120, 100, 60, 0.05) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--ink-sub) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink-sub) 8%, transparent) 1px, transparent 1px);
   background-size: 38px 38px;
 }
 .rec-map-svg {
@@ -312,7 +312,7 @@ watch(
   font-size: 11px;
   font-weight: 800;
   color: var(--ink-sub);
-  background: rgba(255, 253, 248, 0.84);
+  background: color-mix(in srgb, var(--paper-card) 84%, transparent);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 5px 10px;
@@ -498,7 +498,7 @@ watch(
   transform: translate(-50%, -50%) rotate(-3deg);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-pop);
   opacity: 0.92;
   pointer-events: none;
 }

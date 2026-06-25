@@ -20,6 +20,11 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  closeButtonVariant: {
+    type: String,
+    default: 'ghost',
+    validator: (value) => ['default', 'primary', 'ghost', 'danger'].includes(value),
+  },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -148,7 +153,9 @@ onBeforeUnmount(restorePageState)
       >
         <header v-if="!hideHeader" class="base-modal__header">
           <h2 :id="titleId">{{ title }}</h2>
-          <BaseButton variant="ghost" size="small" aria-label="닫기" @click="close">닫기</BaseButton>
+          <BaseButton :variant="closeButtonVariant" size="small" aria-label="닫기" @click="close">
+            닫기
+          </BaseButton>
         </header>
         <div class="base-modal__body">
           <slot />

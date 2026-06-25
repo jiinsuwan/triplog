@@ -251,8 +251,8 @@ function tagsOf(memory) {
 }
 
 .logs-alert {
-  background: #fff1eb;
-  border: 1px solid #e3b3a0;
+  background: color-mix(in srgb, var(--complete) 9%, var(--paper-card));
+  border: 1px solid color-mix(in srgb, var(--complete) 30%, var(--line));
   border-radius: 10px;
   color: var(--complete);
   font-size: 13px;
@@ -309,7 +309,7 @@ function tagsOf(memory) {
 }
 
 .logs-polaroid-button:hover :deep(.ds-polaroid) {
-  box-shadow: 0 14px 24px -18px rgba(60, 40, 20, 0.55);
+  box-shadow: var(--shadow-card);
   transform: translateY(-3px) rotate(-1deg);
 }
 
@@ -322,7 +322,7 @@ function tagsOf(memory) {
 }
 
 .logs-empty {
-  background: rgba(255, 253, 248, 0.58);
+  background: color-mix(in srgb, var(--paper-card) 58%, transparent);
   border: 1px dashed var(--line);
   border-radius: 10px;
   font-size: 13px;

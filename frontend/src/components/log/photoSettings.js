@@ -1,15 +1,18 @@
 // 카드 에디터 사진별 편집 설정 — 기본값 + 저장본 해석.
 // 톤·외곽선 스타일·출력 형식·여백 색 등을 전역으로 두면 사진1 설정이 사진2에 샌다.
 // 사진 전환 때 현재 설정을 저장하고, 새 사진의 저장본(없으면 기본값)을 복원하는 계약을 여기 둔다.
+import { tokenColor } from '@/utils/designTokens'
+
 export const PHOTO_SETTING_DEFAULTS = {
   toneDown: 0.35,
   format: 'native',
   outlineWidth: 1,
+  outlineGap: 3,
   outlineStyle: 'solid',
   dashLen: 12,
   dashGap: 9,
   padFill: 'blur',
-  padColor: '#fdf8ee',
+  padColor: tokenColor('--paper-card'),
   fontFamily: 'Ownglyph ooa',
   fontScale: 1,
 }

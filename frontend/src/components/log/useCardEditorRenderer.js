@@ -2,6 +2,7 @@ import { onScopeDispose } from 'vue'
 import { renderCard } from '@/card/render/renderCore'
 import { computeFitRect } from '@/card/render/exportCard'
 import { makeCoverFit } from '@/card/render/coverFit'
+import { tokenAlpha } from '@/utils/designTokens'
 
 export function useCardEditorRenderer({
   canvasEl,
@@ -58,7 +59,7 @@ export function useCardEditorRenderer({
     cx.filter = `blur(${Math.round(W * 0.03)}px)`
     cx.drawImage(img, ox, oy, dw, dh)
     cx.filter = 'none'
-    cx.fillStyle = 'rgba(20,14,8,0.18)'
+    cx.fillStyle = tokenAlpha('--ink', 0.18)
     cx.fillRect(0, 0, W, H)
     blurCache = { key, canvas: c }
     return c
@@ -152,28 +153,47 @@ export function useCardEditorRenderer({
       items.value
         .map((item) => {
           const st = outlineStyleOf(item.id)
-          return `${item.id}:${refKey(item)}:${isObjectOn(item.id) ? 1 : 0}:${st.width}:${st.style}:${st.dashLen}:${st.dashGap}:${Array.isArray(item.polygons) ? item.polygons.length : 0}`
+          return `${item.id}:${refKey(item)}:${isObjectOn(item.id) ? 1 : 0}:${st.width}:${st.gap}:${st.style}:${st.dashLen}:${st.dashGap}:${Array.isArray(item.polygons) ? item.polygons.length : 0}`
         })
         .join('|'),
     ].join('::')
   }
 
+  function offsetLoopFromCentroid(points, offsetPx) {
+    if (!offsetPx || points.length < 3) return points
+    let cx = 0
+    let cy = 0
+    for (const [x, y] of points) {
+      cx += x
+      cy += y
+    }
+    cx /= points.length
+    cy /= points.length
+    return points.map(([x, y]) => {
+      const dx = x - cx
+      const dy = y - cy
+      const d = Math.hypot(dx, dy) || 1
+      return [x + (dx / d) * offsetPx, y + (dy / d) * offsetPx]
+    })
+  }
+
   function paintOneOutline(ctx, item, no, cf, W, { selected = false, forExport = false } = {}) {
-    const color = selected ? 'rgba(240,68,82,0.95)' : 'rgba(255,255,255,0.96)'
+    const color = selected ? tokenAlpha('--complete', 0.95) : tokenAlpha('--on-fill', 0.96)
     const st = outlineStyleOf(item.id)
     const base = Math.max(1, W * 0.002)
+    const offsetPx = Math.max(0, Number(st.gap) || 0) * W * 0.001
 
     ctx.save()
     ctx.lineWidth = base * st.width
     ctx.strokeStyle = color
-    ctx.shadowColor = 'rgba(0,0,0,0.45)'
+    ctx.shadowColor = tokenAlpha('--ink', 0.45)
     ctx.shadowBlur = base
     ctx.setLineDash(st.style === 'dashed' ? [W * 0.001 * st.dashLen, W * 0.001 * st.dashGap] : [])
     for (const loop of Array.isArray(item.polygons) ? item.polygons : []) {
       if (!Array.isArray(loop) || loop.length < 3) continue
+      const points = offsetLoopFromCentroid(loop.map(([x, y]) => cf.ptPx(x, y)), offsetPx)
       ctx.beginPath()
-      loop.forEach(([x, y], i) => {
-        const [px, py] = cf.ptPx(x, y)
+      points.forEach(([px, py], i) => {
         i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
       })
       ctx.closePath()

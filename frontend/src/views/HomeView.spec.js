@@ -11,6 +11,9 @@ const routerMock = vi.hoisted(() => ({
 }))
 
 const fetchItineraryMock = vi.hoisted(() => vi.fn())
+const fetchMemoriesMock = vi.hoisted(() => vi.fn())
+const fetchTripCardsMock = vi.hoisted(() => vi.fn())
+const fetchCardImageMock = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', () => ({
   useRouter: () => routerMock,
@@ -18,6 +21,12 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/api/itineraryApi', () => ({
   fetchItinerary: fetchItineraryMock,
+}))
+
+vi.mock('@/api/cardApi', () => ({
+  fetchMemories: fetchMemoriesMock,
+  fetchTripCards: fetchTripCardsMock,
+  fetchCardImage: fetchCardImageMock,
 }))
 
 function mountHomeView() {
@@ -42,6 +51,12 @@ describe('HomeView', () => {
     routerMock.push.mockClear()
     fetchItineraryMock.mockReset()
     fetchItineraryMock.mockResolvedValue({ dayCount: 0, days: [] })
+    fetchMemoriesMock.mockReset()
+    fetchMemoriesMock.mockResolvedValue([])
+    fetchTripCardsMock.mockReset()
+    fetchTripCardsMock.mockResolvedValue([])
+    fetchCardImageMock.mockReset()
+    fetchCardImageMock.mockResolvedValue(new Blob())
   })
 
   it('renders the public scrapbook home without exposing logs navigation', () => {
@@ -112,8 +127,9 @@ describe('HomeView', () => {
 
     expect(wrapper.find('h1').text()).toContain('지인님')
     expect(wrapper.text()).toContain('2번')
+    // 계획 중 여행은 이어가기 티켓 제목으로, 다녀온 여행은 도장(지역명)으로 노출된다.
     expect(wrapper.text()).toContain('후쿠오카 주말 여행')
-    expect(wrapper.text()).toContain('다낭 휴양 여행')
+    expect(wrapper.find('.home-stamps').text()).toContain('다낭')
     expect(wrapper.find('[data-testid="home-login"]').exists()).toBe(false)
     expect(wrapper.find('.ds-topbar__search').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-start-trip-top"]').exists()).toBe(false)
@@ -201,7 +217,7 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-testid="trip-preview-detail"]').exists()).toBe(true)
   })
 
-  it('opens upcoming and memory home items in the shared trip preview dialog', async () => {
+  it('opens an upcoming ticket in the preview dialog and a memory polaroid in the detail dialog', async () => {
     const auth = useAuthStore()
     const tripStore = useTripStore()
     auth.setTokens('access', 'refresh')
@@ -216,21 +232,27 @@ describe('HomeView', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-03',
       },
+    ]
+    // 최근 추억 폴라로이드는 trip 목록이 아니라 저장된 카드(memory summary)에서 나온다.
+    fetchMemoriesMock.mockResolvedValue([
       {
-        id: 11,
+        tripId: 11,
         title: '전주 기록 여행',
         region: '전주',
         theme: '골목',
-        status: 'past',
         startDate: '2026-05-01',
         endDate: '2026-05-03',
+        completed: true,
+        cardCount: 2,
       },
-    ]
+    ])
     vi.spyOn(auth, 'fetchMe').mockResolvedValue(auth.user)
-    vi.spyOn(tripStore, 'fetchTripList').mockResolvedValue({ items: tripStore.trips, total: 2 })
+    vi.spyOn(tripStore, 'fetchTripList').mockResolvedValue({ items: tripStore.trips, total: 1 })
 
     const wrapper = mountHomeView()
+    await flushPromises()
 
+    // 곧 떠날 여행(확정) 티켓 → 공유 미리보기 다이얼로그
     await wrapper.get('.home-upcoming .home-ticket-button').trigger('click')
     await flushPromises()
 
@@ -241,13 +263,12 @@ describe('HomeView', () => {
     expect(wrapper.text()).toContain('확정 부산 여행')
 
     await wrapper.get('.trip-preview-dialog__close').trigger('click')
+
+    // 최근 추억 폴라로이드 → 추억 상세 다이얼로그(저장 카드 기반)
     await wrapper.get('.home-memories .home-polaroid-button').trigger('click')
     await flushPromises()
 
-    expect(fetchItineraryMock).toHaveBeenCalledWith(11, {
-      trip: expect.objectContaining({ id: 11 }),
-    })
-    expect(wrapper.get('[data-testid="trip-preview-dialog"]').exists()).toBe(true)
+    expect(fetchTripCardsMock).toHaveBeenCalledWith(11, expect.anything())
     expect(wrapper.text()).toContain('전주 기록 여행')
   })
 

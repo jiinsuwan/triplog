@@ -16,16 +16,17 @@ import {
   deleteOutlineItem,
 } from '@/api/outlineApi'
 import { itemAt, normalizeBox, clamp01 } from '@/card/outlineEdit'
+import { tokenAlpha, tokenColor } from '@/utils/designTokens'
 
 // 캔버스에 그릴 색. 외곽선은 단색 빨강(흰 글로우 없음). 선택은 색 대신 굵기로 구분.
 const C = {
-  outline: '#e03131', // 외곽선 단색(빨강)
-  selected: '#ffc107', // 선택한 대상(노랑 — 색이 아니라 선택 강조용)
-  preview: '#2f9e44', // 미리보기 새 외곽선(초록 — 바뀔 모양 비교용)
-  absorb: '#f08c00', // 흡수될 대상(주황 — 미리보기 때만)
-  inc: '#2f9e44', // 포함점(초록)
-  exc: '#e03131', // 제외점(빨강)
-  accent: '#c2693f', // 추가 모드 탭/박스 드래그 피드백
+  outline: () => tokenColor('--complete'), // 외곽선 단색(빨강)
+  selected: () => tokenColor('--t-mustard'), // 선택한 대상(노랑 — 색이 아니라 선택 강조용)
+  preview: () => tokenColor('--t-sage'), // 미리보기 새 외곽선(초록 — 바뀔 모양 비교용)
+  absorb: () => tokenColor('--t-mustard'), // 흡수될 대상(주황 — 미리보기 때만)
+  inc: () => tokenColor('--t-sage'), // 포함점(초록)
+  exc: () => tokenColor('--complete'), // 제외점(빨강)
+  accent: () => tokenColor('--accent'), // 추가 모드 탭/박스 드래그 피드백
 }
 
 const props = defineProps({
@@ -77,7 +78,7 @@ function dotCursor(fill, plus) {
 }
 const canvasCursor = computed(() => {
   if (mode.value === 'add') return 'crosshair'
-  if (refining.value) return plusMinus.value === 'plus' ? dotCursor(C.inc, true) : dotCursor(C.exc, false)
+  if (refining.value) return plusMinus.value === 'plus' ? dotCursor(C.inc(), true) : dotCursor(C.exc(), false)
   return 'pointer' // 보정-대상 선택 단계: 클릭으로 대상 고르기
 })
 
@@ -141,7 +142,7 @@ function drawLoops(ctx, polygons, W, H) {
 // 단색 스트로크 + 옅은 어두운 그림자(흰 글로우 없이 어두운 사진에서도 보이게).
 function strokePoly(ctx, polygons, W, H, color, width, dash) {
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.5)'
+  ctx.shadowColor = tokenAlpha('--ink', 0.5)
   ctx.shadowBlur = Math.max(2, width)
   ctx.setLineDash(dash || [])
   ctx.lineWidth = width
@@ -163,26 +164,26 @@ function redraw() {
   for (const it of items.value) {
     const sel = it.id === selectedId.value
     if (absorb.has(it.id)) {
-      strokePoly(ctx, it.polygons, W, H, C.absorb, base, [base * 2, base * 1.4])
+      strokePoly(ctx, it.polygons, W, H, C.absorb(), base, [base * 2, base * 1.4])
     } else {
       // 일반 = 빨강, 선택 = 노랑(굵게).
-      strokePoly(ctx, it.polygons, W, H, sel ? C.selected : C.outline, sel ? base * 2.1 : base)
+      strokePoly(ctx, it.polygons, W, H, sel ? C.selected() : C.outline(), sel ? base * 2.1 : base)
     }
   }
   if (preview.value) {
-    strokePoly(ctx, preview.value.polygons, W, H, C.preview, base * 1.8, [base * 2.6, base * 1.7])
+    strokePoly(ctx, preview.value.polygons, W, H, C.preview(), base * 1.8, [base * 2.6, base * 1.7])
   }
   // 정제 점 마커
   const mr = Math.max(8, W * 0.014)
   for (const m of marks.value) {
-    if (m.kind === 'plus') marker(ctx, m.x * W, m.y * H, C.inc, '+', mr)
-    else marker(ctx, m.x * W, m.y * H, C.exc, '−', mr)
+    if (m.kind === 'plus') marker(ctx, m.x * W, m.y * H, C.inc(), '+', mr)
+    else marker(ctx, m.x * W, m.y * H, C.exc(), '−', mr)
   }
   // 마지막 탭(추가 모드)
   if (lastTap.value) {
     const [x, y] = lastTap.value
     ctx.save()
-    ctx.strokeStyle = C.accent
+    ctx.strokeStyle = C.accent()
     ctx.lineWidth = Math.max(2, W * 0.004)
     ctx.beginPath()
     ctx.arc(x * W, y * H, mr, 0, Math.PI * 2)
@@ -194,7 +195,7 @@ function redraw() {
     const { x0, y0, x1, y1 } = boxDraft.value
     ctx.save()
     ctx.setLineDash([base * 2, base * 1.4])
-    ctx.strokeStyle = C.accent
+    ctx.strokeStyle = C.accent()
     ctx.lineWidth = Math.max(2, W * 0.004)
     ctx.strokeRect(x0 * W, y0 * H, (x1 - x0) * W, (y1 - y0) * H)
     ctx.restore()
@@ -202,14 +203,14 @@ function redraw() {
 }
 function marker(ctx, px, py, color, sign, r = 9) {
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.4)'
+  ctx.shadowColor = tokenAlpha('--ink', 0.4)
   ctx.shadowBlur = r * 0.4
   ctx.fillStyle = color
   ctx.beginPath()
   ctx.arc(px, py, r, 0, Math.PI * 2)
   ctx.fill()
   ctx.shadowBlur = 0
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = tokenColor('--on-fill')
   ctx.font = `700 ${Math.round(r * 1.3)}px sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -604,7 +605,7 @@ watch(mode, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(40, 30, 20, 0.46);
+  background: color-mix(in srgb, var(--ink) 46%, transparent);
   padding: 18px;
 }
 .cd-modal {
@@ -612,9 +613,9 @@ watch(mode, () => {
   flex-direction: column;
   width: min(980px, 95vw);
   height: min(680px, 92vh);
-  background: var(--paper, #fbf7ee);
+  background: var(--paper);
   border-radius: 16px;
-  box-shadow: var(--shadow-pop, 0 14px 40px -12px rgba(50, 30, 15, 0.5));
+  box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
 .cd-head {
@@ -622,7 +623,7 @@ watch(mode, () => {
   align-items: center;
   gap: 10px;
   padding: 13px 16px;
-  border-bottom: 1px solid var(--line, #e2d8c4);
+  border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
 }
 .cd-head strong {
@@ -644,7 +645,7 @@ watch(mode, () => {
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: var(--paper-dim, #f6efe2);
+  background: var(--paper-dim);
 }
 .cd-canvaswrap {
   position: relative;
@@ -657,8 +658,8 @@ watch(mode, () => {
   max-height: 100%;
   object-fit: contain;
   border-radius: 10px;
-  box-shadow: 0 8px 26px -12px rgba(40, 25, 10, 0.5);
-  background: #fff;
+  box-shadow: var(--shadow-pop);
+  background: var(--paper-card);
   touch-action: none;
 }
 .cd-chip {
@@ -668,8 +669,8 @@ watch(mode, () => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: rgba(33, 26, 20, 0.82);
-  color: #fff;
+  background: color-mix(in srgb, var(--ink) 82%, transparent);
+  color: var(--on-fill);
   border-radius: 20px;
   padding: 5px 11px;
   font-size: 12px;
@@ -677,10 +678,10 @@ watch(mode, () => {
   pointer-events: none;
 }
 .cd-chip b.inc {
-  color: #a7c79a;
+  color: var(--t-sage);
 }
 .cd-chip b.exc {
-  color: #ec9a93;
+  color: var(--complete);
 }
 
 /* ── 패널: 고정 컨트롤 + 스크롤 목록 ── */
@@ -688,8 +689,8 @@ watch(mode, () => {
   flex: 0 0 300px;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--line, #e2d8c4);
-  background: var(--paper, #fbf7ee);
+  border-left: 1px solid var(--line);
+  background: var(--paper);
   overflow: hidden;
 }
 .cd-ctrls {
@@ -699,7 +700,7 @@ watch(mode, () => {
   flex-direction: column;
   gap: 10px;
   padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--line2, #efe8d9);
+  border-bottom: 1px solid var(--line2);
 }
 .cd-objsection {
   flex: 1 1 auto;
@@ -712,10 +713,10 @@ watch(mode, () => {
 /* 1단계 모드 = 큰 세그먼트, 활성 accent 채움 */
 .modeseg {
   display: flex;
-  border: 1px solid var(--line-strong, #d8ccb6);
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
   overflow: hidden;
-  background: var(--on-fill, #fbf8f1);
+  background: var(--on-fill);
 }
 .modeseg button {
   flex: 1;
@@ -725,12 +726,12 @@ watch(mode, () => {
   font: inherit;
   font-size: 14px;
   font-weight: 700;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
   cursor: pointer;
 }
 .modeseg button.on {
-  background: var(--accent, #c2693f);
-  color: var(--on-fill, #fbf8f1);
+  background: var(--accent);
+  color: var(--on-fill);
 }
 
 /* 도구 타일(점/박스) = 한 급 낮춤(채움 X, 테라코타 라인+옅은 배경) */
@@ -744,20 +745,20 @@ watch(mode, () => {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  border: 1px solid var(--line, #e2d8c4);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--paper-card, #fffdf8);
+  background: var(--paper-card);
   padding: 9px 0;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
 }
 .tool.on {
-  border-color: var(--accent, #c2693f);
-  color: var(--accent, #c2693f);
-  background: #f6e9df;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--paper-card));
 }
 
 /* 포함/제외 토글 = 각자 색(세이지/적색) 틴트 */
@@ -767,25 +768,25 @@ watch(mode, () => {
 }
 .toggle button {
   flex: 1;
-  border: 1px solid var(--line, #e2d8c4);
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: var(--paper-card, #fffdf8);
+  background: var(--paper-card);
   padding: 8px 0;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
   cursor: pointer;
 }
 .toggle button.inc.on {
-  background: #e7eee1;
-  border-color: #6f8a5f;
-  color: #51714a;
+  background: color-mix(in srgb, var(--t-sage) 16%, var(--paper-card));
+  border-color: var(--t-sage);
+  color: var(--t-sage);
 }
 .toggle button.exc.on {
-  background: #f6e0dd;
-  border-color: #c0392b;
-  color: #a5392e;
+  background: color-mix(in srgb, var(--complete) 14%, var(--paper-card));
+  border-color: var(--complete);
+  color: var(--complete);
 }
 
 .cd-sub {
@@ -797,12 +798,12 @@ watch(mode, () => {
 .cd-subt {
   font-size: 12.5px;
   font-weight: 700;
-  color: var(--ink, #2c2926);
+  color: var(--ink);
 }
 .cd-x {
   border: 0;
   background: transparent;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -810,12 +811,12 @@ watch(mode, () => {
   padding: 2px 4px;
 }
 .cd-x:hover {
-  color: var(--ink, #2c2926);
+  color: var(--ink);
 }
 .cd-note {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
 }
 
 .actionrow {
@@ -829,22 +830,22 @@ watch(mode, () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line-strong, #d8ccb6);
-  background: var(--paper-card, #fffdf8);
+  border: 1px solid var(--line-strong);
+  background: var(--paper-card);
   border-radius: 9px;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
   cursor: pointer;
 }
 .iconbtn:disabled {
-  color: var(--ink-faint, #b6ab97);
+  color: var(--ink-faint);
   cursor: default;
 }
 
 /* 버튼 — 디자인 시스템 톤 */
 .b {
-  border: 1px solid var(--line-strong, #d8ccb6);
-  background: var(--paper-card, #fffdf8);
-  color: var(--ink, #2c2926);
+  border: 1px solid var(--line-strong);
+  background: var(--paper-card);
+  color: var(--ink);
   border-radius: 9px;
   padding: 9px 14px;
   font: inherit;
@@ -853,19 +854,19 @@ watch(mode, () => {
   cursor: pointer;
 }
 .b.pri {
-  background: var(--accent, #c2693f);
-  border-color: var(--accent, #c2693f);
-  color: var(--on-fill, #fbf8f1);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-fill);
 }
 .b.pri:disabled {
-  background: #dcb79f;
-  border-color: #dcb79f;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
   cursor: default;
 }
 .b.ghost {
   background: transparent;
-  border-color: var(--line, #e2d8c4);
-  color: var(--ink-sub, #8a8276);
+  border-color: var(--line);
+  color: var(--ink-sub);
 }
 .b.sm {
   padding: 6px 12px;
@@ -880,7 +881,7 @@ watch(mode, () => {
 .b.dangerlink {
   background: transparent;
   border: 1px solid transparent;
-  color: var(--complete, #c0392b);
+  color: var(--complete);
   font-size: 12.5px;
   font-weight: 600;
   padding: 4px;
@@ -890,7 +891,7 @@ watch(mode, () => {
   text-decoration: underline;
 }
 .b.dangerlink:disabled {
-  color: var(--ink-faint, #b6ab97);
+  color: var(--ink-faint);
   cursor: default;
   text-decoration: none;
 }
@@ -901,16 +902,16 @@ watch(mode, () => {
   line-height: 1.5;
 }
 .cd-notice.info {
-  color: var(--stamp, #2f4a5c);
+  color: var(--stamp);
 }
 .cd-notice.error {
-  color: var(--complete, #c0392b);
+  color: var(--complete);
 }
 .cd-busy {
   margin: 0;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--accent, #c2693f);
+  color: var(--accent);
 }
 
 /* 목록 */
@@ -918,7 +919,7 @@ watch(mode, () => {
   flex: 0 0 auto;
   font-size: 12px;
   font-weight: 700;
-  color: var(--ink-sub, #8a8276);
+  color: var(--ink-sub);
   letter-spacing: 0.2px;
   margin-bottom: 7px;
 }
@@ -938,14 +939,14 @@ watch(mode, () => {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border: 1px solid var(--line2, #efe8d9);
+  border: 1px solid var(--line2);
   border-radius: 8px;
-  background: var(--paper-card, #fffdf8);
+  background: var(--paper-card);
   cursor: pointer;
 }
 .objlist li.on {
-  border-color: var(--accent, #c2693f);
-  background: #f6e9df;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--paper-card));
 }
 .objlist li.dim {
   opacity: 0.5;
@@ -957,46 +958,46 @@ watch(mode, () => {
   flex: 0 0 auto;
 }
 .objlist .dot.u {
-  background: #6f8a5f;
+  background: var(--t-sage);
 }
 .objlist .dot.a {
-  background: #2f4a5c;
+  background: var(--stamp);
 }
 .objlist .nm {
   flex: 1;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink, #2c2926);
+  color: var(--ink);
 }
 .objlist .tag {
   font-size: 11px;
   font-weight: 700;
-  color: var(--ink-sub, #8a8276);
-  background: var(--paper-dim, #f6efe2);
+  color: var(--ink-sub);
+  background: var(--paper-dim);
   border-radius: 5px;
   padding: 1px 6px;
 }
 .objlist .x {
   border: 0;
   background: transparent;
-  color: var(--ink-faint, #b6ab97);
+  color: var(--ink-faint);
   font-size: 12.5px;
   cursor: pointer;
   padding: 2px 5px;
   border-radius: 5px;
 }
 .objlist .x:hover {
-  color: var(--complete, #c0392b);
-  background: #f6e0dd;
+  color: var(--complete);
+  background: color-mix(in srgb, var(--complete) 14%, var(--paper-card));
 }
 .objlist .x:disabled {
-  color: var(--line-strong, #d8ccb6);
+  color: var(--line-strong);
   cursor: default;
 }
 .objempty {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-faint, #b6ab97);
+  color: var(--ink-faint);
 }
 </style>
