@@ -8,6 +8,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
+import { AppTopBar } from '@/components/common'
 import { useItineraryStore } from '@/stores/itinerary'
 import { loadKakaoMaps } from '@/utils/kakaoMap'
 import {
@@ -39,6 +40,18 @@ const REGION_KAKAO_PAGE_LIMIT = 1
 const MAX_KAKAO_PAGE_LIMIT = 2
 const REGION_PLACE_PAGE_SIZE = 28
 const MAP_PLACE_PAGE_SIZE = 60
+const TIMELINE_START_HOUR = 9
+const TIMELINE_END_HOUR = 21
+const TIMELINE_HOUR_HEIGHT_PX = 88
+const TIMELINE_MINUTES_PER_STEP = 15
+const MIN_STAY_MINUTES = 30
+const TIMELINE_CARD_GAP_PX = 10
+const TRANSPORT_VIEW_OPTIONS = [
+  { label: '🚶 도보', value: 'walk' },
+  { label: '🚗 차', value: 'car' },
+  { label: '🚌 버스', value: 'public_transit' },
+  { label: '기타', value: 'other' },
+]
 const ANCHOR_SEARCH_RADIUS_METERS = 380
 const ANCHOR_SEARCH_LEVEL = 3
 const MAP_MIN_LEVEL = 1
@@ -65,20 +78,17 @@ const DAY_ROUTE_COLORS = [
 ]
 const COLLECTION_ROUTE_COLOR = '#ea580c'
 const GENERIC_FOOD_KEYWORDS = new Set([
-  '맛집',
   '식당',
+  '맛집',
   '음식점',
-  '밥집',
+  '한식',
   '밥',
-  '먹거리',
-  '뭐먹지',
-  '뭘먹지',
-  '뭐먹을까',
-  '뭘먹을까',
-  '점심',
-  '저녁',
+  '고기',
+  '레스토랑',
+  '브런치',
+  '분식',
 ])
-const GENERIC_CAFE_KEYWORDS = new Set(['카페', '커피', '찻집', '디저트'])
+const GENERIC_CAFE_KEYWORDS = new Set(['카페', '커피', '디저트', '베이커리'])
 
 const route = useRoute()
 const router = useRouter()
@@ -112,6 +122,7 @@ const currentPage = ref(1)
 const mapViewportFilter = ref(null)
 const currentMapSignature = ref('')
 const lastMapSearchSignature = ref('')
+const timelineDragState = ref(null)
 
 let kakao = null
 let map = null
@@ -163,24 +174,26 @@ const activeDay = computed(() =>
   days.value.find((day) => day.dayNumber === activeDayNumber.value) || days.value[0],
 )
 const activeStops = computed(() => activeDay.value?.stops ?? [])
+const activeDisplayStops = computed(() => orderTimelineStops(activeStops.value))
+const activeTimelineLayout = computed(() => buildTimelineLayout(activeDisplayStops.value))
 const dayTabs = computed(() =>
   days.value.map((day) => ({
-    label: `${day.dayNumber}일차`,
+    label: `DAY ${day.dayNumber}`,
     value: day.dayNumber,
     count: day.stops.length,
     date: day.date,
   })),
 )
 const activeRoutePlaceKeys = computed(
-  () => new Map(activeStops.value.map((stop) => [stopPlaceKey(stop), stop.sortOrder])),
+  () => new Map(activeDisplayStops.value.map((stop, index) => [stopPlaceKey(stop), index + 1])),
 )
 const routeSummary = computed(() =>
-  activeStops.value
-    .map((stop) => `${stop.sortOrder}. ${stop.place.name}`)
+  activeDisplayStops.value
+    .map((stop, index) => `${index + 1}. ${stop.place.name}`)
     .join(' → '),
 )
 const routeMapPlaces = computed(() => {
-  const routedPlaces = activeStops.value.map((stop) => toMapPlace(stop.place))
+  const routedPlaces = activeDisplayStops.value.map((stop) => toMapPlace(stop.place))
   return dedupeRouteMapPlaces([...pocketPlaces.value, ...routedPlaces])
 })
 const allRouteMapPlaces = computed(() =>
@@ -246,7 +259,10 @@ watch(
 )
 
 watch(
-  () => activeStops.value.map((stop) => `${stop.id}:${stop.sortOrder}`).join('|'),
+  () => activeDisplayStops.value.map((stop, index) => {
+    const draft = stopDraft(stop)
+    return [stop.id, index, draft.selectedTime, draft.stayMinutes, draft.transport].join(':')
+  }).join('|'),
   () => renderMapPlaces(),
 )
 
@@ -957,7 +973,7 @@ function drawRoutePolylines() {
 }
 
 function routeSegments(day) {
-  const stops = (day.stops ?? []).filter((stop) => hasCoordinates(stop.place))
+  const stops = orderTimelineStops(day.stops ?? []).filter((stop) => hasCoordinates(stop.place))
   const segments = []
   for (let index = 0; index < stops.length - 1; index += 1) {
     const from = stops[index]
@@ -1602,7 +1618,7 @@ async function updateStopField(stop) {
   try {
     await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
       selectedTime: draft.selectedTime,
-      memo: draft.memo,
+      memo: stayMemoFromMinutes(draft.stayMinutes),
       transport: draft.transport,
     })
     selectedStopId.value = stop.id
@@ -1621,7 +1637,7 @@ async function updateLegTransport(stop, transport) {
   try {
     await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
       selectedTime: draft.selectedTime,
-      memo: draft.memo,
+      memo: stayMemoFromMinutes(draft.stayMinutes),
       transport: draft.transport,
     })
     await itineraryStore.fetchTripItinerary(tripId.value, trip.value)
@@ -1643,7 +1659,7 @@ async function updateManualTravelDuration(stop) {
   try {
     await itineraryStore.updateStop(tripId.value, activeDayNumber.value, stop.id, {
       selectedTime: draft.selectedTime,
-      memo: draft.memo,
+      memo: stayMemoFromMinutes(draft.stayMinutes),
       transport: draft.transport,
       manualTravelDurationMinutes,
     })
@@ -1665,6 +1681,101 @@ async function deleteStop(stop) {
   }
 }
 
+function startStopDrag(stop, event) {
+  if (event.button !== undefined && event.button !== 0) return
+  const card = event.currentTarget
+  const body = card.closest('.route-stop-list')
+  if (!body) return
+  const rect = card.getBoundingClientRect()
+  timelineDragState.value = { type: 'move', stop, body, grabOffsetY: event.clientY - rect.top }
+  selectedStopId.value = stop.id
+  beginTimelinePointerTracking()
+}
+
+function startStayResize(stop, edge, event) {
+  if (event.button !== undefined && event.button !== 0) return
+  const body = event.currentTarget.closest('.route-stop-list')
+  if (!body) return
+  timelineDragState.value = {
+    type: edge === 'top' ? 'resize-top' : 'resize-bottom',
+    stop,
+    body,
+    startY: event.clientY,
+    startMinutes: selectedTimeToMinutes(stopDraft(stop).selectedTime || stop.selectedTime) || TIMELINE_START_HOUR * 60,
+    startStay: stopStayMinutes(stop),
+  }
+  selectedStopId.value = stop.id
+  beginTimelinePointerTracking()
+}
+
+function beginTimelinePointerTracking() {
+  window.addEventListener('pointermove', handleTimelinePointerMove)
+  window.addEventListener('pointerup', finishTimelinePointerMove, { once: true })
+  window.addEventListener('pointercancel', cancelTimelinePointerMove, { once: true })
+}
+
+function handleTimelinePointerMove(event) {
+  const state = timelineDragState.value
+  if (!state?.stop) return
+  event.preventDefault()
+  autoScrollTimeline(state.body, event.clientY)
+  if (state.type === 'move') {
+    const rect = state.body.getBoundingClientRect()
+    const top = event.clientY - rect.top + state.body.scrollTop - state.grabOffsetY
+    setStopDraft(state.stop, { selectedTime: topToSelectedTime(top) })
+  } else {
+    const deltaMinutes = roundToTimelineStep(((event.clientY - state.startY) / TIMELINE_HOUR_HEIGHT_PX) * 60)
+    if (state.type === 'resize-bottom') {
+      setStopDraft(state.stop, { stayMinutes: Math.max(MIN_STAY_MINUTES, state.startStay + deltaMinutes) })
+    } else {
+      const nextStay = Math.max(MIN_STAY_MINUTES, state.startStay - deltaMinutes)
+      const nextStart = state.startMinutes + (state.startStay - nextStay)
+      setStopDraft(state.stop, { selectedTime: minutesToSelectedTime(nextStart), stayMinutes: nextStay })
+    }
+  }
+  normalizeTimelineDrafts()
+  renderMapPlaces()
+}
+
+function finishTimelinePointerMove() {
+  normalizeTimelineDrafts()
+  persistTimelineDrafts()
+  cleanupTimelineDrag()
+}
+
+function cancelTimelinePointerMove() {
+  cleanupTimelineDrag()
+}
+
+function cleanupTimelineDrag() {
+  window.removeEventListener('pointermove', handleTimelinePointerMove)
+  window.removeEventListener('pointerup', finishTimelinePointerMove)
+  window.removeEventListener('pointercancel', cancelTimelinePointerMove)
+  timelineDragState.value = null
+}
+
+function normalizeTimelineDrafts() {
+  let cursor = TIMELINE_START_HOUR * 60
+  activeDisplayStops.value.forEach((stop) => {
+    const draft = stopDraft(stop)
+    const current = selectedTimeToMinutes(draft.selectedTime || stop.selectedTime) || cursor
+    const nextStart = Math.max(cursor, current)
+    const stay = Math.max(MIN_STAY_MINUTES, Number(draft.stayMinutes) || stopStayMinutes(stop))
+    setStopDraft(stop, { selectedTime: minutesToSelectedTime(nextStart), stayMinutes: stay })
+    cursor = nextStart + stay
+  })
+}
+
+function autoScrollTimeline(body, clientY) {
+  if (!body) return
+  const rect = body.getBoundingClientRect()
+  if (clientY < rect.top + 64) body.scrollTop -= 18
+  if (clientY > rect.bottom - 64) body.scrollTop += 18
+}
+
+function persistTimelineDrafts() {
+  activeDisplayStops.value.forEach((stop) => updateStopField(stop))
+}
 function keepPlacePopupInView() {
   if (!mapEl.value || !placePopupOverlay) return
 
@@ -1776,58 +1887,150 @@ function defaultStopDraft(stop) {
     memo: stop.memo || '',
     transport: stop.transport || 'walk',
     manualTravelMinutes: manualTravelMinutesValue(stop.travelFromPrevious),
+    stayMinutes: stayMinutesFromMemo(stop.memo),
   }
+}
+
+function orderTimelineStops(stops = []) {
+  return [...stops].sort((left, right) => {
+    const leftTime = selectedTimeToMinutes(stopDraft(left).selectedTime || left.selectedTime)
+    const rightTime = selectedTimeToMinutes(stopDraft(right).selectedTime || right.selectedTime)
+    return (
+      (leftTime ?? fallbackStopMinutes(left)) -
+        (rightTime ?? fallbackStopMinutes(right)) ||
+      Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) ||
+      Number(left.id ?? 0) - Number(right.id ?? 0)
+    )
+  })
+}
+
+function buildTimelineLayout(stops = []) {
+  const layout = new Map()
+  let cursor = 0
+  stops.forEach((stop) => {
+    const rawTop = selectedTimeToTop(stopDraft(stop).selectedTime || stop.selectedTime)
+    const height = stopTimelineHeight(stop)
+    const top = Math.max(rawTop, cursor)
+    layout.set(stop.id, { top, height })
+    cursor = top + height + TIMELINE_CARD_GAP_PX
+  })
+  return layout
+}
+
+function fallbackStopMinutes(stop) {
+  return TIMELINE_START_HOUR * 60 + Math.max(0, Number(stop?.sortOrder ?? 1) - 1) * 90
+}
+
+function selectedTimeToMinutes(value) {
+  const [hour, minute] = String(value || '').split(':').map(Number)
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null
+  return hour * 60 + minute
+}
+
+function minutesToSelectedTime(minutes) {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(minutes)))
+  const hour = Math.floor(clamped / 60)
+  const minute = clamped % 60
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+function roundToTimelineStep(minutes) {
+  return Math.round(minutes / TIMELINE_MINUTES_PER_STEP) * TIMELINE_MINUTES_PER_STEP
+}
+
+function selectedTimeToTop(value) {
+  const minutes = selectedTimeToMinutes(value) ?? TIMELINE_START_HOUR * 60
+  const fromStart = Math.max(0, minutes - TIMELINE_START_HOUR * 60)
+  return (fromStart / 60) * TIMELINE_HOUR_HEIGHT_PX
+}
+
+function topToSelectedTime(top) {
+  const maxMinutes = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 60
+  const minutesFromStart = Math.max(
+    0,
+    Math.min(maxMinutes, roundToTimelineStep((top / TIMELINE_HOUR_HEIGHT_PX) * 60)),
+  )
+  return minutesToSelectedTime(TIMELINE_START_HOUR * 60 + minutesFromStart)
+}
+
+function stopStayMinutes(stop) {
+  const draftMinutes = Number(stopDraft(stop).stayMinutes)
+  if (Number.isFinite(draftMinutes) && draftMinutes >= MIN_STAY_MINUTES) return draftMinutes
+  return stayMinutesFromMemo(stop.memo)
+}
+
+function stopTimelineHeight(stop) {
+  return Math.max(
+    92,
+    Math.round((stopStayMinutes(stop) / 60) * TIMELINE_HOUR_HEIGHT_PX),
+  )
+}
+
+function stopTimelineStyle(stop) {
+  const layout = activeTimelineLayout.value.get(stop.id)
+  return {
+    top: `${layout?.top ?? selectedTimeToTop(stopDraft(stop).selectedTime || stop.selectedTime)}px`,
+    height: `${layout?.height ?? stopTimelineHeight(stop)}px`,
+  }
+}
+
+function routeLegTimelineStyle(stop) {
+  const layout = activeTimelineLayout.value.get(stop.id)
+  return {
+    top: `${(layout?.top ?? 0) + (layout?.height ?? stopTimelineHeight(stop)) + 8}px`,
+  }
+}
+
+function stayMinutesFromMemo(memo) {
+  const text = String(memo || '')
+  const hourMatch = text.match(/(\d+)\s*시간/)
+  const minuteMatch = text.match(/(\d+)\s*분/)
+  const minutes = (hourMatch ? Number(hourMatch[1]) * 60 : 0) + (minuteMatch ? Number(minuteMatch[1]) : 0)
+  return Math.max(MIN_STAY_MINUTES, minutes || 60)
+}
+
+function formatStayMinutes(minutes) {
+  const safeMinutes = Math.max(MIN_STAY_MINUTES, Number(minutes) || 60)
+  const hours = Math.floor(safeMinutes / 60)
+  const rest = safeMinutes % 60
+  if (!hours) return rest + '분'
+  return rest ? hours + '시간 ' + rest + '분' : hours + '시간'
+}
+
+function stayMemoFromMinutes(minutes) {
+  return '머무는 시간 ' + formatStayMinutes(minutes)
 }
 
 function travelEstimateLabel(stop) {
   const estimate = stop?.travelFromPrevious
-  if (!estimate) return '계산 대기'
-  if (estimate.status === 'manual') {
-    return `직접 ${formatTravelDuration(estimate.durationSeconds)}`
+  if (!estimate) return '계산 중'
+  if (estimate.status === 'manual' || estimate.status === 'estimated') {
+    return formatTravelDuration(estimate.durationSeconds) || '계산 중'
   }
-  if (estimate.status === 'estimated') {
-    return [travelProviderLabel(estimate.provider), formatTravelDuration(estimate.durationSeconds), formatTravelDistance(estimate.distanceMeters)]
-      .filter(Boolean)
-      .join(' · ')
-  }
-  const labels = {
-    manual_required: '직접 입력 필요',
-    missing_coordinates: '좌표 없음',
-    not_configured: '키 미설정',
-    failed: '계산 실패',
-  }
-  return labels[estimate.status] || '계산 대기'
+  return '계산 중'
 }
 
-function travelProviderLabel(provider) {
-  if (provider === 'tmap') return 'TMAP'
+function travelProviderLabel() {
   return ''
 }
 
 function travelEstimateTitle(stop) {
-  const estimate = stop?.travelFromPrevious
-  if (estimate?.status === 'manual') {
-    return '직접 입력한 구간 소요시간입니다.'
-  }
-  if (estimate?.provider === 'tmap' && estimate.status === 'estimated') {
-    return 'TMAP API로 계산된 구간 소요시간입니다.'
-  }
-  return travelEstimateLabel(stop)
+  return travelEstimateLabel(stop) || '이동 시간'
 }
 
 function formatTravelDuration(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return ''
   const minutes = Math.max(1, Math.round(seconds / 60))
-  if (minutes < 60) return `${minutes}분`
+  if (minutes < 60) return minutes + '분'
   const hours = Math.floor(minutes / 60)
   const restMinutes = minutes % 60
-  return restMinutes ? `${hours}시간 ${restMinutes}분` : `${hours}시간`
+  return restMinutes ? hours + '시간 ' + restMinutes + '분' : hours + '시간'
 }
 
 function formatTravelDistance(meters) {
   if (!Number.isFinite(meters) || meters < 0) return ''
-  if (meters < 1000) return `${Math.round(meters)}m`
-  return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)}km`
+  if (meters < 1000) return Math.round(meters) + 'm'
+  return (meters / 1000).toFixed(meters < 10000 ? 1 : 0) + 'km'
 }
 
 function isManualTravelInputVisible(stop) {
@@ -2279,396 +2482,176 @@ function normalizeSearchText(value = '') {
 </script>
 
 <template>
-  <main class="place-page">
-    <header class="place-header">
-      <Button
-        label="여행으로"
-        icon="pi pi-arrow-left"
-        severity="secondary"
-        outlined
-        @click="goBack"
-      />
-      <div>
-        <span class="eyebrow">Place Search</span>
-        <h1>{{ trip?.title || '장소 탐색' }}</h1>
-        <p>{{ tripRegion }} 주변 장소를 한 지도에서 확인하고 담습니다.</p>
-      </div>
-    </header>
+  <div class="place-page-shell">
+    <AppTopBar active="trips" search-placeholder="장소, 골목, 맛집 검색">
+      <template #actions>
+        <Button label="여행으로" severity="secondary" outlined @click="goBack" />
+      </template>
+    </AppTopBar>
 
-    <Message v-if="tripStore.error && !trip" severity="error" :closable="false" class="state-message">
-      {{ tripStore.error }}
-    </Message>
-
-    <section v-if="loading" class="loading-state" aria-live="polite">
-      <ProgressSpinner aria-label="장소 탐색 화면 준비 중" />
-      <span>지도와 장소 데이터를 준비하는 중입니다.</span>
-    </section>
-
-    <section v-else class="search-shell" :class="{ planning: itineraryMode }">
-      <aside class="place-list-panel" :class="{ planning: itineraryMode }">
-        <template v-if="!itineraryMode">
-          <div class="search-card">
-            <div class="field-row">
-              <InputText
-                v-model="keyword"
-                placeholder="장소, 골목, 맛집 검색"
-                aria-label="장소 검색어"
-                @keyup.enter="runSearch"
-              />
-              <Button icon="pi pi-search" aria-label="검색" :loading="searching" @click="runSearch" />
-            </div>
-            <SelectButton
-              v-model="activeTab"
-              :options="CATEGORY_OPTIONS"
-              option-label="label"
-              option-value="value"
-              aria-label="장소 유형"
-            />
-          </div>
-
-          <Message v-if="placeError" severity="warn" :closable="false">
-            {{ placeError }}
-          </Message>
-          <Message v-if="kakaoSearchNotice" severity="info" :closable="false">
-            {{ kakaoSearchNotice }}
-          </Message>
-
-          <div class="list-head">
-            <strong>{{ visiblePlaces.length }}곳</strong>
-          </div>
-
-          <div class="place-list">
-            <article
-              v-for="place in paginatedPlaces"
-              :key="place.uid"
-              class="place-row"
-              :class="{ active: selectedPlace?.uid === place.uid }"
-            >
-              <button type="button" class="place-row__main" @click="selectPlace(place)">
-                <span>
-                  <strong>{{ place.name }}</strong>
-                  <small>{{ place.address || place.category }}</small>
-                </span>
-              </button>
-              <Button
-                class="place-row__pocket"
-                :icon="isPocketed(place) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
-                :severity="isPocketed(place) ? 'success' : 'secondary'"
-                text
-                rounded
-                :aria-label="`${place.name} ${pocketActionLabel(place)}`"
-                @click.stop="togglePocket(place)"
-              />
-            </article>
-          </div>
-
-          <nav v-if="totalPages > 1" class="pagination" aria-label="장소 목록 페이지">
-            <Button
-              icon="pi pi-chevron-left"
-              severity="secondary"
-              outlined
-              size="small"
-              aria-label="이전 페이지"
-              :disabled="!canGoPrevPage"
-              @click="goToPage(currentPage - 1)"
-            />
-            <Button
-              v-for="pageNumber in pageNumbers"
-              :key="pageNumber"
-              :label="String(pageNumber)"
-              :severity="pageNumber === currentPage ? 'primary' : 'secondary'"
-              :outlined="pageNumber !== currentPage"
-              size="small"
-              @click="goToPage(pageNumber)"
-            />
-            <Button
-              icon="pi pi-chevron-right"
-              severity="secondary"
-              outlined
-              size="small"
-              aria-label="다음 페이지"
-              :disabled="!canGoNextPage"
-              @click="goToPage(currentPage + 1)"
-            />
-          </nav>
-        </template>
-
-        <template v-else>
-          <div class="route-panel-tools">
-            <Button
-              label="장소 더 담기"
-              icon="pi pi-bookmark"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="closeItineraryBuilder"
-            />
-          </div>
-
-          <Message v-if="itineraryStore.isMock" severity="info" :closable="false" class="compact-message">
-            현재는 mock/local state로 루트 편집 흐름을 검증합니다.
-          </Message>
-          <Message v-if="itineraryStore.error" severity="error" :closable="false" class="compact-message">
-            {{ itineraryStore.error }}
-          </Message>
-          <Message v-if="itineraryNotice" severity="success" :closable="false" class="compact-message">
-            {{ itineraryNotice }}
-          </Message>
-
-          <div class="day-tabs" role="tablist" aria-label="편집할 날짜">
-            <button
-              v-for="day in dayTabs"
-              :key="day.value"
-              type="button"
-              class="day-tab"
-              :class="{ active: day.value === activeDayNumber }"
-              :style="{ '--trip-day-color': dayRouteColor(day.value) }"
-              role="tab"
-              :aria-selected="day.value === activeDayNumber"
-              @click="activeDayNumber = day.value"
-            >
-              <strong>{{ day.label }}</strong>
-              <span>{{ formatDayDate(day.date) }}</span>
-              <em>{{ day.count }}</em>
-            </button>
-          </div>
-
-          <section class="route-stop-section">
-            <div class="route-section-head">
-              <strong>현재 루트</strong>
-              <small>
-                {{
-                  routeSummary ||
-                  (routeMapPlaces.length
-                    ? '지도 마커를 누르는 순서대로 루트가 만들어집니다.'
-                    : '장소를 검색하거나 담은 뒤 지도 마커를 눌러 루트를 만들어보세요.')
-                }}
-              </small>
-            </div>
-
-            <div v-if="activeStops.length" class="route-stop-list">
-              <template v-for="(stop, index) in activeStops" :key="stop.id">
-                <article
-                  class="route-stop-card"
-                  :class="{ active: selectedStopId === stop.id }"
-                >
-                <button
-                  type="button"
-                  class="route-stop-main"
-                  :aria-label="`${stop.sortOrder}번 ${stop.place.name} 선택`"
-                  @click="selectedStopId = stop.id"
-                >
-                  <span>{{ stop.sortOrder }}</span>
-                  <strong>{{ stop.place.name }}</strong>
-                  <small>{{ stop.place.roadAddress || stop.place.address || stop.place.category }}</small>
-                </button>
-
-                <div class="route-stop-fields">
-                  <InputText
-                    :model-value="stopDraft(stop).selectedTime"
-                    type="time"
-                    aria-label="방문 시각"
-                    @update:model-value="setStopDraft(stop, { selectedTime: $event })"
-                    @change="updateStopField(stop)"
-                  />
-                </div>
-                <textarea
-                  :value="stopDraft(stop).memo"
-                  rows="2"
-                  placeholder="메모"
-                  aria-label="방문 메모"
-                  @input="setStopDraft(stop, { memo: $event.target.value })"
-                  @blur="updateStopField(stop)"
-                />
-                <div class="route-stop-actions">
-                  <Button
-                    icon="pi pi-trash"
-                    severity="danger"
-                    outlined
-                    rounded
-                    size="small"
-                    :disabled="itineraryStore.mutating"
-                    :aria-label="`${stop.place.name} 삭제`"
-                    @click="deleteStop(stop)"
-                  />
-                </div>
-                </article>
-                <div v-if="index < activeStops.length - 1" class="route-leg">
-                  <span>
-                    <i class="pi pi-arrow-down" aria-hidden="true"></i>
-                    {{ stop.place.name }} → {{ activeStops[index + 1].place.name }}
-                  </span>
-                  <div
-                    class="route-leg__details"
-                    :class="{ 'has-manual': isManualTravelInputVisible(stop) }"
-                  >
-                    <Select
-                      :model-value="stopDraft(stop).transport"
-                      :options="TRANSPORT_OPTIONS"
-                      option-label="label"
-                      option-value="value"
-                      :aria-label="`${stop.place.name}에서 ${activeStops[index + 1].place.name} 이동수단`"
-                      :disabled="itineraryStore.mutating"
-                      @update:model-value="updateLegTransport(stop, $event)"
-                    />
-                    <label
-                      v-if="isManualTravelInputVisible(stop)"
-                      class="route-leg__manual"
-                      :aria-label="`${stop.place.name}에서 ${activeStops[index + 1].place.name} 직접 소요시간`"
-                    >
-                      <input
-                        class="route-leg__manual-input"
-                        type="number"
-                        min="1"
-                        max="1440"
-                        inputmode="numeric"
-                        placeholder="분"
-                        :value="stopDraft(activeStops[index + 1]).manualTravelMinutes"
-                        :disabled="itineraryStore.mutating"
-                        @input="setStopDraft(activeStops[index + 1], { manualTravelMinutes: $event.target.value })"
-                        @change="updateManualTravelDuration(activeStops[index + 1])"
-                      />
-                      <span>분</span>
-                    </label>
-                    <em :title="travelEstimateTitle(activeStops[index + 1])">
-                      <small>{{ travelEstimateLabel(activeStops[index + 1]) }}</small>
-                    </em>
-                  </div>
-                </div>
-              </template>
-            </div>
-            <p v-else class="empty-pocket">담긴 장소를 순서대로 눌러 루트를 만들어보세요.</p>
-          </section>
-        </template>
-      </aside>
-
-      <section class="map-panel">
-        <div class="map-toolbar">
-          <div>
-            <span class="eyebrow">Map</span>
-            <h2>{{ itineraryMode ? '담은 장소 일정 만들기' : `${tripRegion} 주변 장소` }}</h2>
-          </div>
-          <div class="map-tools">
-            <Button
-              v-if="canSearchCurrentMapArea"
-              label="이 위치에서 재검색"
-              icon="pi pi-refresh"
-              severity="secondary"
-              outlined
-              size="small"
-              :loading="searching"
-              @click="searchCurrentMapArea"
-            />
-          </div>
+    <main class="place-page">
+      <header class="place-header">
+        <div>
+          <span class="tag-hand">{{ itineraryMode ? 'Route Builder' : 'Place Search' }}</span>
+          <h1>{{ itineraryMode ? '담은 장소를 일정으로 엮어요' : tripRegion + ' 주변 장소를 담아요' }}</h1>
+          <p>{{ itineraryMode ? '날짜별로 방문 순서와 머무는 시간을 빠르게 정합니다.' : '관광 데이터와 카카오맵 검색 결과를 한 화면에서 확인하고 보관함에 담습니다.' }}</p>
         </div>
-
-        <div class="map-stage">
-          <div ref="mapEl" class="kakao-map" :class="{ disabled: sdkError }" />
-          <Message v-if="sdkError" severity="error" :closable="false" class="map-error">
-            카카오맵을 불러오지 못했습니다. 카카오 개발자 콘솔에서 JavaScript 키와 Web 플랫폼
-            사이트 도메인(http://localhost:5173)을 확인해주세요. 상세: {{ sdkError }}
-          </Message>
-          <div v-if="sdkError" class="fallback-map">
-            <button
-              v-for="place in mapPlaces.filter(hasCoordinates)"
-              :key="place.uid"
-              type="button"
-              class="fallback-pin"
-              :class="{
-                db: place.origin === 'db',
-                kakao: place.origin === 'kakao',
-                pocketed: isPocketed(place),
-              }"
-              :style="fallbackPinStyle(place)"
-              @click="handleMapPlaceClick(place)"
-            >
-              <span aria-hidden="true" />
-              <strong>{{ place.name }}</strong>
-            </button>
-          </div>
+        <div class="step-card">
+          <span :class="{ on: !itineraryMode }">1 장소 담기</span>
+          <i aria-hidden="true">›</i>
+          <span :class="{ on: itineraryMode }">2 일정 배치</span>
         </div>
+      </header>
+
+      <Message v-if="tripStore.error && !trip" severity="error" :closable="false" class="state-message">{{ tripStore.error }}</Message>
+      <Message v-if="placeError" severity="error" :closable="false" class="state-message">{{ placeError }}</Message>
+      <Message v-if="itineraryNotice" severity="success" :closable="false" class="state-message">{{ itineraryNotice }}</Message>
+
+      <section v-if="loading" class="loading-state" aria-live="polite">
+        <ProgressSpinner aria-label="장소 정보를 불러오는 중" />
+        <span>장소 정보를 불러오고 있습니다.</span>
       </section>
 
-      <aside v-if="!itineraryMode" class="pocket-panel">
-        <div class="pocket-head">
-          <div>
-            <span class="eyebrow">Pocket</span>
-            <h2>담긴 장소</h2>
-          </div>
-          <strong>{{ pocketDisplayPlaces.length }}</strong>
-        </div>
+      <section v-else class="search-shell" :class="{ planning: itineraryMode }">
+        <aside class="place-list-panel" :class="{ planning: itineraryMode }">
+          <template v-if="!itineraryMode">
+            <div class="search-card">
+              <div class="field-row">
+                <InputText v-model="keyword" placeholder="카페, 관광지, 식당..." @keyup.enter="searchKakaoPlaces" />
+                <Button label="검색" :loading="searching" @click="searchKakaoPlaces" />
+              </div>
+              <SelectButton v-model="activeTab" :options="CATEGORY_OPTIONS" option-label="label" option-value="value" />
+            </div>
+            <div class="list-head"><strong>검색 결과</strong><em>{{ visiblePlaces.length }}곳</em></div>
+            <div class="place-list">
+              <article v-for="place in paginatedPlaces" :key="place.uid" class="place-row">
+                <button type="button" class="place-row__main" @click="selectPlace(place)">
+                  <span class="place-type-dot" :class="place.category || 'etc'"></span>
+                  <span><strong>{{ place.name }}</strong><small>{{ place.origin === 'kakao' ? '카카오맵' : '한국관광공사' }} · {{ place.category || '장소' }}</small></span>
+                </button>
+                <Button class="place-row__pocket" :icon="isPocketed(place) ? 'pi pi-check' : 'pi pi-plus'" severity="secondary" outlined rounded :aria-label="place.name + ' 담기'" @click="togglePocket(place)" />
+              </article>
+            </div>
+            <nav class="pagination" aria-label="검색 결과 페이지">
+              <Button label="이전" size="small" severity="secondary" outlined :disabled="!canGoPrevPage" @click="goToPage(currentPage - 1)" />
+              <Button v-for="pageNumber in pageNumbers" :key="pageNumber" :label="String(pageNumber)" size="small" :severity="pageNumber === currentPage ? 'contrast' : 'secondary'" :outlined="pageNumber !== currentPage" @click="goToPage(pageNumber)" />
+              <Button label="다음" size="small" severity="secondary" outlined :disabled="!canGoNextPage" @click="goToPage(currentPage + 1)" />
+            </nav>
+          </template>
 
-        <div v-if="pocketDisplayPlaces.length" class="pocket-list">
-          <article
-            v-for="place in pocketDisplayPlaces"
-            :key="place.uid"
-            class="pocket-item"
-            :class="{ routed: isRoutedPlace(place) }"
-          >
-            <strong>{{ place.name }}</strong>
-            <small>{{ place.address || place.category }}</small>
-            <Button
-              v-if="isPocketed(place)"
-              icon="pi pi-times"
-              severity="secondary"
-              text
-              rounded
-              aria-label="담기 취소"
-              @click="togglePocket(place)"
-            />
-            <em v-else>일정 포함</em>
-          </article>
-        </div>
-        <p v-else class="empty-pocket">지도나 목록에서 장소를 골라 담아보세요.</p>
-        <Button
-          class="route-start-button"
-          label="일정 루트 만들기"
-          icon="pi pi-sitemap"
-          severity="success"
-          :disabled="!pocketDisplayPlaces.length"
-          :loading="itineraryStore.loading"
-          @click="openItineraryBuilder"
-        />
-      </aside>
-    </section>
-  </main>
+          <template v-else>
+            <div class="route-builder-head"><Button label="장소 담기로" severity="secondary" outlined @click="closeItineraryBuilder" /></div>
+            <SelectButton v-model="activeDayNumber" :options="dayTabs" option-label="label" option-value="value" class="day-tabs" />
+            <section class="route-stop-section">
+              <header><h2>DAY {{ activeDay?.dayNumber || 1 }} · {{ formatDayDate(activeDay?.date) }}</h2></header>
+              <div v-if="activeDisplayStops.length" class="route-stop-list">
+                <template v-for="(stop, index) in activeDisplayStops" :key="stop.id">
+                  <article class="route-stop-card" :class="{ active: selectedStopId === stop.id }" :style="stopTimelineStyle(stop)" @pointerdown="startStopDrag(stop, $event)">
+                    <span class="route-stop-resize route-stop-resize--top" @pointerdown.stop.prevent="startStayResize(stop, 'top', $event)"></span>
+                    <div class="route-stop-main">
+                      <span>{{ stopDraft(stop).selectedTime || '--:--' }}</span>
+                      <div><strong>{{ stop.place.name }}</strong><small>{{ stop.place.category || '장소' }}</small><em>머무는 시간 {{ formatStayMinutes(stopStayMinutes(stop)) }}</em></div>
+                    </div>
+                    <Button class="route-stop-delete" icon="pi pi-times" severity="danger" text rounded :aria-label="stop.place.name + ' 삭제'" @pointerdown.stop @click="deleteStop(stop)" />
+                    <span class="route-stop-resize route-stop-resize--bottom" @pointerdown.stop.prevent="startStayResize(stop, 'bottom', $event)"></span>
+                  </article>
+                  <div v-if="index < activeDisplayStops.length - 1" class="route-leg" :style="routeLegTimelineStyle(stop)">
+                    <div class="route-leg__details">
+                      <Select :model-value="stopDraft(stop).transport" :options="TRANSPORT_VIEW_OPTIONS" option-label="label" option-value="value" :disabled="itineraryStore.mutating" @pointerdown.stop @update:model-value="updateLegTransport(stop, $event)" />
+                      <em :title="travelEstimateTitle(activeDisplayStops[index + 1])">{{ travelEstimateLabel(activeDisplayStops[index + 1]) }}</em>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <p v-else class="empty-pocket">담은 장소를 일정에 배치해보세요.</p>
+            </section>
+          </template>
+        </aside>
+
+        <section class="map-panel">
+          <div class="map-toolbar">
+            <div><span class="eyebrow">{{ itineraryMode ? 'Itinerary Map' : 'Kakao Map' }}</span><h2>{{ itineraryMode ? tripRegion + ' 일정 지도' : tripRegion + ' 주변 지도' }}</h2></div>
+            <div class="map-tools"><Button v-if="canSearchCurrentMapArea" label="이 위치에서 재검색" severity="secondary" outlined size="small" :loading="searching" @click="searchCurrentMapArea" /></div>
+          </div>
+          <div class="map-stage">
+            <div ref="mapEl" class="kakao-map" :class="{ disabled: sdkError }" />
+            <Message v-if="sdkError" severity="error" :closable="false" class="map-error">카카오맵을 불러오지 못했습니다. {{ sdkError }}</Message>
+            <div v-if="sdkError" class="fallback-map">
+              <button v-for="place in mapPlaces.filter(hasCoordinates)" :key="place.uid" type="button" class="fallback-pin" :style="fallbackPinStyle(place)" @click="handleMapPlaceClick(place)"><span aria-hidden="true" /><strong>{{ place.name }}</strong></button>
+            </div>
+          </div>
+        </section>
+
+        <aside v-if="!itineraryMode" class="pocket-panel">
+          <div class="pocket-head"><div><span class="eyebrow">Pocket</span><h2>담긴 장소</h2></div><strong>{{ pocketDisplayPlaces.length }}</strong></div>
+          <div v-if="pocketDisplayPlaces.length" class="pocket-list">
+            <article v-for="place in pocketDisplayPlaces" :key="place.uid" class="pocket-item" :class="{ routed: isRoutedPlace(place) }"><strong>{{ place.name }}</strong><Button v-if="isPocketed(place)" icon="pi pi-times" severity="secondary" text rounded aria-label="담기 취소" @click="togglePocket(place)" /><em v-else>일정 포함</em></article>
+          </div>
+          <p v-else class="empty-pocket">지도나 목록에서 장소를 골라 담아보세요.</p>
+          <Button class="route-start-button" label="일정 배치하기" severity="success" :disabled="!pocketDisplayPlaces.length" :loading="itineraryStore.loading" @click="openItineraryBuilder" />
+        </aside>
+      </section>
+    </main>
+  </div>
 </template>
 
 <style scoped>
-.place-page {
+.place-page-shell {
   min-height: 100vh;
-  padding: 24px clamp(16px, 3vw, 40px) 40px;
-  background:
-    linear-gradient(135deg, rgba(46, 143, 107, 0.12), transparent 34%),
-    linear-gradient(315deg, rgba(49, 130, 246, 0.10), transparent 38%),
-    #f6f8fb;
-  color: #151d25;
+  --ds-surface: var(--paper);
+}
+
+.place-page {
+  color: var(--ink);
+  margin: 0 auto;
+  max-width: 1320px;
+  min-height: calc(100vh - 54px);
+  padding: 24px clamp(18px, 4vw, 42px) 56px;
 }
 
 .place-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 18px;
+  justify-content: space-between;
   margin-bottom: 18px;
 }
 
 .place-header h1 {
   margin: 4px 0 0;
-  font-size: clamp(36px, 6vw, 68px);
-  line-height: 0.96;
+  font-size: clamp(30px, 5vw, 52px);
+  line-height: 1.04;
   letter-spacing: 0;
 }
 
 .place-header p {
-  margin: 12px 0 0;
-  color: #4e5968;
-  font-weight: 750;
+  color: var(--ink-sub);
+  font-size: 13px;
+  font-weight: 650;
+  margin: 8px 0 0;
 }
 
-.eyebrow {
-  color: #2e8f6b;
-  font-size: 13px;
-  font-weight: 900;
+.step-card {
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  color: var(--ink-faint);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 9px;
+  padding: 11px 14px;
+}
+
+.step-card span {
+  white-space: nowrap;
+}
+
+.step-card span.on {
+  color: var(--accent);
 }
 
 .state-message {
@@ -2677,13 +2660,13 @@ function normalizeSearchText(value = '') {
 
 .loading-state {
   min-height: 420px;
-  border: 1px solid #e5e8ef;
-  border-radius: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   display: grid;
   place-items: center;
   align-content: center;
   gap: 14px;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--paper);
 }
 
 .search-shell {
@@ -2701,10 +2684,10 @@ function normalizeSearchText(value = '') {
 .map-panel,
 .pocket-panel {
   min-height: calc(100vh - 190px);
-  border: 1px solid #e5e8ef;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.10);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
 }
 
 .place-list-panel {
@@ -2786,9 +2769,9 @@ function normalizeSearchText(value = '') {
 
 .place-row,
 .pocket-item {
-  border: 1px solid transparent;
-  border-radius: 20px;
-  background: #f8fafc;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
+  background: var(--paper-card);
 }
 
 .place-row {
@@ -2800,7 +2783,7 @@ function normalizeSearchText(value = '') {
   align-items: center;
   gap: 12px;
   text-align: left;
-  color: #151d25;
+  color: var(--ink);
 }
 
 .place-row__main {
@@ -2816,7 +2799,7 @@ function normalizeSearchText(value = '') {
 }
 
 .place-row__main:focus-visible {
-  outline: 2px solid #10b981;
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 
@@ -2828,8 +2811,8 @@ function normalizeSearchText(value = '') {
 }
 
 .place-row.active {
-  border-color: transparent;
-  background: #eefbf6;
+  border-color: var(--accent-soft);
+  background: #f7ecd6;
 }
 
 .place-row strong,
@@ -2843,7 +2826,7 @@ function normalizeSearchText(value = '') {
 .pocket-item small {
   display: block;
   margin-top: 4px;
-  color: #687586;
+  color: var(--ink-sub);
   font-size: 12px;
   font-weight: 750;
   line-height: 1.4;
@@ -2864,13 +2847,14 @@ function normalizeSearchText(value = '') {
 
 .map-stage {
   min-height: 480px;
-  border-radius: 24px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
   overflow: hidden;
   position: relative;
   background:
-    linear-gradient(90deg, rgba(28, 64, 44, 0.06) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(28, 64, 44, 0.06) 1px, transparent 1px),
-    linear-gradient(135deg, #f8f3e9, #eff8f2);
+    linear-gradient(90deg, rgba(90, 74, 46, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(90, 74, 46, 0.08) 1px, transparent 1px),
+    linear-gradient(135deg, #f8f3e9, #efe5d4);
   background-size: 78px 78px, 78px 78px, auto;
 }
 
@@ -2962,7 +2946,7 @@ function normalizeSearchText(value = '') {
 
 .empty-pocket {
   margin: 0;
-  color: #687586;
+  color: var(--ink-sub);
   font-weight: 750;
   line-height: 1.55;
 }
@@ -2981,7 +2965,7 @@ function normalizeSearchText(value = '') {
   display: grid;
   place-items: center;
   color: #fff;
-  background: #2e8f6b;
+  background: var(--accent);
 }
 
 .pocket-item {
@@ -3035,11 +3019,11 @@ function normalizeSearchText(value = '') {
 .day-tab {
   min-width: 0;
   min-height: 70px;
-  border: 1px solid #d9e0ea;
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 9px;
-  background: #fff;
-  color: #151d25;
+  background: var(--paper-card);
+  color: var(--ink);
   display: grid;
   justify-items: start;
   gap: 2px;
@@ -3053,7 +3037,7 @@ function normalizeSearchText(value = '') {
 
 .day-tab span,
 .day-tab small {
-  color: #687586;
+  color: var(--ink-sub);
   font-size: 11px;
   font-weight: 800;
 }
@@ -3090,13 +3074,13 @@ function normalizeSearchText(value = '') {
 }
 
 .route-section-head strong {
-  color: #151d25;
+  color: var(--ink);
   font-size: 15px;
 }
 
 .route-section-head small {
   min-width: 0;
-  color: #687586;
+  color: var(--ink-sub);
   font-size: 12px;
   font-weight: 800;
   line-height: 1.4;
@@ -3139,7 +3123,7 @@ function normalizeSearchText(value = '') {
 .route-stop-main small {
   grid-column: 2;
   min-width: 0;
-  color: #687586;
+  color: var(--ink-sub);
   font-size: 12px;
   font-weight: 750;
   overflow-wrap: anywhere;
@@ -3147,17 +3131,17 @@ function normalizeSearchText(value = '') {
 
 .route-stop-card {
   position: relative;
-  border: 1px solid #e5e8ef;
-  border-radius: 18px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
   padding: 11px;
   display: grid;
   gap: 9px;
-  background: #fff;
+  background: var(--paper-card);
 }
 
 .route-stop-card.active {
-  border-color: #c8eadb;
-  background: #f7fffb;
+  border-color: var(--accent-soft);
+  background: #fff7ea;
   box-shadow: none;
 }
 
@@ -3727,5 +3711,227 @@ function normalizeSearchText(value = '') {
   .place-header {
     flex-direction: column;
   }
+}
+
+.search-shell.planning {
+  grid-template-columns: minmax(330px, 430px) minmax(0, 1fr);
+}
+
+.place-list-panel.planning {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.route-builder-head {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.day-tabs {
+  width: 100%;
+}
+
+.route-stop-list {
+  position: relative;
+  display: block;
+  height: min(640px, 64vh);
+  min-height: 540px;
+  overflow: auto;
+  padding: 0 12px 32px 74px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 87px,
+      rgba(207, 187, 151, 0.55) 87px,
+      rgba(207, 187, 151, 0.55) 88px
+    );
+}
+
+.route-stop-card {
+  position: absolute;
+  left: 74px;
+  right: 12px;
+  min-height: 92px;
+  margin: 0;
+  padding: 18px 46px 16px 18px;
+  display: block;
+  cursor: grab;
+  user-select: none;
+  overflow: visible;
+  z-index: 10;
+}
+
+.route-stop-card:active {
+  cursor: grabbing;
+}
+
+.route-stop-main {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  cursor: inherit;
+}
+
+.route-stop-main span {
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.route-stop-main strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.route-stop-main small {
+  display: block;
+  min-width: 0;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-sub);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.route-stop-main em {
+  display: block;
+  margin-top: 10px;
+  color: var(--ink-sub);
+  font-style: normal;
+  font-weight: 850;
+}
+
+.route-stop-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.route-stop-resize {
+  position: absolute;
+  left: 50%;
+  z-index: 20;
+  width: 76px;
+  height: 8px;
+  border-radius: 999px;
+  background: #d7c8af;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.route-stop-resize--top {
+  top: -4px;
+}
+
+.route-stop-resize--bottom {
+  bottom: -4px;
+}
+
+.route-leg {
+  position: absolute;
+  left: 96px;
+  z-index: 14;
+  width: 210px;
+  max-width: calc(100% - 122px);
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  background: #efe5d4;
+  box-shadow: none;
+}
+
+.route-leg > span {
+  display: none;
+}
+
+.route-leg__details,
+.route-leg__details.has-manual {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+}
+
+.route-leg__details :deep(.p-select) {
+  width: 92px;
+  min-width: 92px;
+  height: 28px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.route-leg__details :deep(.p-select-label) {
+  padding: 3px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.route-leg em {
+  min-width: 38px;
+  max-width: 76px;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: transparent;
+  color: #2f7b5f;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.route-leg__manual,
+.route-leg__manual-input {
+  display: none;
+}
+
+.place-row__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.place-type-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #8b5a55;
+}
+
+.place-type-dot.attraction {
+  background: #6f8d61;
+}
+
+.place-type-dot.restaurant {
+  background: #9a4f4b;
+}
+
+.place-type-dot.cafe {
+  background: #8b668e;
 }
 </style>

@@ -1,9 +1,10 @@
 <script setup>
 import { ref } from 'vue'
-import { requestPasswordReset } from '@/api/authApi'
 import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
 import Message from 'primevue/message'
+
+import { requestPasswordReset } from '@/api/authApi'
+import { AuthPassport, BaseButton } from '@/components/common'
 
 const email = ref('')
 const error = ref('')
@@ -32,13 +33,22 @@ function toLocalPath(url) {
 </script>
 
 <template>
-  <main class="auth">
-    <h1>비밀번호 찾기</h1>
-    <p class="intro">가입한 이메일을 입력하면 재설정 경로를 준비합니다.</p>
-    <form @submit.prevent="onSubmit">
-      <label>
+  <AuthPassport
+    title="비밀번호를 잊으셨나요?"
+    subtitle="이메일을 입력하면 재설정 링크를 준비합니다."
+    cover-title="비밀번호를<br>재설정해요"
+    cover-subtitle="가입한 이메일로 다시 들어올 수 있는 경로를 안내해드려요."
+  >
+    <form class="auth-form" @submit.prevent="onSubmit">
+      <label class="auth-field">
         <span>이메일</span>
-        <InputText v-model="email" type="email" autocomplete="email" placeholder="you@triplog.app" required />
+        <InputText
+          v-model="email"
+          type="email"
+          autocomplete="email"
+          placeholder="you@triplog.kr"
+          required
+        />
       </label>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <Message v-if="requested" severity="success" :closable="false">
@@ -47,40 +57,90 @@ function toLocalPath(url) {
       <section v-if="demoResetUrl" class="demo-box" aria-label="데모 재설정 링크">
         <strong>데모 재설정 링크</strong>
         <p>메일 인프라 없이 심사 시연을 이어가기 위한 링크입니다.</p>
-        <RouterLink :to="toLocalPath(demoResetUrl)">비밀번호 재설정으로 이동</RouterLink>
+        <RouterLink class="form-link" :to="toLocalPath(demoResetUrl)">비밀번호 재설정으로 이동</RouterLink>
       </section>
-      <Button type="submit" label="재설정 요청" :loading="loading" />
+      <BaseButton type="submit" variant="primary" block :disabled="loading">
+        {{ loading ? '요청 중' : '재설정 요청' }}
+      </BaseButton>
     </form>
-    <p><RouterLink to="/login">로그인으로 돌아가기</RouterLink></p>
-  </main>
+
+    <p class="links">
+      <RouterLink class="form-link" to="/login">로그인으로 돌아가기</RouterLink>
+    </p>
+  </AuthPassport>
 </template>
 
 <style scoped>
-.auth {
-  max-width: 420px;
-  margin: 4rem auto;
+.auth-form {
+  display: grid;
+  gap: 15px;
 }
-.intro {
-  color: #475569;
+
+.auth-field {
+  display: grid;
+  gap: 6px;
 }
-.auth form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+
+.auth-field > span {
+  color: var(--ink-sub);
+  font-size: 12.5px;
+  font-weight: 600;
 }
-.auth label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+
+.auth-field :deep(.p-inputtext) {
+  background: var(--on-fill);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 11px 13px;
+  width: 100%;
 }
+
+.auth-field :deep(.p-inputtext::placeholder) {
+  color: var(--ink-faint);
+}
+
+.auth-field :deep(.p-inputtext:enabled:focus) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(194, 105, 63, 0.16);
+  outline: none;
+}
+
 .demo-box {
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  background: #eff6ff;
-  padding: 1rem;
+  background: var(--paper-dim);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 13px;
 }
+
+.demo-box strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
 .demo-box p {
-  margin: 0.35rem 0 0.75rem;
-  color: #475569;
+  color: var(--ink-sub);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 5px 0 9px;
+}
+
+.form-link {
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.form-link:hover {
+  text-decoration: underline;
+}
+
+.links {
+  margin: 18px 0 0;
+  text-align: center;
 }
 </style>

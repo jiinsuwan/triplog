@@ -1,11 +1,12 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
 import DatePicker from 'primevue/datepicker'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Select from 'primevue/select'
+
+import { AppTopBar, BaseButton, TripTicket } from '@/components/common'
 import { useTripStore } from '@/stores/trip'
 import {
   REGION_OPTIONS,
@@ -42,10 +43,15 @@ const endDateModel = computed({
   },
 })
 
-const previewNights = computed(() => {
-  if (!form.startDate || !form.endDate || form.startDate > form.endDate) return '기간을 선택해주세요'
-  return `${tripDurationDays(form)}일 여행`
+const previewDates = computed(() => {
+  if (!form.startDate || !form.endDate || form.startDate > form.endDate) {
+    return '날짜 미정'
+  }
+  return `${form.startDate.replaceAll('-', '.')} - ${form.endDate.replaceAll('-', '.')} · ${tripDurationDays(form)}일`
 })
+
+const previewTitle = computed(() => form.title.trim() || '여행 제목을 입력해 주세요')
+const previewTags = computed(() => [form.theme].filter(Boolean))
 
 async function submit(destination = 'places') {
   if (tripStore.creating) return
@@ -78,24 +84,36 @@ function toDate(dateOnly) {
 </script>
 
 <template>
-  <main class="create-page">
-    <section class="create-shell">
-      <aside class="create-preview">
-        <span class="eyebrow">New Trip</span>
-        <h1>{{ form.title || '새 여행 만들기' }}</h1>
-        <p>{{ form.region }} · {{ form.theme }} · {{ previewNights }}</p>
-        <div class="mock-card">
-          <span>{{ form.region }}</span>
-          <strong>{{ form.title || '여행 제목을 입력하면 카드에 표시됩니다' }}</strong>
-          <small>{{ form.startDate }} - {{ form.endDate }}</small>
+  <div class="create-page">
+    <AppTopBar active="trips" :show-search="false">
+      <template #actions>
+        <BaseButton variant="ghost" @click="cancel">목록</BaseButton>
+      </template>
+    </AppTopBar>
+
+    <main class="create-shell">
+      <aside class="preview-panel">
+        <p class="tag-hand">New trip</p>
+        <h1>여행의 뼈대를 잡아요</h1>
+        <p class="preview-copy">제목과 기간, 지역과 테마만 정하면 바로 장소를 담을 수 있습니다.</p>
+
+        <div class="preview-ticket">
+          <TripTicket
+            :title="previewTitle"
+            :region="form.region"
+            :dates="previewDates"
+            serial="TL-NEW"
+            status="TRIP TICKET"
+            color="mustard"
+            :tags="previewTags"
+          />
         </div>
       </aside>
 
-      <form class="trip-form" @submit.prevent="submit('places')">
+      <form class="panel trip-form" @submit.prevent="submit('places')">
         <div class="form-head">
-          <span class="eyebrow">Trip CRUD</span>
-          <h2>여행 기본 정보를 입력해주세요.</h2>
-          <p>장소 탐색과 지도 경로 편집은 다음 단계에서 연결됩니다.</p>
+          <span>새 여행</span>
+          <h2>계획을 시작할 정보를 입력해주세요.</h2>
         </div>
 
         <Message v-if="submitError" severity="error" :closable="false">
@@ -107,7 +125,7 @@ function toDate(dateOnly) {
           <InputText
             id="title"
             v-model="form.title"
-            placeholder="예: 전주 새 일정"
+            placeholder="예: 제주, 바람의 사흘"
             :invalid="!!errors.title"
             fluid
           />
@@ -175,198 +193,134 @@ function toDate(dateOnly) {
         </div>
 
         <div class="form-actions">
-          <Button
+          <BaseButton type="button" variant="ghost" :disabled="tripStore.creating" @click="cancel">
+            취소
+          </BaseButton>
+          <BaseButton
             type="button"
-            label="취소"
-            severity="secondary"
-            outlined
-            :disabled="tripStore.creating"
-            @click="cancel"
-          />
-          <Button
-            type="button"
-            label="목록에 저장"
-            icon="pi pi-list"
-            severity="secondary"
-            outlined
             :disabled="tripStore.creating && submitIntent !== 'list'"
-            :loading="tripStore.creating && submitIntent === 'list'"
             @click="submit('list')"
-          />
-          <Button
+          >
+            {{ tripStore.creating && submitIntent === 'list' ? '저장 중' : '목록에 저장' }}
+          </BaseButton>
+          <BaseButton
             type="submit"
-            label="확인하고 장소 담기"
-            icon="pi pi-check"
+            variant="primary"
             :disabled="tripStore.creating && submitIntent !== 'places'"
-            :loading="tripStore.creating && submitIntent === 'places'"
-          />
+          >
+            {{ tripStore.creating && submitIntent === 'places' ? '저장 중' : '계획 시작하기' }}
+          </BaseButton>
         </div>
       </form>
-    </section>
-  </main>
+    </main>
+  </div>
 </template>
 
 <style scoped>
 .create-page {
   min-height: 100vh;
-  padding: 32px clamp(18px, 4vw, 56px);
-  background:
-    linear-gradient(135deg, rgba(46, 143, 107, 0.12), transparent 34%),
-    linear-gradient(315deg, rgba(49, 130, 246, 0.10), transparent 38%),
-    #f6f8fb;
-  color: #151d25;
+  --ds-surface: var(--paper);
 }
 
 .create-shell {
-  min-height: calc(100vh - 64px);
-  display: grid;
-  grid-template-columns: minmax(280px, 0.95fr) minmax(360px, 1.05fr);
-  gap: 22px;
   align-items: stretch;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(300px, 0.86fr) minmax(380px, 1fr);
+  margin: 0 auto;
+  max-width: 1080px;
+  min-height: calc(100vh - 54px);
+  padding: 30px 26px 80px;
+  width: 100%;
 }
 
-.create-preview,
-.trip-form {
-  border: 1px solid #e5e8ef;
-  border-radius: 30px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.10);
-}
-
-.create-preview {
-  padding: clamp(24px, 4vw, 42px);
+.preview-panel {
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  position: relative;
+  padding: clamp(24px, 4vw, 42px);
 }
 
-.create-preview::before {
-  content: '';
-  position: absolute;
-  inset: auto -12% -18% 22%;
-  height: 58%;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.34), transparent 22%),
-    linear-gradient(135deg, #6fb292, #3d6fb6 54%, #edbf53);
-  opacity: 0.88;
-  transform: rotate(-11deg);
-}
-
-.eyebrow {
-  display: inline-flex;
-  margin-bottom: 10px;
-  color: #2e8f6b;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.create-preview h1 {
-  max-width: 520px;
-  margin: 0;
-  font-size: clamp(42px, 7vw, 84px);
-  line-height: 0.95;
+.preview-panel h1 {
+  font-size: clamp(34px, 5vw, 58px);
   letter-spacing: 0;
+  line-height: 1.04;
+  margin: 2px 0 0;
+  max-width: 500px;
 }
 
-.create-preview p {
-  margin: 18px 0 0;
-  color: #4e5968;
-  font-size: 16px;
-  font-weight: 750;
+.preview-copy {
+  color: var(--ink-sub);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.65;
+  margin: 14px 0 0;
+  max-width: 420px;
 }
 
-.mock-card {
-  position: relative;
-  z-index: 1;
-  min-height: 240px;
-  padding: 22px;
-  border-radius: 28px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  color: #fff;
-  background:
-    linear-gradient(0deg, rgba(9, 16, 22, 0.82), rgba(9, 16, 22, 0.08) 62%),
-    linear-gradient(135deg, #d66c55, #57495f 54%, #edbf53);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+.preview-ticket {
+  margin-top: 28px;
 }
 
-.mock-card span {
-  align-self: flex-start;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.mock-card strong {
-  margin-top: 16px;
-  font-size: 28px;
-  line-height: 1.08;
-}
-
-.mock-card small {
-  margin-top: 8px;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 13px;
-  font-weight: 800;
+.preview-ticket :deep(.ticket) {
+  --ticket-w: min(416px, 100%);
 }
 
 .trip-form {
-  padding: clamp(22px, 4vw, 40px);
-  display: grid;
   align-content: center;
+  display: grid;
   gap: 18px;
 }
 
-.form-head h2 {
-  max-width: 520px;
-  margin: 0;
-  font-size: clamp(30px, 4vw, 48px);
-  line-height: 1.02;
+.form-head span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.form-head p {
-  margin: 12px 0 0;
-  color: #687586;
-  font-weight: 700;
+.form-head h2 {
+  font-size: clamp(26px, 4vw, 40px);
+  letter-spacing: 0;
+  line-height: 1.12;
+  margin: 6px 0 0;
+  max-width: 520px;
 }
 
 .field {
   display: grid;
   gap: 7px;
+  margin: 0;
 }
 
 .field span {
-  color: #2c3745;
-  font-size: 13px;
-  font-weight: 900;
+  color: var(--ink-sub);
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
 .field small {
-  color: #d64d4d;
+  color: var(--complete);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .form-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
-  margin-top: 6px;
+  justify-content: flex-end;
+  margin-top: 4px;
 }
 
 @media (max-width: 900px) {
@@ -376,8 +330,8 @@ function toDate(dateOnly) {
 }
 
 @media (max-width: 640px) {
-  .create-page {
-    padding: 14px;
+  .create-shell {
+    padding: 22px 16px 64px;
   }
 
   .form-grid {
@@ -386,6 +340,10 @@ function toDate(dateOnly) {
 
   .form-actions {
     flex-direction: column-reverse;
+  }
+
+  .form-actions .btn {
+    width: 100%;
   }
 }
 </style>
