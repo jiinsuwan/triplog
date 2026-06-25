@@ -2,8 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { AppTopBar, BaseButton, EmptyState, TripPolaroid } from '@/components/common'
+import { AppTopBar, BaseButton, TripPolaroid } from '@/components/common'
 import MemoryDetailDialog from '@/components/log/MemoryDetailDialog.vue'
+import TripPreviewDialog from '@/components/trip/TripPreviewDialog.vue'
 import { fetchCardImage, fetchMemories } from '@/api/cardApi'
 import { useAuthStore } from '@/stores/auth'
 import { formatTripDateRange, parseTripTags } from '@/utils/tripForm'
@@ -17,6 +18,8 @@ const loading = ref(false)
 const error = ref('')
 const selectedMemory = ref(null)
 const detailOpen = ref(false)
+const recordOpen = ref(false)
+const selectedRecordTrip = ref(null)
 let controller = null
 
 const displayName = computed(() => {
@@ -75,7 +78,7 @@ function resetCovers() {
 
 function openMemory(memory) {
   if (!memory.cardCount) {
-    editMemory(memory)
+    openRecord(memory)
     return
   }
   selectedMemory.value = memory
@@ -83,7 +86,26 @@ function openMemory(memory) {
 }
 
 function editMemory(memory) {
-  router.push({ name: 'card-create', query: { tripId: memory.tripId } })
+  openRecord(memory)
+}
+
+function openRecord(memory) {
+  selectedRecordTrip.value = memoryToTrip(memory)
+  recordOpen.value = true
+}
+
+function memoryToTrip(memory) {
+  if (!memory) return null
+  return {
+    ...memory,
+    id: memory.tripId,
+    status: 'past',
+  }
+}
+
+function goPlaces(trip) {
+  if (!trip?.id) return
+  router.push({ name: 'trip-place-search', params: { tripId: trip.id } })
 }
 
 function tagsOf(memory) {
@@ -109,19 +131,14 @@ function tagsOf(memory) {
     <main class="logs-shell page-canvas" aria-labelledby="logs-title">
       <header class="logs-head">
         <div>
-          <h1 id="logs-title">LOGS</h1>
-          <p>다녀온 여행의 카드가 한 장씩 쌓입니다.</p>
+          <h1 id="logs-title">추억 <span>한 장 한 장</span></h1>
+          <p>다녀온 여행을 카드로 남긴 기록 · 완성 {{ completedCount }} · 기록 중 {{ emptyCount }}</p>
         </div>
-        <dl class="logs-summary">
-          <div>
-            <dt>{{ completedCount }}</dt>
-            <dd>완성</dd>
-          </div>
-          <div>
-            <dt>{{ emptyCount }}</dt>
-            <dd>대기</dd>
-          </div>
-        </dl>
+        <div class="logs-filters" aria-label="추억 필터">
+          <button type="button" class="on">전체</button>
+          <button type="button">최근순</button>
+          <button type="button">연도별</button>
+        </div>
       </header>
 
       <div v-if="error" class="logs-alert" role="alert">{{ error }}</div>
@@ -131,14 +148,9 @@ function tagsOf(memory) {
         <strong>추억을 불러오는 중입니다.</strong>
       </section>
 
-      <EmptyState
-        v-else-if="!memories.length"
-        icon="LOG"
-        title="아직 다녀온 여행이 없습니다."
-        description="여행을 마치면 이곳에서 추억 카드를 만들 수 있습니다."
-        action-label="여행 보기"
-        @action="router.push('/trips')"
-      />
+      <p v-else-if="!memories.length" class="logs-empty">
+        다녀온 여행이 생기면 이곳에 폴라로이드가 놓입니다.
+      </p>
 
       <section v-else class="logs-board" aria-label="추억 목록">
         <button
@@ -157,12 +169,22 @@ function tagsOf(memory) {
             :empty="!memory.completed"
             :placeholder="memory.completed ? '추억 보기' : '추억 만들기'"
           />
-          <span class="logs-polaroid-button__count">{{ memory.cardCount }}장</span>
         </button>
       </section>
+
+      <p v-if="memories.length" class="logs-hint">
+        폴라로이드를 누르면 저장된 카드들을 추억 상세 팝업으로 봅니다 · 빈 폴라로이드는 다녀온 여행 기록뷰로 이어집니다
+      </p>
     </main>
 
     <MemoryDetailDialog v-model="detailOpen" :memory="selectedMemory" @edit="editMemory" />
+    <TripPreviewDialog
+      v-model="recordOpen"
+      :trip="selectedRecordTrip"
+      @open-places="goPlaces"
+      @deleted="loadMemories"
+      @updated="selectedRecordTrip = $event"
+    />
   </div>
 </template>
 
@@ -183,12 +205,19 @@ function tagsOf(memory) {
 }
 
 .logs-head h1 {
-  font-family: var(--font-hand);
-  font-size: 42px;
-  font-weight: 400;
+  font-size: 24px;
+  font-weight: 800;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.15;
   margin: 0;
+}
+
+.logs-head h1 span {
+  color: var(--accent);
+  font-family: var(--font-hand);
+  font-size: 26px;
+  font-weight: 400;
+  margin-left: 4px;
 }
 
 .logs-head p {
@@ -198,32 +227,27 @@ function tagsOf(memory) {
   margin: 8px 0 0;
 }
 
-.logs-summary {
+.logs-filters {
   display: flex;
-  gap: 10px;
-  margin: 0;
+  gap: 6px;
 }
 
-.logs-summary div {
-  background: var(--paper-card);
-  border: 1px solid var(--line2);
+.logs-filters button {
+  background: var(--paper);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  min-width: 74px;
-  padding: 8px 12px;
-  text-align: center;
-}
-
-.logs-summary dt {
-  color: var(--accent);
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.logs-summary dd {
   color: var(--ink-sub);
-  font-size: 11px;
-  font-weight: 800;
-  margin: 2px 0 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+}
+
+.logs-filters button.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-fill);
 }
 
 .logs-alert {
@@ -260,9 +284,10 @@ function tagsOf(memory) {
 .logs-board {
   align-items: flex-start;
   display: grid;
-  gap: 28px 22px;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  padding: 4px 0 40px;
+  gap: 32px 26px;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  justify-items: center;
+  padding: 8px 0 0;
 }
 
 .logs-polaroid-button {
@@ -277,7 +302,7 @@ function tagsOf(memory) {
 }
 
 .logs-polaroid-button :deep(.ds-polaroid) {
-  --pola-w: min(210px, 100%);
+  --pola-w: 232px;
   transition:
     transform 0.16s ease,
     box-shadow 0.16s ease;
@@ -288,10 +313,21 @@ function tagsOf(memory) {
   transform: translateY(-3px) rotate(-1deg);
 }
 
-.logs-polaroid-button__count {
-  color: var(--ink-sub);
-  font-size: 12px;
-  font-weight: 800;
+.logs-empty,
+.logs-hint {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  margin: 0;
+  text-align: center;
+}
+
+.logs-empty {
+  background: rgba(255, 253, 248, 0.58);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 30px 16px;
 }
 
 @keyframes logs-spin {
@@ -306,12 +342,8 @@ function tagsOf(memory) {
     flex-direction: column;
   }
 
-  .logs-summary {
+  .logs-filters {
     width: 100%;
-  }
-
-  .logs-summary div {
-    flex: 1;
   }
 }
 </style>

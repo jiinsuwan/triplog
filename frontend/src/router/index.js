@@ -64,11 +64,10 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'planning' },
   },
   {
-    // 기록 워크스페이스 진입 = 카드 만들기(배치) 화면 직행. 사진 업로드는 그 화면에서 모달로 한다
-    //   (업로드 전용 화면을 먼저 거치지 않아 "기존 사진 모르고 또 올려 중복" 되던 문제 해소).
+    // 다녀온 여행 기록뷰. 여기서 사진을 일정에 배치한 뒤 카드 에디터로 진행한다.
     path: '/trips/:tripId/log',
     name: 'trip-record-workspace',
-    redirect: (to) => ({ name: 'card-create', query: { tripId: to.params.tripId } }),
+    component: () => import('@/views/log/TripRecordView.vue'),
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {
@@ -85,11 +84,10 @@ const routes = [
     meta: { requiresAuth: true, workspace: 'record' },
   },
   {
-    // 사진을 일정에 배치하는 화면은 카드 만들기 1단계로 통합됨(log 트랙).
-    // 옛 경로(/trips/:id/record)는 카드 만들기 흐름으로 리다이렉트한다.
+    // 옛 기록 경로는 기록 워크스페이스로 보낸다.
     path: '/trips/:tripId/record',
     name: 'trip-record',
-    redirect: (to) => ({ name: 'card-create', query: { tripId: to.params.tripId } }),
+    redirect: (to) => ({ name: 'trip-record-workspace', params: to.params }),
     meta: { requiresAuth: true },
   },
   {

@@ -1,8 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { AppTopBar, BaseButton, TripPolaroid, TripStamp, TripTicket } from '@/components/common'
+import { fetchCardImage, fetchMemories } from '@/api/cardApi'
+import MemoryDetailDialog from '@/components/log/MemoryDetailDialog.vue'
 import TripPreviewDialog from '@/components/trip/TripPreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
@@ -14,7 +16,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const tripStore = useTripStore()
 const previewDialogOpen = ref(false)
+const memoryDialogOpen = ref(false)
 const selectedTrip = ref(null)
+const selectedMemory = ref(null)
+const memorySummaries = ref([])
+const memoryCoverUrls = ref({})
+let memoryController = null
 
 const memoryTones = [
   'radial-gradient(80% 70% at 60% 35%, #d39a5a, #9a4b2a 60%, #5a2c18)',
@@ -57,7 +64,7 @@ const resumeTitle = computed(() => {
   return hasPlanningTrips.value ? '이어서 계획하기' : '새 여행 계획하기'
 })
 const displayPastTrips = computed(() => sortedPastTrips.value)
-const recentMemories = computed(() => displayPastTrips.value.slice(0, 3))
+const recentMemories = computed(() => memorySummaries.value.filter((memory) => memory.completed).slice(0, 3))
 const totalTrips = computed(() => tripStore.trips.length)
 const totalDays = computed(() =>
   tripStore.trips.reduce((sum, trip) => sum + tripDurationDays(trip), 0),
@@ -68,6 +75,13 @@ onMounted(() => {
 
   auth.fetchMe().catch(() => {})
   tripStore.fetchTripList().catch(() => {})
+  loadMemories().catch(() => {})
+})
+
+onBeforeUnmount(() => {
+  memoryController?.abort()
+  memoryController = null
+  resetMemoryCovers()
 })
 
 function goToLogin() {
@@ -100,6 +114,18 @@ function openTrip(trip) {
   previewDialogOpen.value = true
 }
 
+function openMemory(memory) {
+  selectedMemory.value = memory
+  memoryDialogOpen.value = true
+}
+
+function editMemory(memory) {
+  const trip = memoryToTrip(memory)
+  if (!trip) return
+  selectedTrip.value = trip
+  previewDialogOpen.value = true
+}
+
 function goPlaces(trip) {
   if (!trip || trip.mock) return
   router.push({ name: 'trip-place-search', params: { tripId: trip.id } })
@@ -111,6 +137,37 @@ function handleTripDeleted() {
 
 function handleTripUpdated(trip) {
   selectedTrip.value = trip
+}
+
+async function loadMemories() {
+  memoryController?.abort()
+  resetMemoryCovers()
+  memoryController = new AbortController()
+  const result = await fetchMemories({ signal: memoryController.signal })
+  memorySummaries.value = result
+  const entries = await Promise.all(
+    result
+      .filter((memory) => memory.coverCardId)
+      .map(async (memory) => {
+        const blob = await fetchCardImage(memory.coverCardId, { signal: memoryController.signal })
+        return [memory.tripId, URL.createObjectURL(blob)]
+      }),
+  )
+  memoryCoverUrls.value = Object.fromEntries(entries)
+}
+
+function resetMemoryCovers() {
+  for (const url of Object.values(memoryCoverUrls.value)) URL.revokeObjectURL(url)
+  memoryCoverUrls.value = {}
+}
+
+function memoryToTrip(memory) {
+  if (!memory) return null
+  return {
+    ...memory,
+    id: memory.tripId,
+    status: 'past',
+  }
 }
 
 function ticketStatus(trip) {
@@ -140,6 +197,10 @@ function ticketDday(trip) {
 
 function tripTags(trip) {
   return tripDisplayTags(trip)
+}
+
+function memoryTags(memory) {
+  return memory.theme ? [memory.theme] : []
 }
 
 function stampTitle(trip) {
@@ -345,15 +406,21 @@ function parseDateTimeValue(value) {
           <h2 id="home-stamps-title" class="home-label">다녀온 도장</h2>
           <div class="home-stamps__note">
             <template v-if="isLoggedIn && displayPastTrips.length">
-              <TripStamp
+              <button
                 v-for="trip in displayPastTrips.slice(0, 4)"
                 :key="trip.id"
-                :title="stampTitle(trip)"
-                :stage="3"
-                :start-date="trip.startDate?.replaceAll('-', '.') || ''"
-                :end-date="trip.endDate?.replaceAll('-', '.') || ''"
-                complete
-              />
+                class="home-stamp-button"
+                type="button"
+                @click="openTrip(trip)"
+              >
+                <TripStamp
+                  :title="stampTitle(trip)"
+                  :stage="3"
+                  :start-date="trip.startDate?.replaceAll('-', '.') || ''"
+                  :end-date="trip.endDate?.replaceAll('-', '.') || ''"
+                  complete
+                />
+              </button>
             </template>
             <div v-else class="home-stamp-placeholder">
               <TripStamp
@@ -376,16 +443,17 @@ function parseDateTimeValue(value) {
           <div class="home-memories__strip">
             <template v-if="isLoggedIn && recentMemories.length">
               <button
-                v-for="(trip, index) in recentMemories"
-                :key="trip.id"
+                v-for="(memory, index) in recentMemories"
+                :key="memory.tripId"
                 class="home-polaroid-button"
                 type="button"
-                @click="openTrip(trip)"
+                @click="openMemory(memory)"
               >
                 <TripPolaroid
-                  :title="trip.title"
-                  :subtitle="`${trip.region || '지역 미정'} · ${formatTripDateRange(trip)}`"
-                  :tags="tripTags(trip)"
+                  :title="memory.title"
+                  :subtitle="`${memory.region || '지역 미정'} · ${formatTripDateRange(memory)}`"
+                  :tags="memoryTags(memory)"
+                  :image-url="memoryCoverUrls[memory.tripId]"
                   :tone="memoryTone(index)"
                   completed
                 />
@@ -438,6 +506,7 @@ function parseDateTimeValue(value) {
       @deleted="handleTripDeleted"
       @updated="handleTripUpdated"
     />
+    <MemoryDetailDialog v-model="memoryDialogOpen" :memory="selectedMemory" @edit="editMemory" />
   </div>
 </template>
 
@@ -649,6 +718,7 @@ function parseDateTimeValue(value) {
 }
 
 .home-ticket-button,
+.home-stamp-button,
 .home-polaroid-button {
   background: transparent;
   border: 0;
@@ -662,11 +732,13 @@ function parseDateTimeValue(value) {
 }
 
 .home-ticket-button:hover,
+.home-stamp-button:hover,
 .home-polaroid-button:hover {
   transform: translateY(-2px);
 }
 
 .home-ticket-button:focus-visible,
+.home-stamp-button:focus-visible,
 .home-polaroid-button:focus-visible {
   border-radius: var(--radius);
   box-shadow: none;

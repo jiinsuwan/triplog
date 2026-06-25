@@ -15,7 +15,7 @@ const tripId = Number(route.params.tripId)
 
 // 카드 생성 위저드로 이동(이 여행 컨텍스트 고정). S3-LOG-06.
 function goToCardCreate() {
-  router.push({ name: 'card-create', query: { tripId: String(tripId) } })
+  router.push({ name: 'trip-record-workspace', params: { tripId: String(tripId) } })
 }
 
 const { items, addFiles, retry, remove, failedCount, linkedCount } = useUploadQueue(tripId)

@@ -115,9 +115,9 @@ function downloadCurrent() {
 </script>
 
 <template>
-  <BaseModal v-model="open" :title="memory?.title || '추억'" width="min(920px, 94vw)">
-    <div v-if="memory" class="memory-detail">
-      <aside class="memory-detail__side">
+  <BaseModal v-model="open" :title="memory?.title || '추억'" hide-header width="min(540px, 94vw)">
+    <section v-if="memory" class="memory-detail">
+      <header class="memory-detail__top">
         <TripStamp
           :title="stampTitle"
           :stage="3"
@@ -125,18 +125,18 @@ function downloadCurrent() {
           :end-date="memory.endDate?.replaceAll('-', '.') || ''"
           complete
         />
-        <div class="memory-detail__meta">
-          <strong>{{ memory.title }}</strong>
-          <span>{{ memory.region || '지역 미정' }} · {{ memoryDates }}</span>
-          <span>{{ memory.cardCount }}장 저장됨</span>
+        <div class="memory-detail__info">
+          <h2>{{ memory.title }}</h2>
+          <p>{{ memory.region || '지역 미정' }} · {{ memoryDates }} · 카드 {{ memory.cardCount }}장</p>
         </div>
         <div class="memory-detail__actions">
-          <BaseButton size="small" variant="primary" @click="editMemory">다시 편집</BaseButton>
+          <BaseButton size="small" variant="ghost" @click="editMemory">수정</BaseButton>
           <BaseButton size="small" variant="ghost" :disabled="!currentCard" @click="downloadCurrent">
             PNG 저장
           </BaseButton>
         </div>
-      </aside>
+        <button type="button" class="memory-detail__close" aria-label="닫기" @click="close">×</button>
+      </header>
 
       <section class="memory-detail__viewer" aria-live="polite">
         <p v-if="loading" class="memory-detail__state">불러오는 중입니다.</p>
@@ -148,6 +148,7 @@ function downloadCurrent() {
             <img :src="currentImageUrl" :alt="`${memory.title} 카드 ${currentIndex + 1}`" />
             <button type="button" class="memory-detail__nav" aria-label="다음 카드" @click="next">›</button>
           </div>
+          <div class="memory-detail__index">{{ currentIndex + 1 }} / {{ cards.length }}</div>
           <div class="memory-detail__thumbs" aria-label="저장된 카드">
             <button
               v-for="(card, index) in cards"
@@ -161,51 +162,73 @@ function downloadCurrent() {
           </div>
         </template>
       </section>
-    </div>
+    </section>
   </BaseModal>
 </template>
 
 <style scoped>
 .memory-detail {
-  display: grid;
-  gap: 22px;
-  grid-template-columns: 190px minmax(0, 1fr);
+  display: block;
+  margin: -18px;
 }
 
-.memory-detail__side {
-  align-content: start;
-  display: grid;
-  gap: 16px;
+.memory-detail__top {
+  align-items: center;
+  border-bottom: 1px solid var(--line2);
+  display: flex;
+  gap: 14px;
+  padding: 18px 22px 15px;
 }
 
-.memory-detail__meta {
-  display: grid;
-  gap: 5px;
+.memory-detail__top :deep(.ds-stamp) {
+  flex: none;
+  height: 64px;
+  width: 64px;
 }
 
-.memory-detail__meta strong {
+.memory-detail__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-detail__info h2 {
   font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
   line-height: 1.25;
+  margin: 0;
 }
 
-.memory-detail__meta span {
+.memory-detail__info p {
   color: var(--ink-sub);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin: 3px 0 0;
 }
 
 .memory-detail__actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex: none;
+  gap: 7px;
+}
+
+.memory-detail__close {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--ink-faint);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
 }
 
 .memory-detail__viewer {
-  background: var(--paper-dim);
-  border: 1px solid var(--line2);
-  border-radius: 8px;
-  min-height: 520px;
-  padding: 16px;
+  background: var(--paper);
+  min-height: 260px;
+  padding: 18px 22px;
 }
 
 .memory-detail__state {
@@ -221,16 +244,16 @@ function downloadCurrent() {
 .memory-detail__stage {
   align-items: center;
   display: grid;
-  gap: 12px;
-  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 14px;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
 }
 
 .memory-detail__stage img {
   background: var(--paper-card);
-  border-radius: 4px;
-  box-shadow: 0 12px 24px -18px rgba(60, 40, 20, 0.42);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px -10px rgba(40, 25, 10, 0.5);
   display: block;
-  max-height: 440px;
+  max-height: 380px;
   max-width: 100%;
   object-fit: contain;
   place-self: center;
@@ -242,16 +265,24 @@ function downloadCurrent() {
   border-radius: 999px;
   color: var(--ink);
   cursor: pointer;
-  font-size: 28px;
-  height: 42px;
+  font-size: 22px;
+  height: 36px;
   line-height: 1;
-  width: 42px;
+  width: 36px;
+}
+
+.memory-detail__index {
+  color: var(--ink-faint);
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 11px;
+  margin: 11px 0 12px;
+  text-align: center;
 }
 
 .memory-detail__thumbs {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  justify-content: center;
   overflow-x: auto;
   padding-bottom: 2px;
 }
@@ -279,8 +310,9 @@ function downloadCurrent() {
 }
 
 @media (max-width: 760px) {
-  .memory-detail {
-    grid-template-columns: 1fr;
+  .memory-detail__top {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .memory-detail__viewer {

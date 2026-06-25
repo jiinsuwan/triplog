@@ -1,4 +1,4 @@
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch, unref } from 'vue'
 import { fetchItinerary } from '@/api/itineraryApi'
 import { fetchTripPhotos, unlinkPhotoFromTrip } from '@/api/photoApi'
 
@@ -7,17 +7,37 @@ import { fetchTripPhotos, unlinkPhotoFromTrip } from '@/api/photoApi'
 // 없으므로 여기서 로컬 상태로 관리한다(실제 영속 = photo.stop_id 스키마 = 추후 상호리뷰).
 //  - autoPlaceByTime: EXIF 촬영시각(takenAt)에 가장 가까운 시간의 stop 으로 근사 자동 배치.
 //  - placePhoto/unplacePhoto: 사용자가 드래그로 배치/해제.
-export function usePhotoPlacement(tripId) {
+// externalDays(옵션): 일정(days)을 외부에서 주입받는다. 주어지면 fetchItinerary 를 생략하고 그 days 를
+// 쓰며 사진만 로드한다 — 부모가 이미 받은 일정을 재사용해 중복 호출·mock seed 불일치를 막는다(기록 뷰).
+// ref / getter(함수) 둘 다 허용. 미지정 시 기존대로 자체 fetch.
+export function usePhotoPlacement(tripId, { externalDays } = {}) {
+  const useExternalDays = externalDays != null
+  const readExternalDays = () =>
+    typeof externalDays === 'function' ? externalDays() : unref(externalDays)
   const days = ref([])
   const photos = ref([])
   const placement = reactive({}) // photoId -> stopId
   const loading = ref(true)
   const error = ref('')
 
+  // 시간순(일정) 평면화 — dayNumber → sortOrder(동률 시 selectedTime). 응답 배열 순서에 의존하지 않는다.
+  // placedPhotoIds(카드 대상 순서)·자동배치가 이 순서를 따르므로, 정렬은 여기서 보장한다.
+  const timeKey = (t) => {
+    const [h, m] = String(t ?? '').split(':').map(Number)
+    return Number.isFinite(h) ? h * 60 + (Number.isFinite(m) ? m : 0) : Number.POSITIVE_INFINITY
+  }
   const stopsFlat = computed(() =>
-    days.value.flatMap((day) =>
-      (day.stops ?? []).map((stop) => ({ ...stop, dayNumber: day.dayNumber, date: day.date })),
-    ),
+    [...days.value]
+      .sort((a, b) => (a.dayNumber ?? 0) - (b.dayNumber ?? 0))
+      .flatMap((day) =>
+        [...(day.stops ?? [])]
+          .sort(
+            (a, b) =>
+              (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+              timeKey(a.selectedTime) - timeKey(b.selectedTime),
+          )
+          .map((stop) => ({ ...stop, dayNumber: day.dayNumber, date: day.date })),
+      ),
   )
   const unplaced = computed(() => photos.value.filter((p) => placement[p.id] == null))
   // 배치된 사진 id = 카드 대상(미배치 제외). 순서는 화면과 같게 일정(DAY/stop) 순서로.
@@ -82,12 +102,20 @@ export function usePhotoPlacement(tripId) {
     loading.value = true
     error.value = ''
     try {
-      const [itinerary, photoList] = await Promise.all([
-        fetchItinerary(tripId),
-        fetchTripPhotos(tripId),
-      ])
-      days.value = Array.isArray(itinerary?.days) ? itinerary.days : []
-      photos.value = Array.isArray(photoList) ? photoList : []
+      if (useExternalDays) {
+        // 일정은 부모가 받은 걸 재사용 — 사진만 가져온다.
+        const photoList = await fetchTripPhotos(tripId)
+        const ext = readExternalDays()
+        days.value = Array.isArray(ext) ? ext : []
+        photos.value = Array.isArray(photoList) ? photoList : []
+      } else {
+        const [itinerary, photoList] = await Promise.all([
+          fetchItinerary(tripId),
+          fetchTripPhotos(tripId),
+        ])
+        days.value = Array.isArray(itinerary?.days) ? itinerary.days : []
+        photos.value = Array.isArray(photoList) ? photoList : []
+      }
       autoPlaceByTime()
     } catch {
       error.value = '일정·사진을 불러오지 못했습니다.'
@@ -112,6 +140,18 @@ export function usePhotoPlacement(tripId) {
     await unlinkPhotoFromTrip(photoId)
     delete placement[photoId]
     photos.value = photos.value.filter((p) => p.id !== photoId)
+  }
+
+  // 외부 일정이 나중에 도착/변경되면 반영 후 재배치(사진이 먼저 로드되고 days 가 늦게 주입되는 경우 대비).
+  // autoPlaceByTime 은 이미 배치된 stop 은 건너뛰므로 수동 배치를 깨지 않는다.
+  if (useExternalDays) {
+    watch(
+      () => readExternalDays(),
+      (next) => {
+        days.value = Array.isArray(next) ? next : []
+        autoPlaceByTime()
+      },
+    )
   }
 
   onMounted(load)

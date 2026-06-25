@@ -90,6 +90,7 @@ describe('router authGuard — 보호 라우트 가드', () => {
     expect(planRoute?.redirect).toBeTypeOf('function')
     expect(recordRoute?.path).toBe('/trips/:tripId/log')
     expect(recordRoute?.meta).toMatchObject({ requiresAuth: true, workspace: 'record' })
+    expect(recordRoute?.redirect).toBeUndefined()
   })
 
   it('plan workspace redirect keeps itinerary mode query', () => {
@@ -107,24 +108,14 @@ describe('router authGuard — 보호 라우트 가드', () => {
     })
   })
 
-  it('record workspace redirect 는 카드 만들기(card-create)로 보낸다', () => {
-    const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record-workspace')
-
-    expect(recordRoute.redirect).toBeTypeOf('function')
-    expect(recordRoute.redirect({ params: { tripId: '12' } })).toEqual({
-      name: 'card-create',
-      query: { tripId: '12' },
-    })
-  })
-
-  it('옛 record 경로(/trips/:id/record)도 카드 만들기로 리다이렉트한다', () => {
+  it('옛 record 경로(/trips/:id/record)는 기록 워크스페이스로 리다이렉트한다', () => {
     const recordRoute = router.getRoutes().find((item) => item.name === 'trip-record')
 
     expect(recordRoute?.path).toBe('/trips/:tripId/record')
     expect(recordRoute.redirect).toBeTypeOf('function')
     expect(recordRoute.redirect({ params: { tripId: '7' } })).toEqual({
-      name: 'card-create',
-      query: { tripId: '7' },
+      name: 'trip-record-workspace',
+      params: { tripId: '7' },
     })
   })
 
