@@ -28,6 +28,8 @@ import {
   resolvePlaceRegion,
 } from '@/utils/placeSearch'
 import { useTripStore } from '@/stores/trip'
+import { createTripFormFromTrip, toTripPayload } from '@/utils/tripForm'
+import { TRIP_STATUS } from '@/utils/tripStatus'
 
 const LIST_PAGE_SIZE = 5
 const PAGE_BUTTON_WINDOW_SIZE = 5
@@ -67,15 +69,15 @@ const KAKAO_CATEGORY_CODES = {
   cafe: 'CE7',
 }
 const DAY_ROUTE_COLORS = [
-  '#2563eb',
-  '#f97316',
-  '#10b981',
-  '#a855f7',
-  '#e11d48',
-  '#0891b2',
-  '#ca8a04',
+  '#c2693f',
+  '#6f8a5f',
+  '#5f7d94',
+  '#8f4a47',
+  '#8a6a82',
+  '#7c7a4f',
+  '#c39a40',
 ]
-const COLLECTION_ROUTE_COLOR = '#ea580c'
+const COLLECTION_ROUTE_COLOR = '#c2693f'
 const GENERIC_FOOD_KEYWORDS = new Set([
   '식당',
   '맛집',
@@ -174,6 +176,7 @@ const activeDay = computed(() =>
 )
 const activeStops = computed(() => activeDay.value?.stops ?? [])
 const activeDisplayStops = computed(() => orderTimelineStops(activeStops.value))
+const hasScheduledStops = computed(() => days.value.some((day) => (day.stops ?? []).length > 0))
 const activeTimelineLayout = computed(() => buildTimelineLayout(activeDisplayStops.value))
 const timelineHours = computed(() =>
   Array.from(
@@ -206,9 +209,12 @@ const routeSummary = computed(() =>
     .map((stop, index) => `${index + 1}. ${stop.place.name}`)
     .join(' → '),
 )
+const routeCandidatePlaces = computed(() =>
+  pocketPlaces.value.filter((place) => !isRoutedPlace(place)),
+)
 const routeMapPlaces = computed(() => {
   const routedPlaces = activeDisplayStops.value.map((stop) => toMapPlace(stop.place))
-  return dedupeRouteMapPlaces([...pocketPlaces.value, ...routedPlaces])
+  return dedupeRouteMapPlaces([...routeCandidatePlaces.value, ...routedPlaces])
 })
 const allRouteMapPlaces = computed(() =>
   routedPlaces.value,
@@ -1014,10 +1020,10 @@ function routePathForLeg(from, to) {
 }
 
 function routeSegmentColor(mode, dayNumber) {
-  if (mode === 'walk') return '#10b981'
+  if (mode === 'walk') return '#6f8a5f'
   if (mode === 'car') return dayRouteColor(dayNumber)
-  if (mode === 'public_transit') return '#8b5cf6'
-  return '#64748b'
+  if (mode === 'public_transit') return '#5f7d94'
+  return '#7c7a4f'
 }
 
 function routeSegmentStyle(mode) {
@@ -1507,8 +1513,8 @@ function popupPocketLabel(place) {
 
 function popupPrimaryLabel(place) {
   if (!itineraryMode.value) return popupPocketLabel(place)
-  const mark = hasActiveDayStopForPlace(place) ? '✓' : '＋'
-  const label = hasActiveDayStopForPlace(place) ? '일정 빼기' : '일정 추가'
+  const mark = hasActiveDayStopForPlace(place) ? '↩' : '＋'
+  const label = hasActiveDayStopForPlace(place) ? '후보로 되돌리기' : '일정 추가'
   return `<span aria-hidden="true">${mark}</span><span>${label}</span>`
 }
 
@@ -1589,6 +1595,39 @@ async function closeItineraryBuilder() {
   renderMapPlacesAfterLayout()
 }
 
+async function completeItineraryBuilder() {
+  await ensureItineraryLoaded()
+
+  if (!hasScheduledStops.value) {
+    itineraryNotice.value = '일정에 담긴 장소가 없습니다. 먼저 지도에서 장소를 추가해주세요.'
+    return
+  }
+
+  try {
+    await persistTimelineDrafts()
+    const currentTrip = trip.value?.id === tripId.value
+      ? trip.value
+      : await tripStore.fetchTripDetail(tripId.value)
+
+    if (!currentTrip) {
+      itineraryNotice.value = '여행 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.'
+      return
+    }
+
+    await tripStore.updateTrip(
+      tripId.value,
+      toTripPayload({
+        ...createTripFormFromTrip(currentTrip),
+        status: TRIP_STATUS.UPCOMING,
+      }),
+    )
+    itineraryNotice.value = '일정이 여행예정 카드로 저장되었습니다.'
+    await router.push({ name: 'trip-list' })
+  } catch {
+    itineraryNotice.value = '일정을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.'
+  }
+}
+
 async function ensureItineraryLoaded() {
   if (!tripId.value) return
   if (itineraryStore.itinerary?.trip?.id === tripId.value) return
@@ -1612,6 +1651,9 @@ async function addPocketPlaceToRoute(place) {
     )
     if (!currentStop) return
     await deleteStop(currentStop)
+    itineraryNotice.value = `${place.name}을(를) 경로 후보로 되돌렸습니다.`
+    await nextTick()
+    renderMapPlacesAfterLayout({ preserveViewport: true })
     return
   }
 
@@ -1819,7 +1861,7 @@ function autoScrollTimeline(body, clientY) {
 }
 
 function persistTimelineDrafts() {
-  activeDisplayStops.value.forEach((stop) => updateStopField(stop))
+  return Promise.all(activeDisplayStops.value.map((stop) => updateStopField(stop)))
 }
 function keepPlacePopupInView() {
   if (!mapEl.value || !placePopupOverlay) return
@@ -2403,10 +2445,10 @@ function markerSymbol(place) {
 
 function mapMarkerColor(place) {
   const markerType = mapMarkerType(toMapPlace(place))
-  if (markerType === 'attraction') return '#6f8d61'
-  if (markerType === 'restaurant') return '#9a4f4b'
-  if (markerType === 'cafe') return '#8b668e'
-  return '#4f6f8f'
+  if (markerType === 'attraction') return '#6f8a5f'
+  if (markerType === 'restaurant') return '#8f4a47'
+  if (markerType === 'cafe') return '#8a6a82'
+  return '#5f7d94'
 }
 
 function mapMarkerLabel(place) {
@@ -2725,7 +2767,9 @@ function normalizeSearchText(value = '') {
           </template>
 
           <template v-else>
-            <div class="route-builder-head"><Button label="장소 담기로" severity="secondary" outlined @click="closeItineraryBuilder" /></div>
+            <div class="route-builder-head">
+              <Button label="장소 담기로" severity="secondary" outlined @click="closeItineraryBuilder" />
+            </div>
             <SelectButton v-model="activeDayNumber" :options="dayTabs" option-label="label" option-value="value" class="day-tabs" />
             <section class="route-stop-section">
               <header class="route-section-head">
@@ -2768,13 +2812,23 @@ function normalizeSearchText(value = '') {
         <section class="map-panel">
           <div class="map-toolbar">
             <div><span class="eyebrow">{{ itineraryMode ? 'Itinerary Map' : 'Kakao Map' }}</span><h2>{{ itineraryMode ? tripRegion + ' 일정 지도' : tripRegion + ' 주변 지도' }}</h2></div>
-            <div class="map-tools"><Button v-if="canSearchCurrentMapArea" label="이 위치에서 재검색" severity="secondary" outlined size="small" :loading="searching" @click="searchCurrentMapArea" /></div>
+            <div class="map-tools">
+              <Button
+                v-if="itineraryMode"
+                class="route-complete-button"
+                label="완료"
+                :disabled="!hasScheduledStops || itineraryStore.loading || itineraryStore.mutating || tripStore.updating"
+                :loading="tripStore.updating"
+                @click="completeItineraryBuilder"
+              />
+              <Button v-if="canSearchCurrentMapArea" label="이 위치에서 재검색" severity="secondary" outlined size="small" :loading="searching" @click="searchCurrentMapArea" />
+            </div>
           </div>
           <div class="map-stage">
             <div ref="mapEl" class="kakao-map" :class="{ disabled: sdkError }" />
             <Message v-if="sdkError" severity="error" :closable="false" class="map-error">카카오맵을 불러오지 못했습니다. {{ sdkError }}</Message>
             <div v-if="sdkError" class="fallback-map">
-              <button v-for="place in mapPlaces.filter(hasCoordinates)" :key="place.uid" type="button" class="fallback-pin" :style="fallbackPinStyle(place)" @click="handleMapPlaceClick(place)"><span aria-hidden="true" /><strong>{{ place.name }}</strong></button>
+              <button v-for="place in mapPlaces.filter(hasCoordinates)" :key="place.uid" type="button" class="fallback-pin" :class="[mapMarkerType(place), { pocketed: isPocketed(place) }]" :style="fallbackPinStyle(place)" @click="handleMapPlaceClick(place)"><span aria-hidden="true" /><strong>{{ place.name }}</strong></button>
             </div>
           </div>
         </section>
@@ -2794,16 +2848,15 @@ function normalizeSearchText(value = '') {
             <Button class="route-start-button" label="일정 배치하기" severity="success" :disabled="!pocketDisplayPlaces.length" :loading="itineraryStore.loading" @click="openItineraryBuilder" />
           </template>
           <template v-else>
-            <div class="pocket-head"><div><span class="eyebrow">Pocket</span><h2>담긴 장소</h2></div><strong>{{ pocketDisplayPlaces.length }}</strong></div>
-            <div v-if="pocketDisplayPlaces.length" class="pocket-list">
-              <article v-for="place in pocketDisplayPlaces" :key="place.uid" class="pocket-item" :class="{ routed: isRoutedPlace(place) }">
+            <div class="pocket-head"><div><span class="eyebrow">Pocket</span><h2>경로 후보</h2></div><strong>{{ routeCandidatePlaces.length }}</strong></div>
+            <div v-if="routeCandidatePlaces.length" class="pocket-list">
+              <article v-for="place in routeCandidatePlaces" :key="place.uid" class="pocket-item">
                 <span class="pocket-dot" :class="mapMarkerType(place)">{{ markerSymbol(place) }}</span>
                 <span class="pocket-item__text"><strong>{{ place.name }}</strong><small>{{ place.category || '장소' }}</small></span>
-                <Button v-if="!isRoutedPlace(place)" label="＋" severity="secondary" text rounded :aria-label="place.name + ' 일정 추가'" @click="addPocketPlaceToRoute(place)" />
-                <em v-else>일정 포함</em>
+                <Button label="＋" severity="secondary" text rounded :aria-label="place.name + ' 일정 추가'" @click="addPocketPlaceToRoute(place)" />
               </article>
             </div>
-            <p v-else class="empty-pocket">담긴 장소가 없습니다.</p>
+            <p v-else class="empty-pocket">추가할 경로 후보가 없습니다.</p>
           </template>
         </aside>
       </section>
@@ -2953,6 +3006,19 @@ function normalizeSearchText(value = '') {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.route-complete-button {
+  border-color: var(--accent) !important;
+  background: var(--accent) !important;
+  color: var(--on-fill) !important;
+  font-weight: 850;
+  box-shadow: 0 10px 24px -14px rgba(194, 105, 63, 0.85);
+}
+
+.route-complete-button:enabled:hover {
+  border-color: #a95534 !important;
+  background: #a95534 !important;
 }
 
 .list-head strong,
@@ -3138,14 +3204,14 @@ function normalizeSearchText(value = '') {
 .fallback-pin {
   position: absolute;
   z-index: 1;
-  border: 0;
+  border: 1px solid var(--line);
   display: flex;
   align-items: center;
   gap: 7px;
   padding: 7px 10px 7px 7px;
   border-radius: 999px;
-  background: #fff;
-  color: #151d25;
+  background: var(--paper-card);
+  color: var(--ink);
   font-weight: 900;
   box-shadow: 0 16px 38px rgba(15, 23, 42, 0.16);
   cursor: pointer;
@@ -3157,13 +3223,21 @@ function normalizeSearchText(value = '') {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: #f7ecd6;
   font-size: 12px;
-  background: #ff5a4f;
+  background: var(--t-blue);
 }
 
-.fallback-pin.db span {
-  background: #2e8f6b;
+.fallback-pin.attraction span {
+  background: var(--t-sage);
+}
+
+.fallback-pin.restaurant span {
+  background: var(--t-burgundy);
+}
+
+.fallback-pin.cafe span {
+  background: var(--t-plum);
 }
 
 .fallback-pin.pocketed {
@@ -3171,7 +3245,7 @@ function normalizeSearchText(value = '') {
 }
 
 .fallback-pin.pocketed span {
-  background: #7c3aed;
+  background: var(--t-mustard);
 }
 
 .empty-pocket {
@@ -3194,7 +3268,7 @@ function normalizeSearchText(value = '') {
   border-radius: 16px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--on-fill);
   background: var(--accent);
 }
 
@@ -3227,8 +3301,8 @@ function normalizeSearchText(value = '') {
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  background: #eefbf6;
-  color: #0f8f63;
+  background: #e7efe4;
+  color: var(--t-sage);
   font-style: normal;
   font-size: 11px;
   font-weight: 900;
@@ -3238,6 +3312,9 @@ function normalizeSearchText(value = '') {
   width: 100%;
   justify-content: center;
   margin-top: auto;
+  border-color: var(--accent) !important;
+  background: var(--accent) !important;
+  color: var(--on-fill) !important;
 }
 
 .route-panel-tools {
@@ -3267,7 +3344,7 @@ function normalizeSearchText(value = '') {
   justify-items: start;
   gap: 2px;
   cursor: pointer;
-  box-shadow: inset 4px 0 0 var(--trip-day-color, #2563eb);
+  box-shadow: inset 4px 0 0 var(--trip-day-color, var(--accent));
 }
 
 .day-tab strong {
@@ -3287,18 +3364,18 @@ function normalizeSearchText(value = '') {
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
-  background: color-mix(in srgb, var(--trip-day-color, #2563eb) 12%, #fff);
-  color: var(--trip-day-color, #2563eb);
+  background: color-mix(in srgb, var(--trip-day-color, var(--accent)) 12%, var(--paper-card));
+  color: var(--trip-day-color, var(--accent));
   font-style: normal;
   font-size: 12px;
   font-weight: 900;
 }
 
 .day-tab.active {
-  border-color: var(--trip-day-color, #2563eb);
-  background: color-mix(in srgb, var(--trip-day-color, #2563eb) 9%, #fff);
-  box-shadow: inset 4px 0 0 var(--trip-day-color, #2563eb),
-    inset 0 0 0 1px var(--trip-day-color, #2563eb);
+  border-color: var(--trip-day-color, var(--accent));
+  background: color-mix(in srgb, var(--trip-day-color, var(--accent)) 9%, var(--paper-card));
+  box-shadow: inset 4px 0 0 var(--trip-day-color, var(--accent)),
+    inset 0 0 0 1px var(--trip-day-color, var(--accent));
 }
 
 .route-stop-section {
@@ -3345,8 +3422,8 @@ function normalizeSearchText(value = '') {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: #10b981;
-  color: #fff;
+  background: var(--t-sage);
+  color: #f7ecd6;
   font-size: 13px;
   font-weight: 950;
 }
@@ -3453,7 +3530,7 @@ function normalizeSearchText(value = '') {
 }
 
 .route-leg i {
-  color: #10b981;
+  color: var(--t-sage);
   font-size: 12px;
 }
 
@@ -3567,7 +3644,7 @@ function normalizeSearchText(value = '') {
 :global(.trip-map-pin__status) {
   display: block;
   margin-top: -1px;
-  color: var(--trip-active-day-color, #2563eb);
+  color: var(--trip-active-day-color, var(--accent));
   font-style: normal;
   font-size: 10px;
   font-weight: 950;
@@ -3579,12 +3656,12 @@ function normalizeSearchText(value = '') {
   width: 34px;
   height: 3px;
   border-radius: 999px;
-  background: var(--trip-other-day-color, #2563eb);
+  background: var(--trip-other-day-color, var(--accent));
   position: absolute;
   top: -7px;
   left: 50%;
   transform: translateX(-50%);
-  box-shadow: 0 2px 7px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 7px rgba(194, 105, 63, 0.24);
 }
 
 :global(.trip-map-pin.is-used-in-route::before) {
@@ -3592,12 +3669,12 @@ function normalizeSearchText(value = '') {
   width: 34px;
   height: 3px;
   border-radius: 999px;
-  background: var(--trip-other-day-color, #2563eb);
+  background: var(--trip-other-day-color, var(--accent));
   position: absolute;
   top: -7px;
   left: 50%;
   transform: translateX(-50%);
-  box-shadow: 0 2px 7px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 25%, transparent);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--trip-other-day-color, var(--accent)) 25%, transparent);
 }
 
 :global(.trip-map-pin span) {
@@ -3606,67 +3683,67 @@ function normalizeSearchText(value = '') {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: #f7ecd6;
   font-size: 12px;
   font-weight: 950;
   line-height: 1;
 }
 
 :global(.trip-map-pin.is-db span) {
-  background: #2e8f6b;
+  background: var(--t-sage);
 }
 
 :global(.trip-map-pin.is-kakao span) {
-  background: #ff5a4f;
+  background: var(--t-blue);
 }
 
 :global(.trip-map-pin.is-attraction span) {
-  background: #2e8f6b;
+  background: var(--t-sage);
 }
 
 :global(.trip-map-pin.is-restaurant span) {
-  background: #f04452;
+  background: var(--t-burgundy);
 }
 
 :global(.trip-map-pin.is-cafe span) {
-  background: #8b5cf6;
+  background: var(--t-plum);
 }
 
 :global(.trip-map-pin.is-routed span) {
-  background: var(--trip-active-day-color, #2563eb);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--trip-active-day-color, #2563eb) 18%, transparent),
+  background: var(--trip-active-day-color, var(--accent));
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--trip-active-day-color, var(--accent)) 18%, transparent),
     0 10px 24px rgba(15, 23, 42, 0.22);
 }
 
 :global(.trip-map-pin.is-pocketed:not(.is-routed):not(.is-used-other-day):not(.is-used-in-route) span) {
-  background: #f59e0b;
-  box-shadow: 0 8px 18px rgba(245, 158, 11, 0.24);
+  background: var(--t-mustard);
+  box-shadow: 0 8px 18px rgba(195, 154, 64, 0.24);
 }
 
 :global(.trip-map-pin.is-pocketed:not(.is-routed):not(.is-used-other-day):not(.is-used-in-route) strong) {
-  color: #92400e;
+  color: var(--t-khaki);
 }
 
 :global(.trip-map-pin.is-used-other-day:not(.is-routed) span) {
-  background: var(--trip-other-day-color, #2563eb);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 16%, transparent),
-    0 8px 18px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 24%, transparent);
+  background: var(--trip-other-day-color, var(--accent));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trip-other-day-color, var(--accent)) 16%, transparent),
+    0 8px 18px color-mix(in srgb, var(--trip-other-day-color, var(--accent)) 24%, transparent);
 }
 
 :global(.trip-map-pin.is-used-other-day:not(.is-routed) strong),
 :global(.trip-map-pin.is-used-other-day:not(.is-routed) .trip-map-pin__status) {
-  color: var(--trip-other-day-color, #2563eb);
+  color: var(--trip-other-day-color, var(--accent));
 }
 
 :global(.trip-map-pin.is-used-in-route span) {
-  background: var(--trip-other-day-color, #2563eb);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 16%, transparent),
-    0 8px 18px color-mix(in srgb, var(--trip-other-day-color, #2563eb) 24%, transparent);
+  background: var(--trip-other-day-color, var(--accent));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--trip-other-day-color, var(--accent)) 16%, transparent),
+    0 8px 18px color-mix(in srgb, var(--trip-other-day-color, var(--accent)) 24%, transparent);
 }
 
 :global(.trip-map-pin.is-used-in-route strong),
 :global(.trip-map-pin.is-used-in-route .trip-map-pin__status) {
-  color: var(--trip-other-day-color, #2563eb);
+  color: var(--trip-other-day-color, var(--accent));
 }
 
 :global(.trip-map-pin i) {
@@ -3882,9 +3959,16 @@ function normalizeSearchText(value = '') {
 }
 
 :global(.trip-place-popup__button.is-primary) {
-  border-color: #10b981;
-  background: #10b981;
-  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-fill);
+}
+
+:global(.trip-place-popup__button:disabled) {
+  border-color: var(--line);
+  background: var(--paper-dim);
+  color: var(--ink-sub);
+  cursor: default;
 }
 
 :global(.trip-map-pin.is-grouped) {
@@ -3967,6 +4051,9 @@ function normalizeSearchText(value = '') {
 .route-builder-head {
   display: flex;
   justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .day-tabs {
@@ -4213,8 +4300,8 @@ function normalizeSearchText(value = '') {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: #fff;
-  background: #6b7280;
+  color: #f7ecd6;
+  background: var(--t-blue);
   font-weight: 950;
   line-height: 1;
 }
@@ -4235,21 +4322,21 @@ function normalizeSearchText(value = '') {
 
 .place-type-dot.attraction,
 .pocket-dot.attraction {
-  background: #6f8d61;
+  background: var(--t-sage);
 }
 
 .place-type-dot.restaurant,
 .pocket-dot.restaurant {
-  background: #9a4f4b;
+  background: var(--t-burgundy);
 }
 
 .place-type-dot.cafe,
 .pocket-dot.cafe {
-  background: #8b668e;
+  background: var(--t-plum);
 }
 
 .place-type-dot.place,
 .pocket-dot.place {
-  background: #4f6f8f;
+  background: var(--t-blue);
 }
 </style>
