@@ -27,6 +27,17 @@ import {
   normalizeKakaoPlace,
   resolvePlaceRegion,
 } from '@/utils/placeSearch'
+import {
+  buildFallbackPinStyle,
+  buildKakaoMapSearchPlan,
+  centerFocusedRadius,
+  dbMapPageSizeForLevel,
+  distanceMeters,
+  isWithinSearchViewport,
+  limitPlacesForViewport,
+  mapBoundsToPlain,
+  mapSearchRadius,
+} from '@/utils/placeMapSearch'
 import { useTripStore } from '@/stores/trip'
 import { createTripFormFromTrip, toTripPayload } from '@/utils/tripForm'
 import { TRIP_STATUS } from '@/utils/tripStatus'
@@ -537,7 +548,12 @@ async function searchKakaoByViewports(
       .filter(hasCoordinates)
       .filter((place) => isWithinSearchViewport(place, filterViewport)),
   )
-  const limitedPlaces = limitKakaoPlacesForViewport(filteredPlaces, filterViewport, maxResults)
+  const limitedPlaces = limitPlacesForViewport(
+    filteredPlaces,
+    filterViewport,
+    maxResults,
+    map?.getLevel?.() ?? 7,
+  )
   kakaoPlaces.value = limitedPlaces
   if (!limitedPlaces.length && shouldShowKakaoSearchNotice(filterViewport)) {
     kakaoSearchNotice.value =
@@ -778,67 +794,6 @@ function dedupePlaces(placeItems) {
     seen.add(place.uid)
     return true
   })
-}
-
-function limitKakaoPlacesForViewport(placeItems, viewport, maxResults) {
-  if (!maxResults || placeItems.length <= maxResults) return placeItems
-  if (!viewport?.bounds) return placeItems.slice(0, maxResults)
-
-  const level = map?.getLevel?.() ?? 7
-  if (level >= 4) return placeItems.slice(0, maxResults)
-
-  return spatiallyBalancedPlaces(placeItems, viewport, maxResults)
-}
-
-function spatiallyBalancedPlaces(placeItems, viewport, maxResults) {
-  const columns = 4
-  const rows = 3
-  const buckets = new Map()
-
-  placeItems.forEach((place) => {
-    const key = viewportGridKey(place, viewport.bounds, columns, rows)
-    const bucket = buckets.get(key) || []
-    bucket.push(place)
-    buckets.set(key, bucket)
-  })
-
-  const orderedBuckets = [...buckets.entries()]
-    .map(([key, bucket]) => ({
-      key,
-      bucket,
-      priority: viewportGridPriority(key, columns, rows),
-    }))
-    .sort((a, b) => a.priority - b.priority)
-
-  const selected = []
-  while (selected.length < maxResults && orderedBuckets.some((item) => item.bucket.length)) {
-    orderedBuckets.forEach((item) => {
-      if (selected.length >= maxResults) return
-      const nextPlace = item.bucket.shift()
-      if (nextPlace) selected.push(nextPlace)
-    })
-  }
-
-  return selected
-}
-
-function viewportGridKey(place, bounds, columns, rows) {
-  const lngSpan = bounds.maxLng - bounds.minLng || 1
-  const latSpan = bounds.maxLat - bounds.minLat || 1
-  const column = clampIndex(Math.floor(((place.longitude - bounds.minLng) / lngSpan) * columns), columns)
-  const row = clampIndex(Math.floor(((bounds.maxLat - place.latitude) / latSpan) * rows), rows)
-  return `${row}:${column}`
-}
-
-function viewportGridPriority(key, columns, rows) {
-  const [row, column] = key.split(':').map(Number)
-  const centerRow = (rows - 1) / 2
-  const centerColumn = (columns - 1) / 2
-  return Math.hypot(row - centerRow, column - centerColumn)
-}
-
-function clampIndex(value, size) {
-  return Math.min(size - 1, Math.max(0, value))
 }
 
 function renderMapPlaces({ preserveViewport = true } = {}) {
@@ -2475,20 +2430,7 @@ function hasCoordinates(place) {
 }
 
 function fallbackPinStyle(place) {
-  const drawable = mapPlaces.value.filter(hasCoordinates)
-  const lats = drawable.map((item) => item.latitude)
-  const lngs = drawable.map((item) => item.longitude)
-  const minLat = Math.min(...lats)
-  const maxLat = Math.max(...lats)
-  const minLng = Math.min(...lngs)
-  const maxLng = Math.max(...lngs)
-  const latRatio = maxLat === minLat ? 0.5 : (place.latitude - minLat) / (maxLat - minLat)
-  const lngRatio = maxLng === minLng ? 0.5 : (place.longitude - minLng) / (maxLng - minLng)
-
-  return {
-    left: `${10 + lngRatio * 78}%`,
-    top: `${12 + (1 - latRatio) * 72}%`,
-  }
+  return buildFallbackPinStyle(mapPlaces.value, place)
 }
 
 function focusRegion(viewport) {
@@ -2525,102 +2467,7 @@ function currentMapKakaoViewport() {
 }
 
 function currentMapKakaoSearchPlan(viewport) {
-  const level = map?.getLevel?.() ?? 7
-  const pageLimit = kakaoPageLimitForLevel(level)
-  if (level <= 3) {
-    return {
-      viewports: currentMapGridViewports(viewport),
-      pageLimit,
-      pageSize: kakaoPageSizeForLevel(level),
-      maxResults: kakaoMaxResultsForLevel(level),
-    }
-  }
-  return {
-    viewports: [viewport],
-    pageLimit,
-    pageSize: kakaoPageSizeForLevel(level),
-    maxResults: kakaoMaxResultsForLevel(level),
-  }
-}
-
-function kakaoPageLimitForLevel(level) {
-  if (level <= 1) return MAX_KAKAO_PAGE_LIMIT
-  return 1
-}
-
-function kakaoPageSizeForLevel(level) {
-  if (level <= 1) return 10
-  if (level <= 2) return 9
-  if (level === 3) return 8
-  if (level <= 5) return MAP_KAKAO_PAGE_SIZE
-  return 6
-}
-
-function kakaoMaxResultsForLevel(level) {
-  if (level <= 1) return 56
-  if (level <= 2) return 48
-  if (level === 3) return 40
-  if (level <= 5) return 28
-  return 18
-}
-
-function dbMapPageSizeForLevel(level) {
-  if (level <= 2) return 80
-  if (level <= 4) return MAP_PLACE_PAGE_SIZE
-  return 36
-}
-
-function currentMapGridViewports(viewport) {
-  if (!viewport?.bounds) return [viewport]
-
-  const { minLat, maxLat, minLng, maxLng } = viewport.bounds
-  const midLat = (minLat + maxLat) / 2
-  const midLng = (minLng + maxLng) / 2
-  const tiles = [
-    { minLat, maxLat: midLat, minLng, maxLng: midLng },
-    { minLat, maxLat: midLat, minLng: midLng, maxLng },
-    { minLat: midLat, maxLat, minLng, maxLng: midLng },
-    { minLat: midLat, maxLat, minLng: midLng, maxLng },
-  ]
-
-  return tiles.map((bounds) => {
-    const center = {
-      lat: (bounds.minLat + bounds.maxLat) / 2,
-      lng: (bounds.minLng + bounds.maxLng) / 2,
-    }
-
-    return {
-      center,
-      bounds,
-      radius: plainBoundsRadius(bounds, center),
-      useRadiusFilter: false,
-    }
-  })
-}
-
-function centerFocusedRadius(baseRadius, level) {
-  if (level <= 2) return baseRadius
-  if (level === 3) return clampRadius(baseRadius * 0.75, 250, 700)
-  if (level === 4) return clampRadius(baseRadius * 0.58, 320, 900)
-  if (level === 5) return clampRadius(baseRadius * 0.42, 400, 1100)
-  if (level === 6) return clampRadius(baseRadius * 0.32, 520, 1400)
-  return clampRadius(baseRadius * 0.22, 700, 1800)
-}
-
-function plainBoundsRadius(bounds, center) {
-  const farthest = Math.max(
-    distanceMeters(center.lat, center.lng, bounds.maxLat, bounds.maxLng),
-    distanceMeters(center.lat, center.lng, bounds.minLat, bounds.minLng),
-  )
-
-  return Math.min(
-    MAX_KAKAO_RADIUS_METERS,
-    Math.max(MIN_KAKAO_RADIUS_METERS, Math.ceil(farthest)),
-  )
-}
-
-function clampRadius(value, min, max) {
-  return Math.min(max, Math.max(min, Math.ceil(value)))
+  return buildKakaoMapSearchPlan(viewport, map?.getLevel?.() ?? 7)
 }
 
 function kakaoSearchOptions(viewport) {
@@ -2648,68 +2495,6 @@ function plainBoundsToKakaoBounds(bounds) {
   kakaoBounds.extend(new kakao.maps.LatLng(bounds.minLat, bounds.minLng))
   kakaoBounds.extend(new kakao.maps.LatLng(bounds.maxLat, bounds.maxLng))
   return kakaoBounds
-}
-
-function mapSearchRadius(bounds, center) {
-  if (!bounds || !center) return MAX_KAKAO_RADIUS_METERS
-
-  const northEast = bounds.getNorthEast()
-  const southWest = bounds.getSouthWest()
-  const farthest = Math.max(
-    distanceMeters(center.getLat(), center.getLng(), northEast.getLat(), northEast.getLng()),
-    distanceMeters(center.getLat(), center.getLng(), southWest.getLat(), southWest.getLng()),
-  )
-
-  return Math.min(
-    MAX_KAKAO_RADIUS_METERS,
-    Math.max(MIN_KAKAO_RADIUS_METERS, Math.ceil(farthest)),
-  )
-}
-
-function mapBoundsToPlain(bounds) {
-  const northEast = bounds.getNorthEast()
-  const southWest = bounds.getSouthWest()
-  return {
-    minLat: southWest.getLat(),
-    maxLat: northEast.getLat(),
-    minLng: southWest.getLng(),
-    maxLng: northEast.getLng(),
-  }
-}
-
-function isWithinSearchViewport(place, viewport) {
-  if (viewport?.useRadiusFilter || !viewport?.bounds) {
-    if (!viewport?.center || !Number.isFinite(viewport.radius)) return true
-    return (
-      distanceMeters(
-        viewport.center.lat,
-        viewport.center.lng,
-        place.latitude,
-        place.longitude,
-      ) <= viewport.radius
-    )
-  }
-  const { minLat, maxLat, minLng, maxLng } = viewport.bounds
-  return (
-    place.latitude >= minLat &&
-    place.latitude <= maxLat &&
-    place.longitude >= minLng &&
-    place.longitude <= maxLng
-  )
-}
-
-function distanceMeters(lat1, lng1, lat2, lng2) {
-  const earthRadius = 6371000
-  const dLat = toRadians(lat2 - lat1)
-  const dLng = toRadians(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLng / 2) ** 2
-  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function toRadians(degrees) {
-  return (degrees * Math.PI) / 180
 }
 
 function normalizeSearchText(value = '') {
