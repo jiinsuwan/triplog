@@ -42,8 +42,8 @@ export function drawLocalDarken(ctx, d) {
   ctx.restore();
 }
 
-// ---------- 얇은 흰 스케치 외곽선 ----------
-export function strokePath(ctx, pts, { alpha = 0.9, width = 2.2, close = true, dash = null } = {}) {
+// ---------- 얇은 흰 스케치 외곽선 (내부 전용 — drawSketchOutline 이 사용) ----------
+function strokePath(ctx, pts, { alpha = 0.9, width = 2.2, close = true, dash = null } = {}) {
   if (pts.length < 2) return;
   ctx.save();
   ctx.lineCap = 'round';
