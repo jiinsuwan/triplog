@@ -229,7 +229,166 @@ describe('TripPlaceSearchView itinerary editor', () => {
     expect(wrapper.text()).toContain(routedPlace.name)
     expect(wrapper.text()).toContain('일정 포함')
   })
+
+  it('renders the Kakao map when the SDK loads and uses the same search for button and Enter', async () => {
+    const { kakao, keywordSearch } = createKakaoMock()
+    loadKakaoMaps.mockResolvedValue(kakao)
+
+    const wrapper = mount(TripPlaceSearchView, {
+      global: {
+        stubs: primeVueStubs(),
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.find('.map-error').exists()).toBe(false)
+    expect(wrapper.find('.fallback-map').exists()).toBe(false)
+    const initialSearchCalls = keywordSearch.mock.calls.length
+
+    const searchInput = wrapper.find('.search-card .p-inputtext')
+    await searchInput.setValue('한옥 카페')
+    await searchInput.trigger('keyup.enter')
+    await flushPromises()
+    expect(keywordSearch).toHaveBeenCalledTimes(initialSearchCalls + 1)
+
+    const searchButton = wrapper.findAll('.search-card button').find((button) => button.text() === '검색')
+    await searchButton.trigger('click')
+    await flushPromises()
+    expect(keywordSearch).toHaveBeenCalledTimes(initialSearchCalls + 2)
+    expect(keywordSearch.mock.calls.at(-1)[0]).toBe(keywordSearch.mock.calls.at(-2)[0])
+  })
+
+  it('shows the fallback map when the Kakao SDK fails', async () => {
+    const wrapper = mount(TripPlaceSearchView, {
+      global: {
+        stubs: primeVueStubs(),
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.find('.map-error').text()).toContain('Kakao SDK unavailable in test')
+    expect(wrapper.find('.fallback-map').exists()).toBe(true)
+    expect(wrapper.findAll('.fallback-pin')).toHaveLength(places.length)
+  })
+
+  it('keeps pocket, schedule, and delete state transitions connected', async () => {
+    const wrapper = mount(TripPlaceSearchView, {
+      global: {
+        stubs: primeVueStubs(),
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    await wrapper.findAll('.place-row__pocket')[0].trigger('click')
+    expect(wrapper.findAll('.pocket-item')).toHaveLength(1)
+
+    await wrapper.find('.route-start-button').trigger('click')
+    await flushPromises()
+    await flushPromises()
+    await wrapper.find('.pocket-item button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.route-stop-card')).toHaveLength(1)
+    expect(wrapper.findAll('.pocket-item')).toHaveLength(0)
+
+    await wrapper.find('.route-stop-delete').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.route-stop-card')).toHaveLength(0)
+    expect(wrapper.findAll('.pocket-item')).toHaveLength(1)
+  })
 })
+
+function createKakaoMock() {
+  const keywordSearch = vi.fn((query, callback) => {
+    callback([], 'ZERO_RESULT', { hasNextPage: false })
+  })
+  const listeners = new Map()
+
+  class LatLng {
+    constructor(lat, lng) {
+      this.lat = lat
+      this.lng = lng
+    }
+
+    getLat() {
+      return this.lat
+    }
+
+    getLng() {
+      return this.lng
+    }
+  }
+
+  class LatLngBounds {
+    extend() {}
+
+    getNorthEast() {
+      return new LatLng(35.9, 127.2)
+    }
+
+    getSouthWest() {
+      return new LatLng(35.7, 127.0)
+    }
+  }
+
+  class MapMock {
+    constructor() {
+      this.center = new LatLng(35.8149, 127.153)
+      this.level = 5
+      this.bounds = new LatLngBounds()
+    }
+
+    addControl() {}
+    getBounds() { return this.bounds }
+    getCenter() { return this.center }
+    getLevel() { return this.level }
+    panTo(position) { this.center = position }
+    relayout() {}
+    setBounds() {}
+    setCenter(position) { this.center = position }
+    setLevel(level) { this.level = level }
+    setMinLevel() {}
+  }
+
+  class CustomOverlay {
+    setMap() {}
+    setPosition() {}
+  }
+
+  class Polyline {
+    setMap() {}
+  }
+
+  const event = {
+    addListener: vi.fn((target, name, handler) => listeners.set(`${name}:${listeners.size}`, handler)),
+    removeListener: vi.fn(),
+  }
+  const kakao = {
+    maps: {
+      ControlPosition: { RIGHT: 'RIGHT' },
+      CustomOverlay,
+      LatLng,
+      LatLngBounds,
+      Map: MapMock,
+      Polyline,
+      ZoomControl: class {},
+      event,
+      services: {
+        Places: class {
+          categorySearch(query, callback) { callback([], 'ZERO_RESULT', { hasNextPage: false }) }
+          keywordSearch(query, callback) { keywordSearch(query, callback) }
+        },
+        SortBy: { DISTANCE: 'DISTANCE' },
+        Status: { OK: 'OK' },
+      },
+    },
+  }
+  return { event, kakao, keywordSearch, listeners }
+}
 
 async function pocketPlacesAndOpenRoute(wrapper, count = 1) {
   const pocketButtons = wrapper.findAll('.place-row__pocket')
