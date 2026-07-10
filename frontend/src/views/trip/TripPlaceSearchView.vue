@@ -38,6 +38,24 @@ import {
   mapBoundsToPlain,
   mapSearchRadius,
 } from '@/utils/placeMapSearch'
+import {
+  buildTimelineLayout as calculateTimelineLayout,
+  formatStayMinutes,
+  minutesToSelectedTime,
+  nextRouteStartTime as calculateNextRouteStartTime,
+  orderTimelineStops as sortTimelineStops,
+  roundToTimelineStep,
+  selectedTimeToMinutes,
+  selectedTimeToTop,
+  stayMemoFromMinutes,
+  stayMinutesFromMemo,
+  stopStayMinutes as calculateStopStayMinutes,
+  stopTimelineHeight as calculateStopTimelineHeight,
+  timelineBaseHeight,
+  timelineHourLabel,
+  timelineHourStyle,
+  topToSelectedTime,
+} from '@/utils/itineraryTimeline'
 import { useTripStore } from '@/stores/trip'
 import { createTripFormFromTrip, toTripPayload } from '@/utils/tripForm'
 import { TRIP_STATUS } from '@/utils/tripStatus'
@@ -1947,128 +1965,23 @@ function defaultStopDraft(stop) {
 }
 
 function orderTimelineStops(stops = []) {
-  return [...stops].sort((left, right) => {
-    const leftTime = selectedTimeToMinutes(stopDraft(left).selectedTime || left.selectedTime)
-    const rightTime = selectedTimeToMinutes(stopDraft(right).selectedTime || right.selectedTime)
-    const dragOrder = overlappingDragOrder(left, right, leftTime, rightTime)
-    if (dragOrder) return dragOrder
-    return (
-      (leftTime ?? fallbackStopMinutes(left)) -
-        (rightTime ?? fallbackStopMinutes(right)) ||
-      Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) ||
-      Number(left.id ?? 0) - Number(right.id ?? 0)
-    )
-  })
-}
-
-function overlappingDragOrder(left, right, leftTime, rightTime) {
-  const state = timelineDragState.value
-  if (state?.type !== 'move' || !state.stop) return 0
-
-  const leftIsDragged = String(left.id) === String(state.stop.id)
-  const rightIsDragged = String(right.id) === String(state.stop.id)
-  if (leftIsDragged === rightIsDragged) return 0
-
-  const dragged = leftIsDragged ? left : right
-  const other = leftIsDragged ? right : left
-  const draggedStart = (leftIsDragged ? leftTime : rightTime) ?? fallbackStopMinutes(dragged)
-  const otherStart = (leftIsDragged ? rightTime : leftTime) ?? fallbackStopMinutes(other)
-  const draggedEnd = draggedStart + stopStayMinutes(dragged)
-  const otherEnd = otherStart + stopStayMinutes(other)
-  const overlaps = draggedStart < otherEnd && draggedEnd > otherStart
-  if (!overlaps) return 0
-
-  const draggedAfterOther = state.moveDirection >= 0
-  if (leftIsDragged) return draggedAfterOther ? 1 : -1
-  return draggedAfterOther ? -1 : 1
+  return sortTimelineStops(stops, stopDraft, timelineDragState.value)
 }
 
 function nextRouteStartTime(stops = []) {
-  const orderedStops = orderTimelineStops(stops)
-  if (!orderedStops.length) return minutesToSelectedTime(TIMELINE_START_HOUR * 60)
-
-  const lastStop = orderedStops[orderedStops.length - 1]
-  const lastMinutes =
-    selectedTimeToMinutes(stopDraft(lastStop).selectedTime || lastStop.selectedTime) ??
-    fallbackStopMinutes(lastStop)
-  const maxStart = TIMELINE_END_HOUR * 60 - MIN_STAY_MINUTES
-  return minutesToSelectedTime(Math.min(maxStart, lastMinutes + 120))
+  return calculateNextRouteStartTime(stops, stopDraft, timelineDragState.value)
 }
 
 function buildTimelineLayout(stops = []) {
-  const layout = new Map()
-  let cursor = 0
-  stops.forEach((stop) => {
-    const rawTop = selectedTimeToTop(stopDraft(stop).selectedTime || stop.selectedTime)
-    const height = stopTimelineHeight(stop)
-    const top = Math.max(rawTop, cursor)
-    layout.set(stop.id, { top, height })
-    cursor = top + height + TIMELINE_CARD_GAP_PX
-  })
-  return layout
-}
-
-function timelineBaseHeight() {
-  return (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * TIMELINE_HOUR_HEIGHT_PX + 90
-}
-
-function timelineHourLabel(hour) {
-  return `${String(hour).padStart(2, '0')}:00`
-}
-
-function timelineHourStyle(hour) {
-  return {
-    top: `${Math.max(0, hour - TIMELINE_START_HOUR) * TIMELINE_HOUR_HEIGHT_PX}px`,
-  }
-}
-
-function fallbackStopMinutes(stop) {
-  return TIMELINE_START_HOUR * 60 + Math.max(0, Number(stop?.sortOrder ?? 1) - 1) * 90
-}
-
-function selectedTimeToMinutes(value) {
-  const [hour, minute] = String(value || '').split(':').map(Number)
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null
-  return hour * 60 + minute
-}
-
-function minutesToSelectedTime(minutes) {
-  const clamped = Math.max(0, Math.min(23 * 60 + 59, Math.round(minutes)))
-  const hour = Math.floor(clamped / 60)
-  const minute = clamped % 60
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-}
-
-function roundToTimelineStep(minutes) {
-  return Math.round(minutes / TIMELINE_MINUTES_PER_STEP) * TIMELINE_MINUTES_PER_STEP
-}
-
-function selectedTimeToTop(value) {
-  const minutes = selectedTimeToMinutes(value) ?? TIMELINE_START_HOUR * 60
-  const fromStart = Math.max(0, minutes - TIMELINE_START_HOUR * 60)
-  return (fromStart / 60) * TIMELINE_HOUR_HEIGHT_PX
-}
-
-function topToSelectedTime(top) {
-  const maxMinutes = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 60
-  const minutesFromStart = Math.max(
-    0,
-    Math.min(maxMinutes, roundToTimelineStep((top / TIMELINE_HOUR_HEIGHT_PX) * 60)),
-  )
-  return minutesToSelectedTime(TIMELINE_START_HOUR * 60 + minutesFromStart)
+  return calculateTimelineLayout(stops, stopDraft)
 }
 
 function stopStayMinutes(stop) {
-  const draftMinutes = Number(stopDraft(stop).stayMinutes)
-  if (Number.isFinite(draftMinutes) && draftMinutes >= MIN_STAY_MINUTES) return draftMinutes
-  return stayMinutesFromMemo(stop.memo)
+  return calculateStopStayMinutes(stop, stopDraft)
 }
 
 function stopTimelineHeight(stop) {
-  return Math.max(
-    72,
-    Math.round((stopStayMinutes(stop) / 60) * TIMELINE_HOUR_HEIGHT_PX),
-  )
+  return calculateStopTimelineHeight(stop, stopDraft)
 }
 
 function stopTimelineStyle(stop) {
@@ -2098,26 +2011,6 @@ function routePlaceTypeLabel(place = {}) {
   if (markerType === 'restaurant') return '식당'
   if (markerType === 'cafe') return '카페'
   return place.category || '장소'
-}
-
-function stayMinutesFromMemo(memo) {
-  const text = String(memo || '')
-  const hourMatch = text.match(/(\d+)\s*시간/)
-  const minuteMatch = text.match(/(\d+)\s*분/)
-  const minutes = (hourMatch ? Number(hourMatch[1]) * 60 : 0) + (minuteMatch ? Number(minuteMatch[1]) : 0)
-  return Math.max(MIN_STAY_MINUTES, minutes || 60)
-}
-
-function formatStayMinutes(minutes) {
-  const safeMinutes = Math.max(MIN_STAY_MINUTES, Number(minutes) || 60)
-  const hours = Math.floor(safeMinutes / 60)
-  const rest = safeMinutes % 60
-  if (!hours) return rest + '분'
-  return rest ? hours + '시간 ' + rest + '분' : hours + '시간'
-}
-
-function stayMemoFromMinutes(minutes) {
-  return '머무는 시간 ' + formatStayMinutes(minutes)
 }
 
 function travelEstimateLabel(stop) {
