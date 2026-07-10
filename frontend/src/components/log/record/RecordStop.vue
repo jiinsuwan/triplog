@@ -5,14 +5,13 @@
 import { computed } from 'vue'
 import RecordPhotoChip from './RecordPhotoChip.vue'
 import { useRecordDrag } from '@/composables/useRecordDrag'
+import { TYPE_ICON } from './recordShared.js'
 
 const props = defineProps({
   stop: { type: Object, required: true },
   photos: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['remove'])
-
-const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
 
 const { drag } = useRecordDrag()
 const over = computed(() => drag.active && drag.overStopId === props.stop.id)

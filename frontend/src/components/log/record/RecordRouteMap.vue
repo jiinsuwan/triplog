@@ -2,31 +2,14 @@
 // 경로 지도 (S4-LOG-01 기록 뷰) — 스키매틱. 일정 장소를 위경도로 배치해 번호 노드 + 경로선으로 보여준다.
 // 실제 카카오맵 SDK 연동은 별도(키·범위 큼) — 목업처럼 경로 구조만 표현한다.
 import { computed } from 'vue'
+import { projectStopsToViewBox } from './recordShared.js'
 
 const props = defineProps({
   stops: { type: Array, default: () => [] },
 })
 
-// 위경도 → 0~100 뷰박스(패딩). x=경도(서→동), y=위도(북 위쪽). 점이 1개거나 같은 좌표면 중앙 폴백.
-const nodes = computed(() => {
-  const pts = props.stops.filter((s) => s.place?.latitude != null && s.place?.longitude != null)
-  if (pts.length === 0) return []
-  const lats = pts.map((s) => Number(s.place.latitude))
-  const lngs = pts.map((s) => Number(s.place.longitude))
-  const minLat = Math.min(...lats)
-  const minLng = Math.min(...lngs)
-  const spanLat = Math.max(...lats) - minLat || 1
-  const spanLng = Math.max(...lngs) - minLng || 1
-  const P = 14
-  const S = 100 - P * 2
-  return pts.map((s) => ({
-    id: s.id,
-    no: s.sortOrder,
-    name: s.place.name,
-    x: pts.length === 1 ? 50 : P + ((Number(s.place.longitude) - minLng) / spanLng) * S,
-    y: pts.length === 1 ? 50 : P + (1 - (Number(s.place.latitude) - minLat) / spanLat) * S,
-  }))
-})
+// 위경도 → 0~100 뷰박스 투영(recordShared 공유 로직 — RecordPlacementBody 지도와 동일 수식).
+const nodes = computed(() => projectStopsToViewBox(props.stops))
 
 const polyline = computed(() => nodes.value.map((n) => `${n.x},${n.y}`).join(' '))
 </script>

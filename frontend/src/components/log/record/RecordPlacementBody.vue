@@ -10,6 +10,7 @@ import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import PhotoManageDialog from '@/components/log/PhotoManageDialog.vue'
 import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
 import { useRecordDrag, cancelPhotoDrag } from '@/composables/useRecordDrag'
+import { projectStopsToViewBox, TYPE_ICON } from './recordShared.js'
 
 const props = defineProps({
   days: { type: Array, default: () => [] }, // 부모가 받은 일정(plannedDays)
@@ -66,35 +67,10 @@ const activeDayLabel = computed(() => {
   return `${date} · ${activeStops.value.length}곳 · 사진 ${photoCountForDay(day)}`
 })
 
-// 경로 지도 핀 — 위경도를 0~100 뷰박스로 정규화. 유한수 좌표만(빈 문자열·NaN 제외).
-function num(value) {
-  if (value == null || value === '') return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-const mapNodes = computed(() => {
-  const pts = activeStops.value
-    .map((stop) => ({ stop, lat: num(stop.place?.latitude), lng: num(stop.place?.longitude) }))
-    .filter((p) => p.lat != null && p.lng != null)
-  if (!pts.length) return []
-  const lats = pts.map((p) => p.lat)
-  const lngs = pts.map((p) => p.lng)
-  const minLat = Math.min(...lats)
-  const minLng = Math.min(...lngs)
-  const spanLat = Math.max(...lats) - minLat || 1
-  const spanLng = Math.max(...lngs) - minLng || 1
-  const P = 14
-  const S = 100 - P * 2
-  return pts.map(({ stop, lat, lng }, i) => ({
-    id: stop.id ?? i,
-    no: stop.sortOrder ?? i + 1,
-    x: pts.length === 1 ? 50 : P + ((lng - minLng) / spanLng) * S,
-    y: pts.length === 1 ? 50 : P + (1 - (lat - minLat) / spanLat) * S,
-  }))
-})
+// 경로 지도 핀 — 위경도를 0~100 뷰박스로 투영(recordShared 공유 로직). 현재 DAY(activeStops)만.
+const mapNodes = computed(() => projectStopsToViewBox(activeStops.value))
 const polyline = computed(() => mapNodes.value.map((n) => `${n.x},${n.y}`).join(' '))
 
-const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
 function stopType(stop) {
   return stop.place?.category || stop.place?.categoryGroup || ''
 }
