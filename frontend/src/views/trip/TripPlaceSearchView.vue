@@ -10,6 +10,7 @@ import SelectButton from 'primevue/selectbutton'
 import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
 import { AppTopBar } from '@/components/common'
 import { useItineraryStore } from '@/stores/itinerary'
+import { useKakaoMapLifecycle } from '@/composables/useKakaoMapLifecycle'
 import { loadKakaoMaps } from '@/utils/kakaoMap'
 import {
   formatDayDate,
@@ -124,6 +125,7 @@ const route = useRoute()
 const router = useRouter()
 const tripStore = useTripStore()
 const itineraryStore = useItineraryStore()
+const mapLifecycle = useKakaoMapLifecycle()
 
 const tripId = computed(() => Number(route.params.tripId))
 const trip = computed(() => tripStore.selectedTrip)
@@ -157,13 +159,6 @@ const timelineDragState = ref(null)
 let kakao = null
 let map = null
 let placesService = null
-let overlays = []
-let routePolylines = []
-let placePopupOverlay = null
-let placePopupTimer = null
-let mapIdleHandler = null
-let mapZoomChangedHandler = null
-let mapClickHandler = null
 let shouldMarkBaselineOnIdle = false
 const dbPlaceDetailCache = new Map()
 const dbPlaceDetailRequests = new Map()
@@ -297,9 +292,9 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  removeMapListeners()
-  clearPlacePopup()
-  clearOverlays()
+  mapLifecycle.cleanup(kakao, map)
+  selectedPlace.value = null
+  cleanupTimelineDrag()
 })
 
 watch(
@@ -828,41 +823,27 @@ function renderMapPlacesAfterLayout({ preserveViewport = true } = {}) {
 }
 
 function attachMapListeners() {
-  if (!kakao || !map || mapIdleHandler) return
-  mapIdleHandler = () => {
-    updateMapSignature()
-    drawMapPlaces({ preserveViewport: true })
-    if (shouldMarkBaselineOnIdle) {
-      lastMapSearchSignature.value = currentMapSignature.value
+  mapLifecycle.attachListeners(kakao, map, {
+    idle: () => {
+      updateMapSignature()
+      drawMapPlaces({ preserveViewport: true })
+      if (shouldMarkBaselineOnIdle) {
+        lastMapSearchSignature.value = currentMapSignature.value
+        shouldMarkBaselineOnIdle = false
+      }
+    },
+    zoom_changed: () => {
       shouldMarkBaselineOnIdle = false
-    }
-  }
-  mapZoomChangedHandler = () => {
-    shouldMarkBaselineOnIdle = false
-    updateMapSignature()
-    drawMapPlaces({ preserveViewport: true })
-  }
-  mapClickHandler = () => clearPlacePopup()
-  kakao.maps.event.addListener(map, 'idle', mapIdleHandler)
-  kakao.maps.event.addListener(map, 'zoom_changed', mapZoomChangedHandler)
-  kakao.maps.event.addListener(map, 'click', mapClickHandler)
+      updateMapSignature()
+      drawMapPlaces({ preserveViewport: true })
+    },
+    click: () => clearPlacePopup(),
+  })
   updateMapSignature()
 }
 
 function removeMapListeners() {
-  if (!kakao || !map) return
-  if (mapIdleHandler) {
-    kakao.maps.event.removeListener(map, 'idle', mapIdleHandler)
-  }
-  if (mapZoomChangedHandler) {
-    kakao.maps.event.removeListener(map, 'zoom_changed', mapZoomChangedHandler)
-  }
-  if (mapClickHandler) {
-    kakao.maps.event.removeListener(map, 'click', mapClickHandler)
-  }
-  mapIdleHandler = null
-  mapZoomChangedHandler = null
-  mapClickHandler = null
+  mapLifecycle.removeListeners(kakao, map)
 }
 
 function markMapSearchBaseline({ afterIdle = false } = {}) {
@@ -907,7 +888,7 @@ function drawMapPlaces({ preserveViewport }) {
       clickable: true,
     })
     overlay.setMap(map)
-    overlays.push(overlay)
+    mapLifecycle.addOverlay(overlay)
   })
   drawRoutePolylines()
 
@@ -938,10 +919,7 @@ function drawMapPlaces({ preserveViewport }) {
 }
 
 function clearOverlays() {
-  routePolylines.forEach((polyline) => polyline.setMap(null))
-  routePolylines = []
-  overlays.forEach((overlay) => overlay.setMap(null))
-  overlays = []
+  mapLifecycle.clearDrawings()
 }
 
 function drawRoutePolylines() {
@@ -960,7 +938,7 @@ function drawRoutePolylines() {
         zIndex: isCollectionMode ? 20 : isActiveDay ? 36 : 22,
       })
       polyline.setMap(map)
-      routePolylines.push(polyline)
+      mapLifecycle.addRoutePolyline(polyline)
     })
   })
 }
@@ -1329,25 +1307,18 @@ async function resolveDbPlaceDetail(place) {
 }
 
 function schedulePlacePopup(place, position, { delayed = false } = {}) {
-  clearPlacePopupTimer()
   const show = () => {
-    placePopupTimer = null
     if (selectedPlace.value?.uid !== place.uid) return
     showPlacePopup(place, position)
   }
-
-  if (delayed) {
-    placePopupTimer = window.setTimeout(show, 450)
-    return
-  }
-  show()
+  mapLifecycle.schedulePopup(show, delayed ? 450 : 0)
 }
 
 function showPlacePopup(place, position) {
   if (!kakao || !map) return
   clearPlacePopup({ clearSelection: false })
 
-  placePopupOverlay = new kakao.maps.CustomOverlay({
+  const popupOverlay = new kakao.maps.CustomOverlay({
     position,
     content: createPlacePopupContent(place),
     xAnchor: 0.5,
@@ -1355,25 +1326,21 @@ function showPlacePopup(place, position) {
     zIndex: 50,
     clickable: true,
   })
-  placePopupOverlay.setMap(map)
+  mapLifecycle.setPopupOverlay(popupOverlay)
+  popupOverlay.setMap(map)
   requestAnimationFrame(() => keepPlacePopupInView())
 }
 
 function clearPlacePopup({ clearSelection = true } = {}) {
-  clearPlacePopupTimer()
-  if (placePopupOverlay) {
-    placePopupOverlay.setMap(null)
-    placePopupOverlay = null
-  }
+  mapLifecycle.clearPopupTimer()
+  mapLifecycle.clearPopupOverlay()
   if (clearSelection) {
     selectedPlace.value = null
   }
 }
 
 function clearPlacePopupTimer() {
-  if (!placePopupTimer) return
-  window.clearTimeout(placePopupTimer)
-  placePopupTimer = null
+  mapLifecycle.clearPopupTimer()
 }
 
 function createPlacePopupContent(place) {
@@ -1845,7 +1812,7 @@ function persistTimelineDrafts() {
   return Promise.all(activeDisplayStops.value.map((stop) => updateStopField(stop)))
 }
 function keepPlacePopupInView() {
-  if (!mapEl.value || !placePopupOverlay) return
+  if (!mapEl.value || !mapLifecycle.hasPopupOverlay()) return
 
   const popup = mapEl.value.querySelector('.trip-place-popup')
   if (!popup) return

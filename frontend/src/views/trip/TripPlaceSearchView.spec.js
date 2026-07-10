@@ -259,6 +259,28 @@ describe('TripPlaceSearchView itinerary editor', () => {
     expect(keywordSearch.mock.calls.at(-1)[0]).toBe(keywordSearch.mock.calls.at(-2)[0])
   })
 
+  it('removes Kakao map listeners when the view unmounts', async () => {
+    const { event, kakao } = createKakaoMock()
+    loadKakaoMaps.mockResolvedValue(kakao)
+    const wrapper = mount(TripPlaceSearchView, {
+      global: {
+        stubs: primeVueStubs(),
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(event.addListener).toHaveBeenCalledTimes(3)
+    wrapper.unmount()
+
+    expect(event.removeListener).toHaveBeenCalledTimes(3)
+    expect(event.removeListener.mock.calls.map((call) => call[1])).toEqual([
+      'idle',
+      'zoom_changed',
+      'click',
+    ])
+  })
+
   it('shows the fallback map when the Kakao SDK fails', async () => {
     const wrapper = mount(TripPlaceSearchView, {
       global: {
