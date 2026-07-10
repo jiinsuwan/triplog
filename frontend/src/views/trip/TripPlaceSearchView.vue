@@ -9,6 +9,7 @@ import Select from 'primevue/select'
 import SelectButton from 'primevue/selectbutton'
 import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
 import { AppTopBar } from '@/components/common'
+import ItineraryTimelinePanel from '@/components/trip/ItineraryTimelinePanel.vue'
 import PlacePocketPanel from '@/components/trip/PlacePocketPanel.vue'
 import PlaceSearchPanel from '@/components/trip/PlaceSearchPanel.vue'
 import { useItineraryStore } from '@/stores/itinerary'
@@ -2418,58 +2419,38 @@ function normalizeSearchText(value = '') {
           @toggle-pocket="togglePocket"
         />
 
-        <aside v-else class="place-list-panel planning">
-            <div class="route-builder-head">
-              <Button label="장소 담기로" severity="secondary" outlined @click="closeItineraryBuilder" />
-            </div>
-            <SelectButton v-model="activeDayNumber" :options="dayTabs" option-label="label" option-value="value" class="day-tabs" />
-            <section class="route-stop-section">
-              <header class="route-section-head">
-                <strong>DAY {{ activeDay?.dayNumber || 1 }} · {{ formatDayDate(activeDay?.date) }}</strong>
-                <small>09:00부터 21:00까지, 카드 높이로 머무는 시간을 조정합니다.</small>
-              </header>
-              <div class="route-stop-list">
-                <div class="route-time-canvas" :style="timelineCanvasStyle">
-                  <div v-for="hour in timelineHours" :key="hour" class="route-hour-row" :style="timelineHourStyle(hour)">
-                    <span>{{ timelineHourLabel(hour) }}</span>
-                    <i aria-hidden="true"></i>
-                  </div>
-                  <p v-if="!activeDisplayStops.length" class="empty-pocket route-empty-timeline">지도 마커나 Pocket의 ＋ 버튼으로 장소를 일정에 추가하세요.</p>
-                  <template v-for="(stop, index) in activeDisplayStops" :key="stop.id">
-                    <article class="route-stop-card" :class="{ active: selectedStopId === stop.id }" :style="stopTimelineStyle(stop)" @pointerdown="startStopDrag(stop, $event)">
-                      <span class="route-stop-resize route-stop-resize--top" @pointerdown.stop.prevent="startStayResize(stop, 'top', $event)"></span>
-                      <div class="route-stop-main">
-                        <div>
-                          <strong>{{ stop.place.name }}</strong>
-                          <small><b>{{ routePlaceTypeLabel(stop.place) }}</b>{{ stop.place.category ? ' · ' + stop.place.category : '' }}</small>
-                          <em>머무는 시간 {{ formatStayMinutes(stopStayMinutes(stop)) }}</em>
-                        </div>
-                      </div>
-                      <Button class="route-stop-delete" label="×" severity="danger" text rounded :aria-label="stop.place.name + ' 삭제'" @pointerdown.stop @click="deleteStop(stop)" />
-                      <span class="route-stop-resize route-stop-resize--bottom" @pointerdown.stop.prevent="startStayResize(stop, 'bottom', $event)"></span>
-                    </article>
-                    <div v-if="index < activeDisplayStops.length - 1" class="route-leg" :style="routeLegTimelineStyle(stop, activeDisplayStops[index + 1])">
-                      <div class="route-leg__details" :class="{ 'has-manual': isManualTravelInputVisible(stop) }">
-                        <Select :model-value="routeLegMode(stop)" :options="TRANSPORT_VIEW_OPTIONS" option-label="label" option-value="value" :disabled="itineraryStore.mutating" @pointerdown.stop @update:model-value="updateLegTransport(stop, $event)" />
-                        <em :title="routeLegTitle(stop, activeDisplayStops[index + 1])">{{ routeLegSummary(stop, activeDisplayStops[index + 1]) }}</em>
-                        <label v-if="isManualTravelInputVisible(stop)" class="route-leg__manual">
-                          <InputText
-                            :model-value="stopDraft(stop).manualTravelMinutes"
-                            class="route-leg__manual-input"
-                            inputmode="numeric"
-                            aria-label="대중교통 이동 시간 직접 입력"
-                            @update:model-value="setStopDraft(stop, { manualTravelMinutes: $event })"
-                            @change="updateManualTravelDuration(stop)"
-                          />
-                          <span>분</span>
-                        </label>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-              </div>
-            </section>
-        </aside>
+        <ItineraryTimelinePanel
+          v-else
+          v-model:active-day-number="activeDayNumber"
+          :active-day="activeDay"
+          :active-display-stops="activeDisplayStops"
+          :day-tabs="dayTabs"
+          :format-day-date="formatDayDate"
+          :format-stay-minutes="formatStayMinutes"
+          :is-manual-travel-input-visible="isManualTravelInputVisible"
+          :mutating="itineraryStore.mutating"
+          :route-leg-mode="routeLegMode"
+          :route-leg-summary="routeLegSummary"
+          :route-leg-timeline-style="routeLegTimelineStyle"
+          :route-leg-title="routeLegTitle"
+          :route-place-type-label="routePlaceTypeLabel"
+          :selected-stop-id="selectedStopId"
+          :stop-draft="stopDraft"
+          :stop-stay-minutes="stopStayMinutes"
+          :stop-timeline-style="stopTimelineStyle"
+          :timeline-canvas-style="timelineCanvasStyle"
+          :timeline-hour-label="timelineHourLabel"
+          :timeline-hour-style="timelineHourStyle"
+          :timeline-hours="timelineHours"
+          :transport-options="TRANSPORT_VIEW_OPTIONS"
+          @close="closeItineraryBuilder"
+          @delete-stop="deleteStop"
+          @resize-stop="startStayResize"
+          @start-drag="startStopDrag"
+          @update-leg-transport="updateLegTransport"
+          @update-manual-duration="updateManualTravelDuration"
+          @update-stop-draft="setStopDraft"
+        />
 
         <section class="map-panel">
           <div class="map-toolbar">
