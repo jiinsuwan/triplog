@@ -10,6 +10,7 @@ import SelectButton from 'primevue/selectbutton'
 import { fetchPlaceDetail, fetchPlaceRegions, fetchPlaces } from '@/api/placeApi'
 import { AppTopBar } from '@/components/common'
 import ItineraryTimelinePanel from '@/components/trip/ItineraryTimelinePanel.vue'
+import PlaceMapPanel from '@/components/trip/PlaceMapPanel.vue'
 import PlacePocketPanel from '@/components/trip/PlacePocketPanel.vue'
 import PlaceSearchPanel from '@/components/trip/PlaceSearchPanel.vue'
 import { useItineraryStore } from '@/stores/itinerary'
@@ -135,6 +136,10 @@ const trip = computed(() => tripStore.selectedTrip)
 const tripRegion = computed(() => trip.value?.region || '서울')
 
 const mapEl = ref(null)
+
+function setMapElement(element) {
+  mapEl.value = element
+}
 const activeTab = ref('all')
 const keyword = ref('')
 const dbPlaces = ref([])
@@ -2452,29 +2457,24 @@ function normalizeSearchText(value = '') {
           @update-stop-draft="setStopDraft"
         />
 
-        <section class="map-panel">
-          <div class="map-toolbar">
-            <div><span class="eyebrow">{{ itineraryMode ? 'Itinerary Map' : 'Kakao Map' }}</span><h2>{{ itineraryMode ? tripRegion + ' 일정 지도' : tripRegion + ' 주변 지도' }}</h2></div>
-            <div class="map-tools">
-              <Button
-                v-if="itineraryMode"
-                class="route-complete-button"
-                label="완료"
-                :disabled="!hasScheduledStops || itineraryStore.loading || itineraryStore.mutating || tripStore.updating"
-                :loading="tripStore.updating"
-                @click="completeItineraryBuilder"
-              />
-              <Button v-if="canSearchCurrentMapArea" label="이 위치에서 재검색" severity="secondary" outlined size="small" :loading="searching" @click="searchCurrentMapArea" />
-            </div>
-          </div>
-          <div class="map-stage">
-            <div ref="mapEl" class="kakao-map" :class="{ disabled: sdkError }" />
-            <Message v-if="sdkError" severity="error" :closable="false" class="map-error">카카오맵을 불러오지 못했습니다. {{ sdkError }}</Message>
-            <div v-if="sdkError" class="fallback-map">
-              <button v-for="place in mapPlaces.filter(hasCoordinates)" :key="place.uid" type="button" class="fallback-pin" :class="[mapMarkerType(place), { pocketed: isPocketed(place) }]" :style="fallbackPinStyle(place)" @click="handleMapPlaceClick(place)"><span aria-hidden="true" /><strong>{{ place.name }}</strong></button>
-            </div>
-          </div>
-        </section>
+        <PlaceMapPanel
+          :can-complete="hasScheduledStops && !itineraryStore.loading && !itineraryStore.mutating && !tripStore.updating"
+          :can-search-current-map-area="canSearchCurrentMapArea"
+          :fallback-pin-style="fallbackPinStyle"
+          :has-coordinates="hasCoordinates"
+          :is-pocketed="isPocketed"
+          :itinerary-mode="itineraryMode"
+          :map-marker-type="mapMarkerType"
+          :map-places="mapPlaces"
+          :map-ref="setMapElement"
+          :sdk-error="sdkError"
+          :searching="searching"
+          :trip-region="tripRegion"
+          :trip-updating="tripStore.updating"
+          @complete="completeItineraryBuilder"
+          @fallback-place-click="handleMapPlaceClick"
+          @search-current-area="searchCurrentMapArea"
+        />
 
         <PlacePocketPanel
           :is-pocketed="isPocketed"
