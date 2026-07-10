@@ -286,38 +286,6 @@ function drawSketchOutline(ctx, o) {
   strokePath(ctx, pts, { alpha: o.alpha ?? 0.9, width: o.width ?? 2.4, close: true, dash: o.dash || null });
 }
 
-// ---------- 얇은 곡선 점선 화살표 ----------
-function drawCurvedArrow(ctx, a) {
-  const [x1, y1] = a.from, [x2, y2] = a.to;
-  const w = a.width || 2;
-  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
-  const curve = a.curve != null ? a.curve : len * 0.22;
-  const cx = mx - (dy / len) * curve, cy = my + (dx / len) * curve;
-  const tang = Math.atan2(y2 - cy, x2 - cx), hl = a.head || 12;
-  ctx.save();
-  ctx.strokeStyle = `rgba(255,252,245,${a.alpha ?? 0.9})`;
-  ctx.lineWidth = w;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.shadowColor = 'rgba(15,10,5,0.5)';
-  ctx.shadowBlur = 3.5;
-  ctx.shadowOffsetY = 1;
-  ctx.setLineDash(a.dash || [2, 7]);
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.quadraticCurveTo(cx, cy, x2, y2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - hl * Math.cos(tang - 0.42), y2 - hl * Math.sin(tang - 0.42));
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - hl * Math.cos(tang + 0.42), y2 - hl * Math.sin(tang + 0.42));
-  ctx.stroke();
-  ctx.restore();
-}
-
 // ---------- 흰 손글씨 코멘트 ----------
 function drawNote(ctx, n) {
   const size = n.size || 42, font = n.font || 'East Sea Dokdo';
