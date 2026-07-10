@@ -11,18 +11,14 @@
 //
 // 표준 CanvasRenderingContext2D 만 사용 — Konva·rough.js 미채택.
 
+import { unit, offsetFromCentroid, downsampleClosed, smoothClosed } from './renderGeometry.js';
+
 export const WHITE = '#fdf8ee'; // 따뜻한 흰 (강조 1색, 크림 톤) — 단색 여백 기본색도 이 값을 재사용(exportCard)
 const SHADOW = 'rgba(22,15,8,'; // 따뜻한 어두운 그림자 베이스
 
 const NOTE_SIZE_RATIO = 0.027; // 카드 문구 기본 크기(작게 — 여러 문구가 카드를 덮지 않게)
 const MARGIN_RATIO = 0.035;
 const CLOSING_SIZE_RATIO = 0.046;
-
-// 단위 벡터(영벡터는 그대로). 노트→객체 방향·정렬 계산용.
-function unit(v) {
-  const m = Math.hypot(v[0], v[1]) || 1;
-  return [v[0] / m, v[1] / m];
-}
 
 /**
  * scene 을 ctx 에 그린다.
@@ -241,40 +237,6 @@ function strokePath(ctx, pts, { alpha = 0.9, width = 2.2, close = true, dash = n
   ctx.lineWidth = width;
   ctx.stroke();
   ctx.restore();
-}
-
-// 폴리곤을 중심에서 바깥으로 일정 픽셀 밀어낸다(객체 살짝 바깥에 그려 가독성↑, 형태는 유지).
-function offsetFromCentroid(pts, off) {
-  if (!off) return pts;
-  let cx = 0, cy = 0;
-  for (const [x, y] of pts) { cx += x; cy += y; }
-  cx /= pts.length;
-  cy /= pts.length;
-  return pts.map(([x, y]) => {
-    const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
-    return [x + (dx / d) * off, y + (dy / d) * off];
-  });
-}
-
-// 점이 많은 폴리곤을 균일 간격으로 다운샘플(손그림 스트로크 + 성능).
-function downsampleClosed(pts, max) {
-  if (pts.length <= max) return pts;
-  const out = [], step = pts.length / max;
-  for (let i = 0; i < max; i++) out.push(pts[Math.floor(i * step)]);
-  return out;
-}
-
-function smoothClosed(pts, iters) {
-  let p = pts;
-  for (let k = 0; k < iters; k++) {
-    const n = p.length, q = [];
-    for (let i = 0; i < n; i++) {
-      const a = p[(i - 1 + n) % n], b = p[i], c = p[(i + 1) % n];
-      q.push([(a[0] + 2 * b[0] + c[0]) / 4, (a[1] + 2 * b[1] + c[1]) / 4]);
-    }
-    p = q;
-  }
-  return p;
 }
 
 // 실제 SAM 폴리곤을 따라 그린다(과거 radial '바깥 림' 변환 폐기 — 마스크 윤곽 보존).
