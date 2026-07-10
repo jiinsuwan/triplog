@@ -82,7 +82,7 @@ describe('HomeView', () => {
 
     expect(routerMock.push).toHaveBeenCalledWith({
       path: '/login',
-      query: { redirect: '/trips/new' },
+      query: { redirect: '/' },
     })
   })
 
@@ -294,14 +294,18 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-testid="home-empty-create"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="home-upcoming-empty"]').exists()).toBe(true)
     expect(wrapper.find('.home-upcoming .home-ticket-button').exists()).toBe(false)
-    expect(wrapper.find('.home-stamp-placeholder').exists()).toBe(true)
+    expect(wrapper.find('.home-stamps .home-compact-empty').text()).toContain(
+      '다녀온 여행이 생기면 도장이 찍혀요.',
+    )
     expect(wrapper.find('.home-memories .home-polaroid-button').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('강릉 주말 바다')
     expect(wrapper.text()).not.toContain('전주 한옥 골목')
 
     await wrapper.get('[data-testid="home-empty-create"]').trigger('click')
+    await flushPromises()
 
-    expect(routerMock.push).toHaveBeenCalledWith('/trips/new')
+    expect(routerMock.push).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="trip-create-dialog"]').exists()).toBe(true)
   })
 
   it('does not expose mock preview tickets for authenticated empty users', async () => {

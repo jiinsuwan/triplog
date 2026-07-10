@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { AppTopBar, BaseButton, TripPolaroid, TripStamp, TripTicket } from '@/components/common'
 import { fetchCardImage, fetchMemories } from '@/api/cardApi'
 import MemoryDetailDialog from '@/components/log/MemoryDetailDialog.vue'
+import TripCreateDialog from '@/components/trip/TripCreateDialog.vue'
 import TripPreviewDialog from '@/components/trip/TripPreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
@@ -15,6 +16,7 @@ import { getTripTicketColor } from '@/utils/tripTicket'
 const router = useRouter()
 const auth = useAuthStore()
 const tripStore = useTripStore()
+const createDialogOpen = ref(false)
 const previewDialogOpen = ref(false)
 const memoryDialogOpen = ref(false)
 const selectedTrip = ref(null)
@@ -90,10 +92,10 @@ function goToLogin() {
 
 function startTrip() {
   if (auth.isAuthenticated) {
-    router.push('/trips/new')
+    createDialogOpen.value = true
     return
   }
-  router.push({ path: '/login', query: { redirect: '/trips/new' } })
+  router.push({ path: '/login', query: { redirect: '/' } })
 }
 
 function openTrips() {
@@ -127,8 +129,27 @@ function editMemory(memory) {
 }
 
 function goPlaces(trip) {
-  if (!trip || trip.mock) return
+  if (!trip?.id || trip.mock) return
   router.push({ name: 'trip-place-search', params: { tripId: trip.id } })
+}
+
+function goPlanEditor(trip) {
+  if (!trip?.id || trip.mock) return
+  router.push({
+    name: 'trip-place-search',
+    params: { tripId: trip.id },
+    query: { mode: 'itinerary' },
+  })
+}
+
+function handleTripCreated({ trip, destination }) {
+  if (destination === 'places' && trip?.id) {
+    goPlaces(trip)
+    return
+  }
+
+  selectedTrip.value = trip
+  previewDialogOpen.value = true
 }
 
 function handleTripDeleted() {
@@ -422,17 +443,7 @@ function parseDateTimeValue(value) {
                 />
               </button>
             </template>
-            <div v-else class="home-stamp-placeholder">
-              <TripStamp
-                title="NEXT"
-                :stage="2"
-                start-date="----.--.--"
-                end-date="----.--.--"
-                label="TL"
-                side-glyph="+"
-              />
-              <p class="home-muted">다녀온 여행이 생기면 도장이 찍혀요.</p>
-            </div>
+            <p v-else class="home-compact-empty">다녀온 여행이 생기면 도장이 찍혀요.</p>
           </div>
         </section>
 
@@ -459,12 +470,7 @@ function parseDateTimeValue(value) {
                 />
               </button>
             </template>
-            <TripPolaroid
-              v-else
-              title="아직 기록된 추억이 없어요"
-              subtitle="로그인하면 사진과 카드가 이곳에 모입니다"
-              empty
-            />
+            <p v-else class="home-compact-empty">기록된 추억이 아직 없어요.</p>
           </div>
         </section>
 
@@ -491,7 +497,7 @@ function parseDateTimeValue(value) {
                 />
               </button>
             </template>
-            <p v-else class="home-upcoming-empty" data-testid="home-upcoming-empty">
+            <p v-else class="home-compact-empty" data-testid="home-upcoming-empty">
               계획된 여행이 아직 없어요
             </p>
           </div>
@@ -499,10 +505,11 @@ function parseDateTimeValue(value) {
       </section>
     </main>
 
+    <TripCreateDialog v-model="createDialogOpen" @created="handleTripCreated" />
     <TripPreviewDialog
       v-model="previewDialogOpen"
       :trip="selectedTrip"
-      @open-places="goPlaces"
+      @open-places="goPlanEditor"
       @deleted="handleTripDeleted"
       @updated="handleTripUpdated"
     />
@@ -772,24 +779,15 @@ function parseDateTimeValue(value) {
   transform: rotate(-3deg);
 }
 
-.home-stamp-placeholder {
-  align-items: center;
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-  width: 100%;
-}
-
-.home-stamp-placeholder :deep(.ds-stamp) {
-  opacity: 0.72;
-}
-
-.home-muted {
+.home-compact-empty {
+  align-self: center;
   color: var(--ink-faint);
-  font-size: 12px;
+  font-family: var(--font-hand);
+  font-size: 18px;
   font-weight: 700;
   margin: 0;
   text-align: center;
+  width: 100%;
 }
 
 .home-memories__strip {
@@ -798,7 +796,7 @@ function parseDateTimeValue(value) {
   gap: 12px;
   min-width: 0;
   overflow-x: auto;
-  padding-bottom: 6px;
+  padding-bottom: 0;
 }
 
 .home-memories__strip :deep(.ds-polaroid) {
@@ -811,19 +809,6 @@ function parseDateTimeValue(value) {
   flex-direction: column;
   flex: 1;
   gap: 12px;
-}
-
-.home-upcoming-empty {
-  align-items: center;
-  color: var(--ink-sub);
-  display: flex;
-  flex: 1;
-  font-family: var(--font-hand);
-  font-size: 22px;
-  justify-content: center;
-  line-height: 1.25;
-  margin: 0;
-  text-align: center;
 }
 
 .home-upcoming :deep(.ds-ticket) {
