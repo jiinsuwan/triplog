@@ -25,6 +25,9 @@ export function statusTag(item) {
 export const isUploading = (item) =>
   item.status === QueueStatus.UPLOADING || item.status === QueueStatus.LINKING
 
+// 재시도 가능 상태(실패). 템플릿에서 QueueStatus 직접 참조를 없애기 위한 헬퍼.
+export const isFailed = (item) => item.status === QueueStatus.FAILED
+
 // EXIF 촬영시각 ISO "2026-06-04T12:17:56" → "🕐 2026-06-04 12:17", 없으면 "🕐 시간 없음".
 export function takenAtLabel(item) {
   if (!item.takenAt) return '🕐 시간 없음'

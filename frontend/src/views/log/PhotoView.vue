@@ -7,7 +7,7 @@ import ProgressBar from 'primevue/progressbar'
 import Message from 'primevue/message'
 import { fetchTrip } from '@/api/tripApi'
 import { useUploadQueue, ACCEPT_ATTR } from '@/composables/useUploadQueue'
-import { statusTag, isUploading, takenAtLabel } from './photoUploadPresenters.js'
+import { statusTag, isUploading, takenAtLabel, isFailed } from './photoUploadPresenters.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -165,7 +165,7 @@ const connectLabel = computed(() =>
             <Tag :value="statusTag(item).label" :severity="statusTag(item).severity" />
             <div class="actions">
               <Button
-                v-if="item.status === QueueStatus.FAILED"
+                v-if="isFailed(item)"
                 icon="pi pi-refresh"
                 label="재시도"
                 size="small"
