@@ -1,16 +1,26 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { AppTopBar, BaseButton, TripPolaroid, TripStamp, TripTicket } from '@/components/common'
-import { fetchCardImage, fetchMemories } from '@/api/cardApi'
 import MemoryDetailDialog from '@/components/log/MemoryDetailDialog.vue'
 import TripPreviewDialog from '@/components/trip/TripPreviewDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTripStore } from '@/stores/trip'
-import { formatTripDateRange, tripDisplayTags, tripDurationDays } from '@/utils/tripForm'
-import { TRIP_STATUS, isPastTripStatus, normalizeTripStatus } from '@/utils/tripStatus'
-import { getTripTicketColor } from '@/utils/tripTicket'
+import { formatTripDateRange } from '@/utils/tripForm'
+import { isPastTripStatus } from '@/utils/tripStatus'
+import {
+  ticketStatus,
+  ticketSerial,
+  ticketColor,
+  ticketDday,
+  tripTags,
+  memoryTags,
+  stampTitle,
+  memoryTone,
+} from './home/homeTripPresenters.js'
+import { useHomeTrips } from './home/useHomeTrips.js'
+import { useHomeMemories } from './home/useHomeMemories.js'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -19,15 +29,7 @@ const previewDialogOpen = ref(false)
 const memoryDialogOpen = ref(false)
 const selectedTrip = ref(null)
 const selectedMemory = ref(null)
-const memorySummaries = ref([])
-const memoryCoverUrls = ref({})
-let memoryController = null
-
-const memoryTones = [
-  'radial-gradient(80% 70% at 60% 35%, #d39a5a, #9a4b2a 60%, #5a2c18)',
-  'radial-gradient(80% 70% at 40% 40%, #7bb0ad, #3d8079 60%, #235650)',
-  'radial-gradient(80% 70% at 50% 30%, #8a6a9e, #4a3566 65%, #2a1d3e)',
-]
+const { memorySummaries, memoryCoverUrls, recentMemories, loadMemories } = useHomeMemories()
 
 const isLoggedIn = computed(() => auth.isAuthenticated)
 const displayName = computed(() => {
@@ -36,39 +38,21 @@ const displayName = computed(() => {
 })
 const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase() || 'T')
 
-const planningTrips = computed(() =>
-  tripStore.trips.filter((trip) => normalizeTripStatus(trip.status) === TRIP_STATUS.PLANNING),
-)
-const confirmedUpcomingTrips = computed(() =>
-  tripStore.trips.filter((trip) => normalizeTripStatus(trip.status) === TRIP_STATUS.UPCOMING),
-)
-const pastTrips = computed(() =>
-  tripStore.trips.filter((trip) => isPastTripStatus(trip.status)),
-)
-const sortedPlanningTrips = computed(() =>
-  [...planningTrips.value].sort((a, b) => activityValue(b) - activityValue(a)),
-)
-const sortedUpcomingTrips = computed(() =>
-  [...confirmedUpcomingTrips.value].sort((a, b) => dateValue(a.startDate) - dateValue(b.startDate)),
-)
-const sortedPastTrips = computed(() =>
-  [...pastTrips.value].sort(
-    (a, b) => dateValue(b.endDate || b.startDate) - dateValue(a.endDate || a.startDate),
-  ),
-)
-const resumeTrip = computed(() => sortedPlanningTrips.value[0] || null)
-const upcomingTrips = computed(() => sortedUpcomingTrips.value.slice(0, 2))
-const hasPlanningTrips = computed(() => planningTrips.value.length > 0)
-const resumeTitle = computed(() => {
-  if (!isLoggedIn.value) return '새 여행 시작하기'
-  return hasPlanningTrips.value ? '이어서 계획하기' : '새 여행 계획하기'
-})
-const displayPastTrips = computed(() => sortedPastTrips.value)
-const recentMemories = computed(() => memorySummaries.value.filter((memory) => memory.completed).slice(0, 3))
-const totalTrips = computed(() => tripStore.trips.length)
-const totalDays = computed(() =>
-  tripStore.trips.reduce((sum, trip) => sum + tripDurationDays(trip), 0),
-)
+const {
+  planningTrips,
+  confirmedUpcomingTrips,
+  pastTrips,
+  sortedPlanningTrips,
+  sortedUpcomingTrips,
+  sortedPastTrips,
+  resumeTrip,
+  upcomingTrips,
+  hasPlanningTrips,
+  resumeTitle,
+  displayPastTrips,
+  totalTrips,
+  totalDays,
+} = useHomeTrips(isLoggedIn)
 
 onMounted(() => {
   if (!auth.isAuthenticated) return
@@ -76,12 +60,6 @@ onMounted(() => {
   auth.fetchMe().catch(() => {})
   tripStore.fetchTripList().catch(() => {})
   loadMemories().catch(() => {})
-})
-
-onBeforeUnmount(() => {
-  memoryController?.abort()
-  memoryController = null
-  resetMemoryCovers()
 })
 
 function goToLogin() {
@@ -139,28 +117,6 @@ function handleTripUpdated(trip) {
   selectedTrip.value = trip
 }
 
-async function loadMemories() {
-  memoryController?.abort()
-  resetMemoryCovers()
-  memoryController = new AbortController()
-  const result = await fetchMemories({ signal: memoryController.signal })
-  memorySummaries.value = result
-  const entries = await Promise.all(
-    result
-      .filter((memory) => memory.coverCardId)
-      .map(async (memory) => {
-        const blob = await fetchCardImage(memory.coverCardId, { signal: memoryController.signal })
-        return [memory.tripId, URL.createObjectURL(blob)]
-      }),
-  )
-  memoryCoverUrls.value = Object.fromEntries(entries)
-}
-
-function resetMemoryCovers() {
-  for (const url of Object.values(memoryCoverUrls.value)) URL.revokeObjectURL(url)
-  memoryCoverUrls.value = {}
-}
-
 function memoryToTrip(memory) {
   if (!memory) return null
   return {
@@ -170,67 +126,6 @@ function memoryToTrip(memory) {
   }
 }
 
-function ticketStatus(trip) {
-  return isPastTripStatus(trip.status) ? 'MEMORY TICKET' : 'TRIP TICKET'
-}
-
-function ticketSerial(trip) {
-  if (trip.serial) return trip.serial
-
-  const year = trip.startDate?.slice(0, 4) || new Date().getFullYear()
-  return `TL-${year}-${String(trip.id).padStart(4, '0')}`
-}
-
-function ticketColor(trip, index = 0) {
-  return getTripTicketColor(trip, index)
-}
-
-function ticketDday(trip) {
-  if (!trip?.startDate || isPastTripStatus(trip.status)) return null
-
-  const today = new Date()
-  const target = new Date(`${trip.startDate}T00:00:00`)
-  today.setHours(0, 0, 0, 0)
-
-  return Math.max(0, Math.ceil((target - today) / 86400000))
-}
-
-function tripTags(trip) {
-  return tripDisplayTags(trip)
-}
-
-function memoryTags(memory) {
-  return memory.theme ? [memory.theme] : []
-}
-
-function stampTitle(trip) {
-  return (trip.region || 'TRIP').slice(0, 4)
-}
-
-function memoryTone(index) {
-  return memoryTones[index % memoryTones.length]
-}
-
-function dateValue(value) {
-  if (!value) return Number.MAX_SAFE_INTEGER
-  return new Date(`${value}T00:00:00`).getTime()
-}
-
-function activityValue(trip) {
-  const value = trip.updatedAt || trip.modifiedAt || trip.createdAt || trip.startDate || trip.endDate
-  const timestamp = parseDateTimeValue(value)
-
-  if (Number.isFinite(timestamp)) return timestamp
-  return Number(trip.id) || 0
-}
-
-function parseDateTimeValue(value) {
-  if (!value) return Number.NaN
-
-  const normalizedValue = String(value)
-  const dateText = normalizedValue.includes('T') ? normalizedValue : `${normalizedValue}T00:00:00`
-  return new Date(dateText).getTime()
-}
 </script>
 
 <template>
