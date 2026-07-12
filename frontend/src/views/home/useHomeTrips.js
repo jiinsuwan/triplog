@@ -45,14 +45,9 @@ export function useHomeTrips(isLoggedIn) {
 
   return {
     planningTrips,
-    confirmedUpcomingTrips,
     pastTrips,
-    sortedPlanningTrips,
-    sortedUpcomingTrips,
-    sortedPastTrips,
     resumeTrip,
     upcomingTrips,
-    hasPlanningTrips,
     resumeTitle,
     displayPastTrips,
     totalTrips,

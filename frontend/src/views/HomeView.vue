@@ -40,14 +40,9 @@ const userInitial = computed(() => displayName.value.slice(0, 1).toUpperCase() |
 
 const {
   planningTrips,
-  confirmedUpcomingTrips,
   pastTrips,
-  sortedPlanningTrips,
-  sortedUpcomingTrips,
-  sortedPastTrips,
   resumeTrip,
   upcomingTrips,
-  hasPlanningTrips,
   resumeTitle,
   displayPastTrips,
   totalTrips,
