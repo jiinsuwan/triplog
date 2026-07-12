@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import BaseModal from './BaseModal.vue'
 import BaseButton from './BaseButton.vue'
+import { validateNickname, extractApiMessage } from './accountValidation.js'
 
 // 프로필/계정 팝업 (core 공유, 디자인 정본 = docs/design/profile-mockup.html).
 // 상단바 아바타 클릭 → 이 팝업. 닉네임은 인라인 수정, 회원 탈퇴는 확인 팝업으로 분기한다.
@@ -65,26 +66,22 @@ function cancelEditNickname() {
 }
 
 async function saveNickname() {
-  const nickname = nicknameDraft.value.trim()
-  if (!nickname) {
-    nicknameError.value = '닉네임을 입력하세요.'
-    return
-  }
-  if (nickname.length > 50) {
-    nicknameError.value = '닉네임은 50자 이하여야 합니다.'
-    return
-  }
-  if (nickname === auth.user?.nickname) {
+  const result = validateNickname(nicknameDraft.value, auth.user?.nickname)
+  if (result.unchanged) {
     cancelEditNickname()
+    return
+  }
+  if (!result.ok) {
+    nicknameError.value = result.error
     return
   }
   nicknameError.value = ''
   savingNickname.value = true
   try {
-    await auth.updateProfile({ nickname })
+    await auth.updateProfile({ nickname: result.value })
     cancelEditNickname()
   } catch (e) {
-    nicknameError.value = e?.response?.data?.message ?? '닉네임 변경에 실패했습니다.'
+    nicknameError.value = extractApiMessage(e, '닉네임 변경에 실패했습니다.')
   } finally {
     savingNickname.value = false
   }
@@ -119,7 +116,7 @@ async function onWithdraw() {
     withdrawPassword.value = ''
     router.replace({ path: '/login', query: { withdrawn: '1' } })
   } catch (e) {
-    withdrawError.value = e?.response?.data?.message ?? '회원 탈퇴에 실패했습니다.'
+    withdrawError.value = extractApiMessage(e, '회원 탈퇴에 실패했습니다.')
   } finally {
     withdrawing.value = false
   }
