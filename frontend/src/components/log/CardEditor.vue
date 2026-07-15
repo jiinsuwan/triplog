@@ -32,6 +32,7 @@ import { useCardEditorExport } from './useCardEditorExport'
 import { LAYER_CHIP, LAYER_CHIP_CLASS, useCardEditorLayers } from './useCardEditorLayers'
 import { useCardEditorRenderer } from './useCardEditorRenderer'
 import { resolvePhotoSettings } from './photoSettings'
+import { applyOverrides } from './cardEditorScene'
 import { tokenColor } from '@/utils/designTokens'
 
 const props = defineProps({
@@ -173,12 +174,7 @@ function setCaptionRot(id, deg) {
 // 문구 객체에 사용자 override(위치·기울기)를 입혀 buildScene 입력으로 만든다. 미리보기·export 공용.
 //   position 은 콘텐츠 캔버스 정규화(0~1), rotation 은 도(°). 둘 다 없으면 원본 그대로(자동 배치).
 function applyCaptionOverrides(o, cr, cd) {
-  const p = getCaptionPos(o.itemId)
-  const rot = getCaptionRot(o.itemId)
-  let out = o
-  if (p) out = { ...out, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } }
-  if (rot) out = { ...out, rotation: rot }
-  return out
+  return applyOverrides(o, getCaptionPos(o.itemId), getCaptionRot(o.itemId), cr, cd)
 }
 // 외곽선 선 모양 — 객체별 개별 적용(키 photoId:itemId). override 없으면 전역 기본(outlineWidth/Style/dash)을 따른다.
 const outlineOverride = reactive({})
@@ -234,12 +230,7 @@ function setClosingRot(deg) {
 // 마무리에 위치·기울기 override(콘텐츠 정규화)를 입혀 buildScene 입력으로 만든다. 미리보기·export 공용.
 function closingForScene(cr, cd) {
   if (!isClosingOn.value || !closing.value) return null
-  const p = getClosingPos()
-  const rot = getClosingRot()
-  let out = closing.value
-  if (p) out = { ...out, position: { x: (p.x * cd.W - cr.dx) / cr.cw, y: (p.y * cd.H - cr.dy) / cr.ch } }
-  if (rot) out = { ...out, rotation: rot }
-  return out
+  return applyOverrides(closing.value, getClosingPos(), getClosingRot(), cr, cd)
 }
 // 마무리 멘트 내용 수정 — 사용자가 직접 바꿀 수 있다(store.captions.closing.text 갱신).
 function updateClosingText(text) {

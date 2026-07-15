@@ -15,8 +15,18 @@ import {
   applyRefine,
   deleteOutlineItem,
 } from '@/api/outlineApi'
-import { itemAt, normalizeBox, clamp01 } from '@/card/outlineEdit'
+import { itemAt, normalizeBox } from '@/card/outlineEdit'
 import { tokenAlpha, tokenColor } from '@/utils/designTokens'
+import {
+  MODE,
+  ADD_TOOL,
+  MARK,
+  ITEM_SRC,
+  NOTICE,
+  correctionError,
+  dotCursor,
+  letterboxPoint,
+} from './correctionEdit'
 
 // 캔버스에 그릴 색. 외곽선은 단색 빨강(흰 글로우 없음). 선택은 색 대신 굵기로 구분.
 const C = {
@@ -43,52 +53,42 @@ const items = computed(() => {
   return o?.status === 'READY' && Array.isArray(o.items) ? o.items : []
 })
 
-const mode = ref('add') // 'add'(추가) | 'edit'(보정)
-const addTool = ref('tap') // 'tap' | 'box'
+const mode = ref(MODE.ADD) // 'add'(추가) | 'edit'(보정)
+const addTool = ref(ADD_TOOL.TAP) // 'tap' | 'box'
 const selectedId = ref(null)
 const refining = ref(false) // 모양 다듬기 진행 중
-const plusMinus = ref('plus') // 'plus'(포함) | 'minus'(제외)
+const plusMinus = ref(MARK.PLUS) // 'plus'(포함) | 'minus'(제외)
 const marks = ref([]) // 정제 점 [{ x, y, kind }] — 순서 보존(되돌리기용)
 const preview = ref(null) // 미리보기 결과 { itemId, polygons, absorbItemIds }
 const boxDraft = ref(null) // {x0,y0,x1,y1} 드래그 중
 const lastTap = ref(null) // 마지막 탭 지점(추가 모드 피드백)
 const correcting = ref(false)
 const notice = ref('')
-const noticeKind = ref('info') // 'info' | 'error'
+const noticeKind = ref(NOTICE.INFO) // 'info' | 'error'
 
 const canvasEl = ref(null)
 const img = shallowRef(null)
 let disposed = false
 
 const selectedIndex = computed(() => items.value.findIndex((it) => it.id === selectedId.value))
-const pos = computed(() => marks.value.filter((m) => m.kind === 'plus').map((m) => [m.x, m.y]))
-const neg = computed(() => marks.value.filter((m) => m.kind === 'minus').map((m) => [m.x, m.y]))
+const pos = computed(() => marks.value.filter((m) => m.kind === MARK.PLUS).map((m) => [m.x, m.y]))
+const neg = computed(() => marks.value.filter((m) => m.kind === MARK.MINUS).map((m) => [m.x, m.y]))
 const canPreview = computed(() => marks.value.length > 0)
 const absorbCount = computed(() => preview.value?.absorbItemIds?.length ?? 0)
 
-// 보정 정제 중에는 커서를 현재 도구(포함=초록＋ / 제외=빨강−) 모양으로 — 무엇을 찍는지 마우스로 표시.
-function dotCursor(fill, plus) {
-  const cross = plus
-    ? "<line x1='15' y1='9.5' x2='15' y2='20.5' stroke='white' stroke-width='2.6'/><line x1='9.5' y1='15' x2='20.5' y2='15' stroke='white' stroke-width='2.6'/>"
-    : "<line x1='9.5' y1='15' x2='20.5' y2='15' stroke='white' stroke-width='2.6'/>"
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30'>` +
-    `<circle cx='15' cy='15' r='10' fill='${fill}' stroke='white' stroke-width='2.4'/>${cross}</svg>`
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 15 15, crosshair`
-}
 const canvasCursor = computed(() => {
-  if (mode.value === 'add') return 'crosshair'
-  if (refining.value) return plusMinus.value === 'plus' ? dotCursor(C.inc(), true) : dotCursor(C.exc(), false)
+  if (mode.value === MODE.ADD) return 'crosshair'
+  if (refining.value) return plusMinus.value === MARK.PLUS ? dotCursor(C.inc(), true) : dotCursor(C.exc(), false)
   return 'pointer' // 보정-대상 선택 단계: 클릭으로 대상 고르기
 })
 
 function info(msg) {
   notice.value = msg
-  noticeKind.value = 'info'
+  noticeKind.value = NOTICE.INFO
 }
 function fail(msg) {
   notice.value = msg
-  noticeKind.value = 'error'
+  noticeKind.value = NOTICE.ERROR
 }
 
 // --- 사진 로드 ---
@@ -116,17 +116,17 @@ watch(
 )
 
 function resetState() {
-  mode.value = 'add'
-  addTool.value = 'tap'
+  mode.value = MODE.ADD
+  addTool.value = ADD_TOOL.TAP
   selectedId.value = null
   refining.value = false
-  plusMinus.value = 'plus'
+  plusMinus.value = MARK.PLUS
   marks.value = []
   preview.value = null
   boxDraft.value = null
   lastTap.value = null
   notice.value = ''
-  noticeKind.value = 'info'
+  noticeKind.value = NOTICE.INFO
 }
 
 // --- 렌더 ---
@@ -176,7 +176,7 @@ function redraw() {
   // 정제 점 마커
   const mr = Math.max(8, W * 0.014)
   for (const m of marks.value) {
-    if (m.kind === 'plus') marker(ctx, m.x * W, m.y * H, C.inc(), '+', mr)
+    if (m.kind === MARK.PLUS) marker(ctx, m.x * W, m.y * H, C.inc(), '+', mr)
     else marker(ctx, m.x * W, m.y * H, C.exc(), '−', mr)
   }
   // 마지막 탭(추가 모드)
@@ -238,12 +238,7 @@ function ptOf(e) {
   const r = el.getBoundingClientRect()
   const iw = el.width || r.width
   const ih = el.height || r.height
-  const scale = Math.min(r.width / iw, r.height / ih)
-  const dw = iw * scale
-  const dh = ih * scale
-  const offX = (r.width - dw) / 2
-  const offY = (r.height - dh) / 2
-  return [clamp01((e.clientX - r.left - offX) / dw), clamp01((e.clientY - r.top - offY) / dh)]
+  return letterboxPoint(r, iw, ih, e.clientX, e.clientY)
 }
 
 // --- 포인터 ---
@@ -252,27 +247,27 @@ function onPointerDown(e) {
   if (correcting.value || !img.value) return
   const [nx, ny] = ptOf(e)
   // 보정 정제: 좌클릭 = 현재 토글(포함/제외) 점 찍기(미리보기 중이면 편집으로 복귀).
-  if (mode.value === 'edit' && refining.value) {
+  if (mode.value === MODE.EDIT && refining.value) {
     if (e.button !== 0) return // 포함/제외는 토글로만 선택 — 다른 버튼은 무시
     if (preview.value) preview.value = null
     addPoint(nx, ny, plusMinus.value)
     return
   }
   if (e.button === 2) return
-  if (mode.value === 'add') {
-    if (addTool.value === 'box') {
-      drag = { kind: 'box', x0: nx, y0: ny }
+  if (mode.value === MODE.ADD) {
+    if (addTool.value === ADD_TOOL.BOX) {
+      drag = { kind: ADD_TOOL.BOX, x0: nx, y0: ny }
       boxDraft.value = { x0: nx, y0: ny, x1: nx, y1: ny }
       bindMove(e)
     } else {
-      drag = { kind: 'tap', x0: nx, y0: ny }
+      drag = { kind: ADD_TOOL.TAP, x0: nx, y0: ny }
       lastTap.value = [nx, ny]
       bindMove(e)
     }
     return
   }
   // 보정-대상 선택
-  if (mode.value === 'edit' && !refining.value) {
+  if (mode.value === MODE.EDIT && !refining.value) {
     const hit = itemAt(items.value, nx, ny)
     selectedId.value = hit ? hit.id : null
   }
@@ -285,7 +280,7 @@ function bindMove(e) {
 function onPointerMove(e) {
   if (!drag) return
   const [nx, ny] = ptOf(e)
-  if (drag.kind === 'box') boxDraft.value = { x0: drag.x0, y0: drag.y0, x1: nx, y1: ny }
+  if (drag.kind === ADD_TOOL.BOX) boxDraft.value = { x0: drag.x0, y0: drag.y0, x1: nx, y1: ny }
 }
 function onPointerUp(e) {
   window.removeEventListener('pointermove', onPointerMove)
@@ -295,9 +290,9 @@ function onPointerUp(e) {
   const d = drag
   drag = null
   boxDraft.value = null
-  if (d.kind === 'tap') {
+  if (d.kind === ADD_TOOL.TAP) {
     if (Math.hypot(nx - d.x0, ny - d.y0) < 0.01) addByTap(d.x0, d.y0)
-  } else if (d.kind === 'box') {
+  } else if (d.kind === ADD_TOOL.BOX) {
     const box = normalizeBox(d.x0, d.y0, nx, ny)
     if (box) addByBox(box)
   }
@@ -313,7 +308,7 @@ async function addByBox(box) {
 async function appendFromResult(res) {
   if (!res || res.itemId < 0) {
     fail(
-      addTool.value === 'box'
+      addTool.value === ADD_TOOL.BOX
         ? '여기선 대상을 못 찾았어요. 박스로 좀 더 촘촘하게 감싸 보세요.'
         : '여기선 대상을 못 찾았어요. 대상의 중심을 클릭해 보세요.',
     )
@@ -351,7 +346,7 @@ async function deleteItem(id) {
 function startRefine() {
   if (selectedId.value == null) return
   refining.value = true
-  plusMinus.value = 'plus'
+  plusMinus.value = MARK.PLUS
   marks.value = []
   preview.value = null
   notice.value = ''
@@ -415,19 +410,13 @@ async function runCorrection(call, onOk) {
     correcting.value = false
   }
 }
-function correctionError(e) {
-  const status = e?.response?.status
-  if (status === 503) return '인식 서버가 잠깐 응답하지 않아요. 잠시 후 다시 시도해 주세요.'
-  if (status === 409) return '아직 자동 외곽선을 만드는 중이에요. 잠시 후 다시 시도해 주세요.'
-  return '처리에 실패했어요. 잠시 후 다시 시도해 주세요.'
-}
 
 // --- 닫기·키 ---
 function close() {
   emit('update:modelValue', false)
 }
 function onKeydown(e) {
-  if (e.key === 'Backspace' && mode.value === 'edit' && refining.value) {
+  if (e.key === 'Backspace' && mode.value === MODE.EDIT && refining.value) {
     e.preventDefault()
     if (preview.value) preview.value = null // 미리보기 → 편집으로
     else undoPoint()
@@ -490,8 +479,8 @@ watch(mode, () => {
                 @contextmenu.prevent
               />
               <div v-if="refining" class="cd-chip">
-                <b :class="plusMinus === 'plus' ? 'inc' : 'exc'">
-                  {{ plusMinus === 'plus' ? '＋ 포함' : '− 제외' }}
+                <b :class="plusMinus === MARK.PLUS ? 'inc' : 'exc'">
+                  {{ plusMinus === MARK.PLUS ? '＋ 포함' : '− 제외' }}
                 </b>
                 <span>찍는 중</span>
               </div>
@@ -503,21 +492,21 @@ watch(mode, () => {
             <div class="cd-ctrls">
               <!-- 1단계: 모드 -->
               <div class="modeseg">
-                <button :class="{ on: mode === 'add' }" @click="mode = 'add'">추가</button>
-                <button :class="{ on: mode === 'edit' }" @click="mode = 'edit'">보정</button>
+                <button :class="{ on: mode === MODE.ADD }" @click="mode = MODE.ADD">추가</button>
+                <button :class="{ on: mode === MODE.EDIT }" @click="mode = MODE.EDIT">보정</button>
               </div>
 
               <!-- 추가 모드 -->
-              <template v-if="mode === 'add'">
+              <template v-if="mode === MODE.ADD">
                 <div class="toolrow">
-                  <button class="tool" :class="{ on: addTool === 'tap' }" @click="addTool = 'tap'">
+                  <button class="tool" :class="{ on: addTool === ADD_TOOL.TAP }" @click="addTool = ADD_TOOL.TAP">
                     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
                       <circle cx="12" cy="12" r="3.6" fill="currentColor" />
                       <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.3" opacity="0.45" />
                     </svg>
                     <span>점</span>
                   </button>
-                  <button class="tool" :class="{ on: addTool === 'box' }" @click="addTool = 'box'">
+                  <button class="tool" :class="{ on: addTool === ADD_TOOL.BOX }" @click="addTool = ADD_TOOL.BOX">
                     <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
                       <rect x="4.5" y="4.5" width="15" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-dasharray="3.4 2.6" />
                     </svg>
@@ -545,8 +534,8 @@ watch(mode, () => {
                     <button class="cd-x" @click="cancelRefine">취소</button>
                   </div>
                   <div class="toggle">
-                    <button class="inc" :class="{ on: plusMinus === 'plus' }" @click="plusMinus = 'plus'">＋ 포함</button>
-                    <button class="exc" :class="{ on: plusMinus === 'minus' }" @click="plusMinus = 'minus'">− 제외</button>
+                    <button class="inc" :class="{ on: plusMinus === MARK.PLUS }" @click="plusMinus = MARK.PLUS">＋ 포함</button>
+                    <button class="exc" :class="{ on: plusMinus === MARK.MINUS }" @click="plusMinus = MARK.MINUS">− 제외</button>
                   </div>
                   <div class="actionrow">
                     <button class="iconbtn" title="되돌리기 (Backspace)" :disabled="!marks.length || correcting" @click="undoPoint">
@@ -582,9 +571,9 @@ watch(mode, () => {
                   :class="{ on: it.id === selectedId, dim: refining && it.id !== selectedId }"
                   @click="selectItem(it.id)"
                 >
-                  <span class="dot" :class="it.src === 'user' ? 'u' : 'a'" />
+                  <span class="dot" :class="it.src === ITEM_SRC.USER ? 'u' : 'a'" />
                   <span class="nm">객체 {{ i + 1 }}</span>
-                  <span class="tag">{{ it.src === 'user' ? '직접' : '자동' }}</span>
+                  <span class="tag">{{ it.src === ITEM_SRC.USER ? '직접' : '자동' }}</span>
                   <button class="x" title="삭제" :disabled="correcting" @click.stop="deleteItem(it.id)">✕</button>
                 </li>
               </ul>
