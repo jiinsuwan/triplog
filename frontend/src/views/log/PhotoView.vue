@@ -6,7 +6,8 @@ import Tag from 'primevue/tag'
 import ProgressBar from 'primevue/progressbar'
 import Message from 'primevue/message'
 import { fetchTrip } from '@/api/tripApi'
-import { useUploadQueue, QueueStatus, ACCEPT_ATTR } from '@/composables/useUploadQueue'
+import { useUploadQueue, ACCEPT_ATTR } from '@/composables/useUploadQueue'
+import { statusTag, isUploading, takenAtLabel, isFailed } from './photoUploadPresenters.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,35 +65,6 @@ function onKeydown(event) {
     event.preventDefault()
     openPicker()
   }
-}
-
-// 상태 → 배지(라벨·severity). 실패/검증탈락은 사유 문구를 그대로 보여준다.
-function statusTag(item) {
-  switch (item.status) {
-    case QueueStatus.PENDING:
-      return { label: '대기 중', severity: 'secondary' }
-    case QueueStatus.UPLOADING:
-      return { label: `업로드 중 ${item.progress}%`, severity: 'info' }
-    case QueueStatus.LINKING:
-      return { label: '연결 중', severity: 'info' }
-    case QueueStatus.LINKED:
-      return { label: '연결됨', severity: 'success' }
-    case QueueStatus.FAILED:
-      return { label: item.error?.message ?? '실패', severity: 'danger' }
-    case QueueStatus.REJECTED:
-      return { label: item.error?.message ?? '업로드 불가', severity: 'warn' }
-    default:
-      return { label: item.status, severity: 'secondary' }
-  }
-}
-
-const isUploading = (item) =>
-  item.status === QueueStatus.UPLOADING || item.status === QueueStatus.LINKING
-
-function takenAtLabel(item) {
-  if (!item.takenAt) return '🕐 시간 없음'
-  // ISO "2026-06-04T12:17:56" → "2026-06-04 12:17"
-  return `🕐 ${item.takenAt.slice(0, 16).replace('T', ' ')}`
 }
 
 const connectLabel = computed(() =>
@@ -193,7 +165,7 @@ const connectLabel = computed(() =>
             <Tag :value="statusTag(item).label" :severity="statusTag(item).severity" />
             <div class="actions">
               <Button
-                v-if="item.status === QueueStatus.FAILED"
+                v-if="isFailed(item)"
                 icon="pi pi-refresh"
                 label="재시도"
                 size="small"

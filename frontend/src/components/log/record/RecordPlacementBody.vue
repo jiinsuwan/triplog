@@ -4,8 +4,9 @@
 // 일정(days)은 부모(TripPreviewDialog)가 이미 받은 걸 props 로 주입받아 재사용한다(중복 fetch 방지).
 // 사진만 usePhotoPlacement 가 로드하고, 배치/해제는 포인터 드래그(useRecordDrag)로 한다.
 import { computed, ref, watch, onScopeDispose } from 'vue'
-import RecordPhotoChip from './RecordPhotoChip.vue'
 import RecordPhotoTray from './RecordPhotoTray.vue'
+import RecordRouteMap from './RecordRouteMap.vue'
+import RecordStop from './RecordStop.vue'
 import PhotoThumb from '@/components/log/PhotoThumb.vue'
 import PhotoManageDialog from '@/components/log/PhotoManageDialog.vue'
 import { usePhotoPlacement } from '@/composables/usePhotoPlacement'
@@ -66,39 +67,6 @@ const activeDayLabel = computed(() => {
   return `${date} · ${activeStops.value.length}곳 · 사진 ${photoCountForDay(day)}`
 })
 
-// 경로 지도 핀 — 위경도를 0~100 뷰박스로 정규화. 유한수 좌표만(빈 문자열·NaN 제외).
-function num(value) {
-  if (value == null || value === '') return null
-  const n = Number(value)
-  return Number.isFinite(n) ? n : null
-}
-const mapNodes = computed(() => {
-  const pts = activeStops.value
-    .map((stop) => ({ stop, lat: num(stop.place?.latitude), lng: num(stop.place?.longitude) }))
-    .filter((p) => p.lat != null && p.lng != null)
-  if (!pts.length) return []
-  const lats = pts.map((p) => p.lat)
-  const lngs = pts.map((p) => p.lng)
-  const minLat = Math.min(...lats)
-  const minLng = Math.min(...lngs)
-  const spanLat = Math.max(...lats) - minLat || 1
-  const spanLng = Math.max(...lngs) - minLng || 1
-  const P = 14
-  const S = 100 - P * 2
-  return pts.map(({ stop, lat, lng }, i) => ({
-    id: stop.id ?? i,
-    no: stop.sortOrder ?? i + 1,
-    x: pts.length === 1 ? 50 : P + ((lng - minLng) / spanLng) * S,
-    y: pts.length === 1 ? 50 : P + (1 - (lat - minLat) / spanLat) * S,
-  }))
-})
-const polyline = computed(() => mapNodes.value.map((n) => `${n.x},${n.y}`).join(' '))
-
-const TYPE_ICON = { ATTRACTION: '🏛', RESTAURANT: '🍽', CAFE: '☕', LODGING: '🏨' }
-function stopType(stop) {
-  return stop.place?.category || stop.place?.categoryGroup || ''
-}
-
 // 사진 추가·관리 모달(이미 올린 사진 보기·빼기 + 새 업로드). CardPhotoPicker 와 같은 흐름.
 const showManage = ref(false)
 const removingIds = ref(new Set())
@@ -133,21 +101,10 @@ watch(
 
     <template v-else>
       <div class="rec-cols">
-        <!-- 좌: 경로 지도(스키매틱) -->
+        <!-- 좌: 경로 지도(스키매틱) — 렌더는 공용 RecordRouteMap, 프레임(격자·범례)은 여기서 -->
         <div class="rec-map">
           <div class="rec-map-grid"></div>
-          <svg
-            v-if="mapNodes.length"
-            class="rec-map-svg"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            <polyline v-if="mapNodes.length > 1" :points="polyline" class="rec-route" />
-            <g v-for="n in mapNodes" :key="n.id">
-              <circle :cx="n.x" :cy="n.y" r="3.6" class="rec-node" />
-              <text :x="n.x" :y="n.y + 1.2" class="rec-node-no">{{ n.no }}</text>
-            </g>
-          </svg>
+          <RecordRouteMap :stops="activeStops" bare caption="" />
           <span class="rec-legend">{{ region || '여행지' }} · DAY {{ activeDay?.dayNumber || 1 }} 경로</span>
         </div>
 
@@ -168,41 +125,18 @@ watch(
           <p class="rec-drag-hint">사진을 끌어 다른 장소로 옮길 수 있어요</p>
 
           <div class="rec-stops">
-            <div
+            <RecordStop
               v-for="stop in activeStops"
               :key="stop.id"
-              class="rec-stop"
-              :class="{ over: drag.active && drag.overStopId === stop.id }"
-              :data-stop-id="stop.id"
+              variant="timeline"
+              :stop="stop"
+              :photos="photosForStop(stop.id)"
+              @remove="unplacePhoto"
             >
-              <span class="rec-time">{{ stop.selectedTime || '' }}</span>
-              <span class="rec-rail"><span class="rec-dot"></span></span>
-              <div class="rec-stop-body">
-                <div class="rec-info">
-                  <span class="rec-ic" aria-hidden="true">{{ TYPE_ICON[stop.place?.placeType] ?? '📍' }}</span>
-                  <b class="rec-nm">{{ stop.place?.name || '장소' }}</b>
-                  <span v-if="stopType(stop)" class="rec-ty">{{ stopType(stop) }}</span>
-                </div>
-                <div class="rec-photos">
-                  <RecordPhotoChip
-                    v-for="p in photosForStop(stop.id)"
-                    :key="p.id"
-                    :photo-id="p.id"
-                    :alt="p.originalFilename || '사진'"
-                    removable
-                    @remove="unplacePhoto"
-                  />
-                  <button
-                    v-if="!photosForStop(stop.id).length"
-                    type="button"
-                    class="rec-add"
-                    @click="showManage = true"
-                  >
-                    사진 관리
-                  </button>
-                </div>
-              </div>
-            </div>
+              <template #empty-action>
+                <button type="button" class="rec-add" @click="showManage = true">사진 관리</button>
+              </template>
+            </RecordStop>
           </div>
         </div>
       </div>
@@ -280,31 +214,6 @@ watch(
     linear-gradient(90deg, color-mix(in srgb, var(--ink-sub) 8%, transparent) 1px, transparent 1px);
   background-size: 38px 38px;
 }
-.rec-map-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.rec-route {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 0.8;
-  stroke-dasharray: 2 1.6;
-  opacity: 0.7;
-}
-.rec-node {
-  fill: var(--accent);
-  stroke: var(--on-fill);
-  stroke-width: 0.9;
-}
-.rec-node-no {
-  fill: var(--on-fill);
-  font-size: 3px;
-  font-weight: 800;
-  text-anchor: middle;
-  font-family: var(--font-mono);
-}
 .rec-legend {
   position: absolute;
   left: 12px;
@@ -372,83 +281,7 @@ watch(
 .rec-stops::-webkit-scrollbar {
   display: none; /* Chrome·Safari */
 }
-.rec-stop {
-  display: grid;
-  grid-template-columns: 44px 13px 1fr;
-  align-items: flex-start;
-  border-radius: 10px;
-  transition: background 0.12s;
-}
-.rec-stop.over {
-  background: var(--accent-soft);
-}
-.rec-time {
-  padding: 1px 9px 0 0;
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--accent);
-  line-height: 1.5;
-}
-.rec-rail {
-  align-self: stretch;
-  display: flex;
-  justify-content: center;
-  position: relative;
-}
-.rec-rail::before {
-  content: '';
-  position: absolute;
-  top: 14px;
-  bottom: 0;
-  width: 1px;
-  background: var(--line);
-}
-.rec-stop:last-child .rec-rail::before {
-  display: none;
-}
-.rec-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-top: 5px;
-  z-index: 1;
-  box-shadow: 0 0 0 2px var(--paper-card);
-}
-.rec-stop-body {
-  min-width: 0;
-  padding: 0 0 16px 10px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.rec-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding-top: 1px;
-}
-.rec-nm {
-  font-size: 14px;
-  font-weight: 700;
-}
-.rec-ty {
-  font-size: 10px;
-  color: var(--ink-sub);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 1px 6px;
-}
-.rec-photos {
-  flex: none;
-  display: flex;
-  gap: 5px;
-}
+/* stop 행 자체(.rec-stop 계열)는 공용 RecordStop(variant="timeline")으로 이동 */
 .rec-add {
   width: 56px;
   height: 56px;
