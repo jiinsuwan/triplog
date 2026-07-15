@@ -46,15 +46,16 @@
 | 기능 | 자리 | 우선순위 |
 |---|---|---|
 | 여행 챗봇 | **우하단 플로팅 버튼 → 사이드 채팅** (현재 보는 장소/날짜 맥락 주입) | P1 |
-| 보관함(pocket) | **탐색·일정 공통 우측 상시 레일** (담으면 즉시 보임) | P0 |
+| 보관함(pocket) | **탐색·일정 공통 우측 상시 레일** (담으면 즉시 보임). 여행별 후보 장소 보관을 담당하며 F10을 흡수 | P0 흐름 + F10 |
 | AI 자동 일정 | **일정 화면의 ✨ 버튼** (별도 화면 아님) | P2 |
-| 위시리스트(저장) | **탐색의 ★저장 필터 / 장소별 ★** | P1 |
 | 카드 편집 | **카드 3단계(미리보기·편집) 안** | P1 |
 | 여행 기록(로그) 뷰 — F14 재정의 | **기록 워크스페이스 본문** (§3-0, 구 "사진 뷰 토글"을 대체) | P1 (S4) |
 
+**F10 결정(#112)**: 별도 즐겨찾기/위시리스트 CRUD와 전역 마이페이지 즐겨찾기는 현재 범위에서 구현하지 않는다. 기존 여행별 `담은 장소`(Pocket)가 후보 장소 보관 역할을 이미 수행해 사용자 역할이 중복되기 때문이다. 담은 장소 UX 개선이 필요하면 별도 Issue로 분리한다.
+
 ### 3-3. 데이터 모델 (제안)
 ```
-Trip { id, title, region, theme, startDate, dayCount, status, days[], pocket[], wish[] }
+Trip { id, title, region, theme, startDate, dayCount, status, days[], pocket[] }
    status: 'planning' | 'upcoming' | 'past'        // C4의 '상태'
 Day  { lodging: placeId | null, stops: Stop[] }     // 숙소는 그 날의 베이스(체크인/아웃) — 시퀀스에 안 섞음
 Stop { placeId, type, time?: "HH:MM", memo?, transport }  // 시간·유형·메모·이동수단
@@ -80,10 +81,9 @@ Stop { placeId, type, time?: "HH:MM", memo?, transport }  // 시간·유형·메
 - **접근성**: 아이콘 버튼(★ 💬 ⚙ × ↑↓ ＋)에 `aria-label`, 터치 타깃 ≥34px.
 
 ## 4. 열린 결정 (합의 필요)
-1. **위시리스트 귀속** — 여행별 vs 계정 전역(마이페이지). 현재 제안은 탐색 ★필터(여행별).
-2. **테마 필드 용도** — 추천/카드 톤에 쓸지, 안 쓰면 F02에서 제거할지.
-3. **탐색·일정 통합 여부** — 두 탭을 "계획" 한 탭의 토글로 합칠지.
-4. ~~requirements F07 본문 정정~~ — 완료(PR #32).
+1. **테마 필드 용도** — 추천/카드 톤에 쓸지, 안 쓰면 F02에서 제거할지.
+2. **탐색·일정 통합 여부** — 두 탭을 "계획" 한 탭의 토글로 합칠지.
+3. ~~requirements F07 본문 정정~~ — 완료(PR #32).
 
 ## 5. 정본 디자인 (S4 채택 — docs/design/ 패키지)
 
@@ -116,8 +116,8 @@ proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
 | 홈 여행 그리드 + 상태 배지 | `DataView` + `Card` + `Tag` |
 | 여행 생성/수정 폼 | `InputText`·`DatePicker`·`Select`·`SelectButton`·`Textarea` + `Button` + `Message` |
 | 탐색 검색바 | `IconField` + `InputText` |
-| 카테고리 / ★저장 필터 | `SelectButton` / `ToggleButton` |
-| 장소 리스트 + 출처 배지 + ★ | `DataView` + `Tag` + `Button`(toggle) |
+| 카테고리 | `SelectButton` |
+| 장소 리스트 + 출처 배지 + 담기 | `DataView` + `Tag` + `Button`(toggle) |
 | **지도·핀·경로·노드연결** | **카카오맵 SDK + 커스텀** (PrimeVue 없음) |
 | 장소 상세 패널 | `Drawer` |
 | 보관함 레일 | 커스텀 `Card` + 리스트 |
@@ -140,3 +140,4 @@ proposal IA를 유지하되, v3(팀원)의 아래 비주얼을 가져온다:
 | v1 | 2026-06-09 | 정본 채택(docs/design/trip-planner-flow.html) + v3 비주얼 흡수(§6) + PrimeVue 컴포넌트 매핑(§7). F07 정정 완료(PR #32) 반영. |
 | v2 | 2026-06-12 | **S2 회고 반영**: 기록/카드 흐름 와이어프레임(log-flow-proposal.html, PR #58) 정본 채택 — 계획/기록 2워크스페이스 + 상태 기반 진입(§3-0) / Stop에 transport 필수 필드 / 사진↔stop 선택적 연결 방향 / F14 = 기록 뷰 재정의(S4) |
 | v3 | 2026-06-23 | **S4 디자인 반영**: 시각 디자인 정본을 docs/design/ 패키지(design-system + 화면 목업)로 교체. 옛 시안 trip-planner-flow·log-flow-proposal 폐기. 디자인 언어 = 종이/빈티지 티켓 톤(테라코타·도장 남색), 메타포 = 티켓·도장·폴라로이드. 화면 세부는 docs/design/ 우선. |
+| v4 | 2026-07-11 | **F10 처분(#112)**: 별도 즐겨찾기/위시리스트 대신 기존 여행별 담은 장소(Pocket)가 후보 장소 보관 역할을 대체하도록 IA 정리. |
