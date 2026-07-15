@@ -13,7 +13,8 @@ function num(value) {
 }
 
 // 일정 stop들을 0~100 뷰박스 좌표로 투영한다. x=경도(서→동), y=위도(북이 위, y축 반전).
-// 유효 좌표가 있는 stop만, 점이 1개거나 좌표가 모두 같으면 중앙(50) 폴백. 반환 [{ id, no, x, y }].
+// 유효 좌표가 있는 stop만. 점이 1개면 중앙(50) 폴백. 점이 여러 개인데 한 축 span이 0이면
+// (동일 좌표 다수 포함) 그 축은 시작 가장자리에 고정된다 — x=14, y=86. 반환 [{ id, no, x, y }].
 export function projectStopsToViewBox(stops) {
   const pts = (stops ?? [])
     .map((stop) => ({ stop, lat: num(stop.place?.latitude), lng: num(stop.place?.longitude) }))

@@ -33,6 +33,20 @@ describe('projectStopsToViewBox — 위경도 0~100 뷰박스 투영', () => {
     expect(out[0].id).toBe(2)
   })
 
+  it('동일 좌표 여러 개면 가장자리(14,86)에 겹쳐 놓는다(중앙 아님 — 현 동작 고정)', () => {
+    // span 0 → 나눗셈 가드(|| 1)로 두 점 다 (P, P+S) = (14, 86). 시각적으로 한 점으로 겹침.
+    const out = projectStopsToViewBox([stop(1, 1, 37, 127), stop(2, 2, 37, 127)])
+    expect(out[0]).toEqual({ id: 1, no: 1, x: 14, y: 86 })
+    expect(out[1]).toEqual({ id: 2, no: 2, x: 14, y: 86 })
+  })
+
+  it('한 축만 span 0이면 그 축만 가장자리에 고정된다', () => {
+    // 위도 동일(y span 0 → y=86), 경도만 퍼짐(x는 14~86 정상 투영)
+    const out = projectStopsToViewBox([stop(1, 1, 37, 127), stop(2, 2, 37, 128)])
+    expect(out[0]).toEqual({ id: 1, no: 1, x: 14, y: 86 })
+    expect(out[1]).toEqual({ id: 2, no: 2, x: 86, y: 86 })
+  })
+
   it('id·sortOrder 가 없으면 인덱스로 폴백한다', () => {
     const out = projectStopsToViewBox([
       { place: { latitude: 37, longitude: 127 } },
